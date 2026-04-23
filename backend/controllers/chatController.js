@@ -1,0 +1,132 @@
+import Conversation from "../models/Conversation.js";
+import Template from "../models/Template.js";
+import Message from "../models/Message.js";
+import { sendTextMessage, sendTemplateMessage } from "../services/whatsappService.js";
+import { logActivity } from "../utils/activityLogger.js";
+
+export const getConversations = async (req, res) => {
+  try {
+    const filter = {};
+    if (req.user.role === "Executive") {
+      filter.assignedTo = req.user._id;
+    }
+
+    const conversations = await Conversation.find(filter)
+      .populate("contact")
+      .populate("assignedTo", "name")
+      .sort({ lastMessageTime: -1 });
+    res.json(conversations);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getMessages = async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const messages = await Message.find({
+      $or: [{ from: phone }, { to: phone }]
+    }).sort({ timestamp: 1 });
+    
+    await Conversation.findOneAndUpdate({ phone }, { unreadCount: 0 });
+    
+    res.json(messages);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const sendMessage = async (req, res) => {
+  try {
+    const { to, body } = req.body;
+    const metaRes = await sendTextMessage(to, body);
+    console.log("📤 Meta Send Response:", metaRes);
+
+    const newMessage = new Message({
+      from: "me",
+      to,
+      body,
+      direction: "outbound"
+    });
+    await newMessage.save();
+
+    await Conversation.findOneAndUpdate(
+      { phone: to },
+      { lastMessage: body, lastMessageTime: new Date() },
+      { upsert: true }
+    );
+
+    await logActivity(req.user._id, "SEND_MESSAGE", `Sent text message: ${body.substring(0, 50)}...`, to);
+
+    res.json({ success: true, message: newMessage });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const updateConversationStatus = async (req, res) => {
+  try {
+    const { phone, status } = req.body;
+    const conversation = await Conversation.findOneAndUpdate(
+      { phone },
+      { status },
+      { new: true }
+    );
+
+    await logActivity(req.user._id, "UPDATE_STATUS", `Updated status to ${status}`, phone);
+
+    res.json({ success: true, conversation });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const sendChatTemplateMessage = async (req, res) => {
+  try {
+    const { to, templateName, templateComponents } = req.body;
+    
+    // Find template in DB to get correct language
+    const template = await Template.findOne({ name: templateName });
+    const lang = template ? template.language : "en_US";
+
+    const metaRes = await sendTemplateMessage(to, templateName, lang, templateComponents);
+    
+    const newMessage = new Message({
+      from: "me",
+      to,
+      body: `[Template: ${templateName}]`,
+      direction: "outbound"
+    });
+    await newMessage.save();
+
+    await Conversation.findOneAndUpdate(
+      { phone: to },
+      { lastMessage: newMessage.body, lastMessageTime: new Date() },
+      { upsert: true }
+    );
+
+    await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
+
+    res.json({ success: true, message: newMessage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const assignConversation = async (req, res) => {
+  try {
+    const { phone, userId } = req.body;
+    const conversation = await Conversation.findOneAndUpdate(
+      { phone },
+      { assignedTo: userId || null },
+      { new: true }
+    ).populate("assignedTo", "name");
+    
+    const assignedName = conversation.assignedTo ? conversation.assignedTo.name : "Unassigned";
+    await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName}`, phone);
+
+    res.json({ message: "Conversation assigned", conversation });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
