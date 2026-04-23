@@ -451,8 +451,33 @@ const ChatModule = () => {
                   <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>Online</span>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
-                <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#111b21", padding: "6px 12px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer" }}>
+              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                {/* Assignment Dropdown */}
+                {currentUser.role !== "Executive" && (
+                  <select 
+                    style={{ background: "#2a3942", color: "#dfe5e7", border: "1px solid #3b4a54", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", outline: "none" }}
+                    value={selectedChat.assignedTo?._id || selectedChat.assignedTo || ""}
+                    onChange={(e) => handleAssign(e.target.value)}
+                  >
+                    <option value="">Assign To...</option>
+                    {executives.map(ex => (
+                      <option key={ex._id} value={ex._id}>{ex.name}</option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Status Dropdown */}
+                <select 
+                  style={{ background: getStatusColor(selectedChat.status), color: "#111b21", border: "none", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", outline: "none" }}
+                  value={selectedChat.status || "New"}
+                  onChange={(e) => handleUpdateStatus(e.target.value)}
+                >
+                  {STATUS_OPTIONS.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+
+                <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#111b21", padding: "6px 12px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer" }}>
                   Send Template
                 </button>
                 <MoreVertical size={20} style={{ color: "#aebac1", cursor: "pointer" }} />
