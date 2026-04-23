@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
 import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, CheckCircle2, AlertCircle, FileText, Plus } from "lucide-react";
 
@@ -41,30 +41,62 @@ const ChatModule = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [templateVars, setTemplateVars] = useState({});
   const scrollRef = useRef();
-  
+  const [prevMsgCount, setPrevMsgCount] = useState(0);
+
   const currentUser = JSON.parse(localStorage.getItem("userInfo"));
   const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
 
-  const fetchConversations = async () => {
-    try {
-      const res = await axios.get(`${API_BASE}/conversations`, config);
-      setConversations(Array.isArray(res.data) ? res.data : []);
-      // Update selected chat data if it's currently open
-      if (selectedChat && !selectedChat.isNew) {
-        const updated = res.data.find(c => c.phone === selectedChat.phone);
-        if (updated) setSelectedChat(updated);
+  useEffect(() => {
+    if (scrollRef.current && messages.length > prevMsgCount) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+      const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
+      
+      // Scroll to bottom ONLY if it's the first load of THIS chat or user is already at bottom
+      if (prevMsgCount === 0 || isAtBottom) {
+        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
       }
-    } catch (err) {
-      console.error("Error fetching conversations:", err);
+      setPrevMsgCount(messages.length);
     }
-  };
+  }, [messages, prevMsgCount]);
+
+  // Only reset scroll tracking when we switch to a DIFFERENT phone number
+  useEffect(() => {
+    setPrevMsgCount(0);
+  }, [selectedChat?.phone]);
 
   const fetchMessages = async (phone) => {
     try {
       const res = await axios.get(`${API_BASE}/messages/${phone}`, config);
-      setMessages(Array.isArray(res.data) ? res.data : []);
+      const newMsgs = Array.isArray(res.data) ? res.data : [];
+      setMessages(prev => {
+        if (prev.length === newMsgs.length && JSON.stringify(prev[prev.length-1]) === JSON.stringify(newMsgs[newMsgs.length-1])) {
+          return prev; // No change, don't trigger re-render
+        }
+        return newMsgs;
+      });
     } catch (err) {
       console.error("Error fetching messages:", err);
+    }
+  };
+
+  const fetchConversations = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/conversations`, config);
+      const newData = Array.isArray(res.data) ? res.data : [];
+      setConversations(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newData)) return prev;
+        return newData;
+      });
+      
+      // Only update selected chat if data changed
+      if (selectedChat && !selectedChat.isNew) {
+        const updated = newData.find(c => c.phone === selectedChat.phone);
+        if (updated && JSON.stringify(updated) !== JSON.stringify(selectedChat)) {
+          setSelectedChat(updated);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching conversations:", err);
     }
   };
 
@@ -113,11 +145,7 @@ const ChatModule = () => {
     }
   }, [selectedChat?._id]);
 
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages]);
+
 
   const handleAssign = async (userId) => {
     if (!selectedChat) return;
@@ -135,17 +163,17 @@ const ChatModule = () => {
   const handleNewChat = (e) => {
     e.preventDefault();
     if (!newChatPhone.trim()) return;
-    
+
     const phone = newChatPhone.trim();
     const existing = conversations.find(c => c.phone === phone);
-    
+
     if (existing) {
       setSelectedChat(existing);
     } else {
       setSelectedChat({ phone, status: "New", isNew: true });
       setMessages([]);
     }
-    
+
     setShowNewChatModal(false);
     setNewChatPhone("");
   };
@@ -159,10 +187,10 @@ const ChatModule = () => {
         to: selectedChat.phone,
         body: newMessage
       }, config);
-      
+
       setMessages([...messages, res.data.message]);
       setNewMessage("");
-      
+
       if (selectedChat.isNew) {
         await fetchConversations();
       } else {
@@ -207,7 +235,7 @@ const ChatModule = () => {
   const handlePresetSelect = (pId) => {
     const preset = presets.find(p => p._id === pId);
     if (!preset) return;
-    
+
     setSelectedPreset(pId);
     setSelectedTemplate(preset.template);
     setTemplateVars(preset.config || {});
@@ -268,7 +296,7 @@ const ChatModule = () => {
     return dateStr;
   };
 
-  const messageGroups = groupMessagesByDate(messages);
+  const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -280,181 +308,212 @@ const ChatModule = () => {
     }
   };
 
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const filteredConversations = conversations.filter(c => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return true;
+    const phoneMatch = c.phone.includes(term);
+    const nameMatch = c.contact?.name?.toLowerCase().includes(term);
+    return phoneMatch || nameMatch;
+  });
+
   return (
-    <div className="chat-container glass-card" style={{ 
-      display: "grid", 
-      gridTemplateColumns: "350px 1fr", 
-      height: "calc(100vh - 140px)", 
-      padding: 0, 
+    <div className="chat-container glass-card" style={{
+      display: "grid",
+      gridTemplateColumns: "350px 1fr",
+      height: "600px",
+      width: "100%",
+      maxWidth: "1250px",
+      margin: "20px 0",
+      padding: 0,
       overflow: "hidden",
-      marginTop: "10px"
+      border: "1px solid rgba(255,255,255,0.1)",
+      borderRadius: "12px",
+      background: "#111b21",
+      boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+      position: "relative"
     }}>
       <style>{`
-        .chat-scroll::-webkit-scrollbar { width: 6px; }
-        .chat-scroll::-webkit-scrollbar-track { background: transparent; }
-        .chat-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); borderRadius: 10px; }
-        .chat-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-primary); }
+        .chat-scroll::-webkit-scrollbar { width: 12px !important; }
+        .chat-scroll::-webkit-scrollbar-track { background: #111b21 !important; }
+        .chat-scroll::-webkit-scrollbar-thumb { background: #ffffff !important; border-radius: 6px; border: 2px solid #111b21; }
+        .chat-scroll::-webkit-scrollbar-thumb:hover { background: #00a884 !important; }
+        
+        .chat-scroll {
+          overflow-y: scroll !important;
+          scrollbar-width: auto;
+          scrollbar-color: #ffffff #111b21;
+        }
+        
+        .chat-item:hover { background: #202c33 !important; }
+        .chat-item.active { background: #2a3942 !important; border-left: 4px solid #00a884 !important; }
+        
+        .msg-bubble {
+          max-width: 65%;
+          padding: 8px 12px;
+          font-size: 0.9rem;
+          margin-bottom: 4px;
+          line-height: 1.4;
+          box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
+          position: relative;
+        }
+        
+        .msg-outbound {
+          align-self: flex-end !important;
+          background-color: #005c4b !important;
+          color: #e9edef !important;
+          border-radius: 8px 0 8px 8px;
+        }
+        
+        .msg-inbound {
+          align-self: flex-start !important;
+          background-color: #202c33 !important;
+          color: #e9edef !important;
+          border-radius: 0 8px 8px 8px;
+        }
+
+        .sidebar-container {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          border-right: 1px solid rgba(255,255,255,0.1);
+          background: #111b21;
+        }
+
+        .chat-area-container {
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          background: #0b141a;
+          position: relative;
+        }
       `}</style>
 
       {/* Sidebar */}
-      <div style={{ borderRight: "1px solid var(--glass-border)", display: "flex", flexDirection: "column", height: "100%" }}>
-        <div style={{ padding: "1.5rem", borderBottom: "1px solid var(--glass-border)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-            <h3 style={{ margin: 0 }}>Conversations</h3>
-            <button 
-              onClick={() => setShowNewChatModal(true)}
-              style={{ background: "var(--accent-primary)", border: "none", color: "black", width: "32px", height: "32px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-            >
-              <Plus size={20} />
-            </button>
+      <div className="sidebar-container" style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ padding: "12px", background: "#202c33", flexShrink: 0, height: "110px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#e9edef" }}>Chats</h3>
+            <div style={{ display: "flex", gap: "15px", color: "#aebac1" }}>
+              <Plus size={20} cursor="pointer" onClick={() => setShowNewChatModal(true)} />
+              <MoreVertical size={20} cursor="pointer" />
+            </div>
           </div>
-          <div className="search-bar" style={{ position: "relative" }}>
-            <Search size={18} style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }} />
-            <input 
-              type="text" 
-              placeholder="Search chat..." 
-              style={{ width: "100%", padding: "10px 10px 10px 35px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+          <div style={{ position: "relative" }}>
+            <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#8696a0" }} />
+            <input
+              type="text"
+              placeholder="Search or start new chat"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{ width: "100%", padding: "8px 12px 8px 40px", background: "#2a3942", border: "none", color: "#d1d7db", borderRadius: "8px", fontSize: "0.85rem", outline: "none" }}
             />
           </div>
         </div>
-        
-        <div className="chat-scroll" style={{ flex: 1, overflowY: "auto" }}>
-          {conversations.map((chat) => (
-            <div 
-              key={chat._id} 
+
+        <div className="chat-scroll" style={{ height: "calc(100% - 110px)", overflowY: "scroll", overflowX: "hidden", display: "block" }}>
+          {filteredConversations.map((chat) => (
+            <div
+              key={chat._id}
+              className={`chat-item ${(selectedChat?._id === chat._id || selectedChat?.phone === chat.phone) ? "active" : ""}`}
               onClick={() => setSelectedChat(chat)}
-              style={{ 
-                padding: "1rem 1.5rem", 
-                cursor: "pointer", 
-                background: selectedChat?._id === chat._id || selectedChat?.phone === chat.phone ? "rgba(255,255,255,0.05)" : "transparent",
-                borderBottom: "1px solid rgba(255,255,255,0.02)",
-                transition: "all 0.2s"
-              }}
+              style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: "12px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
             >
-              <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                <div style={{ position: "relative" }}>
-                  <div style={{ width: "45px", height: "45px", borderRadius: "50%", background: "var(--accent-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "black" }}>
-                    <User size={24} />
-                  </div>
-                  <div style={{ position: "absolute", bottom: 0, right: 0, width: "12px", height: "12px", borderRadius: "50%", background: getStatusColor(chat.status), border: "2px solid var(--bg-secondary)" }}></div>
+              <div style={{ width: "45px", height: "45px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7" }}>
+                <User size={24} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
+                  <span style={{ fontWeight: "600", color: "#e9edef", fontSize: "0.95rem" }}>{chat.contact?.name || chat.phone}</span>
+                  <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>{chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
                 </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-                    <span style={{ fontWeight: "700", fontSize: "0.9rem" }}>{chat.contact?.name || chat.phone}</span>
-                    <span style={{ fontSize: "0.65rem", color: "var(--text-secondary)" }}>{new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "150px" }}>{chat.lastMessage}</p>
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                      {chat.unreadCount > 0 && (
-                        <span style={{ background: "var(--accent-primary)", color: "black", width: "16px", height: "16px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", fontWeight: "700" }}>{chat.unreadCount}</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <p style={{ fontSize: "0.8rem", color: "#8696a0", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {chat.lastMessage || "No messages"}
+                </p>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Main Chat Area */}
-      <div style={{ display: "flex", flexDirection: "column", background: "rgba(0,0,0,0.2)", height: "100%", overflow: "hidden" }}>
+      {/* Chat Area */}
+      <div className="chat-area-container" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
         {selectedChat ? (
           <>
-            <div style={{ padding: "0.8rem 2rem", borderBottom: "1px solid var(--glass-border)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-secondary)" }}>
+            <div style={{ padding: "10px 16px", background: "#202c33", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "60px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{ width: "40px", height: "40px", borderRadius: "50%", background: "var(--accent-secondary)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: "35px", height: "35px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7" }}>
                   <User size={20} />
                 </div>
                 <div>
-                  <h4 style={{ fontSize: "0.95rem" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#25d366" }}></div>
-                      <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)" }}>Online</span>
-                    </div>
-                    <div style={{ height: "12px", width: "1px", background: "var(--glass-border)" }}></div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                      <Tag size={12} color={getStatusColor(selectedChat.status)} />
-                      <select 
-                        value={selectedChat.status || "New"} 
-                        onChange={async (e) => {
-                          try {
-                            await axios.post(`${API_BASE}/conversations/status`, { phone: selectedChat.phone, status: e.target.value }, config);
-                            fetchConversations();
-                          } catch (err) {
-                            alert("Error updating status");
-                          }
-                        }}
-                        style={{ background: "transparent", border: "none", color: "var(--text-secondary)", fontSize: "0.75rem", outline: "none", cursor: "pointer" }}
-                      >
-                        {STATUS_OPTIONS.map(s => <option key={s} value={s} style={{ background: "var(--bg-secondary)" }}>{s}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  <h4 style={{ margin: 0, fontSize: "0.95rem", color: "#e9edef" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
+                  <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>Online</span>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: "1.5rem", alignItems: "center" }}>
-                {currentUser.role !== "Executive" && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Assign to:</span>
-                    <select 
-                      style={{ background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", padding: "4px 8px", borderRadius: "6px", fontSize: "0.75rem" }}
-                      value={selectedChat.assignedTo?._id || ""}
-                      onChange={(e) => handleAssign(e.target.value)}
-                    >
-                      <option value="">Unassigned</option>
-                      {executives.map(u => (
-                        <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <button onClick={() => setShowTemplateModal(true)} style={{ background: "rgba(37, 211, 102, 0.1)", border: "1px solid var(--accent-primary)", color: "var(--accent-primary)", padding: "6px 12px", borderRadius: "20px", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }}>
-                  <FileText size={14} /> Send Template
+              <div style={{ display: "flex", gap: "15px", alignItems: "center" }}>
+                <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#111b21", padding: "6px 12px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer" }}>
+                  Send Template
                 </button>
-                <MoreVertical size={20} style={{ cursor: "pointer", color: "var(--text-secondary)" }} />
+                <MoreVertical size={20} style={{ color: "#aebac1", cursor: "pointer" }} />
               </div>
             </div>
 
             <div 
               ref={scrollRef}
               className="chat-scroll"
-              style={{ flex: 1, padding: "1.5rem 2.5rem", overflowY: "auto", display: "flex", flexDirection: "column", gap: "1.5rem" }}
+              style={{ height: "calc(100% - 120px)", padding: "20px", overflowY: "scroll", display: "flex", flexDirection: "column", background: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')", backgroundBlendMode: "soft-light", backgroundColor: "#0b141a" }}
             >
               {Object.entries(messageGroups).map(([date, msgs]) => (
-                <div key={date} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-                  <div style={{ display: "flex", justifyContent: "center", margin: "1rem 0" }}>
-                    <div style={{ background: "var(--bg-tertiary)", padding: "4px 15px", borderRadius: "10px", fontSize: "0.65rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "5px", border: "1px solid var(--glass-border)" }}>
-                      <Calendar size={12} /> {formatDateLabel(date)}
+                <div key={date} style={{ display: "flex", flexDirection: "column" }}>
+                  <div style={{ display: "flex", justifyContent: "center", margin: "15px 0" }}>
+                    <div style={{ background: "#182229", padding: "4px 10px", borderRadius: "6px", fontSize: "0.7rem", color: "#8696a0" }}>
+                      {formatDateLabel(date)}
                     </div>
                   </div>
                   {msgs.map((msg) => (
-                    <div 
-                      key={msg._id} 
-                      style={{ 
-                        alignSelf: msg.direction === "outbound" ? "flex-end" : "flex-start",
-                        maxWidth: "75%",
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: msg.direction === "outbound" ? "flex-end" : "flex-start"
-                      }}
+                    <div
+                      key={msg._id}
+                      className={`msg-bubble ${msg.direction === "outbound" ? "msg-outbound" : "msg-inbound"}`}
                     >
-                      <div style={{ 
-                        padding: "10px 16px", 
-                        borderRadius: msg.direction === "outbound" ? "15px 15px 0 15px" : "15px 15px 15px 0",
-                        background: msg.direction === "outbound" ? "linear-gradient(135deg, #25d366, #128c7e)" : "var(--bg-tertiary)",
-                        color: msg.direction === "outbound" ? "black" : "white",
-                        fontSize: "0.9rem",
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                        lineHeight: "1.4"
-                      }}>
-                        {msg.body}
-                        <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: "4px", marginTop: "4px", opacity: 0.7 }}>
-                          <span style={{ fontSize: "0.6rem" }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                          {msg.direction === "outbound" && <Clock size={10} />}
+                      {msg.type === "template" && msg.templateData ? (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                          {/* Image rendering if available */}
+                          {msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link && (
+                            <img 
+                              src={msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link} 
+                              alt="Template" 
+                              style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }} 
+                            />
+                          )}
+                          
+                          <div style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}>
+                            {/* Reconstructing template body text if possible, else showing fallback */}
+                            {(() => {
+                              const template = templates.find(t => t.name === msg.templateData.name);
+                              let text = template?.components.find(c => c.type === "BODY")?.text || msg.body;
+                              const params = msg.templateData.components.find(c => c.type === "body")?.parameters || [];
+                              params.forEach((p, i) => {
+                                text = text.replace(`{{${i+1}}}`, p.text || "");
+                              });
+                              return text;
+                            })()}
+                          </div>
+
+                          {/* Rendering Buttons from the template structure in DB */}
+                          {templates.find(t => t.name === msg.templateData.name)?.components.find(c => c.type === "BUTTONS")?.buttons?.map((btn, i) => (
+                            <div key={i} style={{ padding: "8px", background: "rgba(255,255,255,0.05)", borderRadius: "6px", textAlign: "center", fontSize: "0.75rem", border: "1px solid rgba(255,255,255,0.1)", marginTop: "2px", color: "#53bdeb" }}>
+                              {btn.text}
+                            </div>
+                          ))}
                         </div>
+                      ) : (
+                        <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
+                      )}
+
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", gap: "4px" }}>
+                        <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        {msg.direction === "outbound" && <CheckCircle2 size={10} style={{ color: "#53bdeb" }} />}
                       </div>
                     </div>
                   ))}
@@ -462,136 +521,156 @@ const ChatModule = () => {
               ))}
             </div>
 
-            <form onSubmit={handleSend} style={{ padding: "1.2rem 2rem", background: "var(--bg-secondary)", borderTop: "1px solid var(--glass-border)" }}>
-              <div style={{ display: "flex", gap: "1rem" }}>
-                <input 
-                  type="text" 
-                  placeholder="Type a message..." 
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  style={{ flex: 1, padding: "12px 20px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "30px", outline: "none", fontSize: "0.9rem" }}
-                />
-                <button type="submit" className="btn-primary" style={{ width: "45px", height: "45px", borderRadius: "50%", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Send size={18} />
-                </button>
-              </div>
+            <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#202c33", display: "flex", gap: "10px" }}>
+              <input
+                type="text"
+                placeholder="Type a message"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                style={{ flex: 1, padding: "8px 12px", background: "#2a3942", border: "none", color: "#d1d7db", borderRadius: "8px", outline: "none" }}
+              />
+              <button type="submit" style={{ background: "transparent", border: "none", color: "#00a884", cursor: "pointer" }}>
+                <Send size={24} />
+              </button>
             </form>
           </>
         ) : (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-secondary)" }}>
-            <div style={{ width: "100px", height: "100px", borderRadius: "50%", background: "rgba(255,255,255,0.02)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.5rem" }}>
-              <MessageSquare size={48} style={{ opacity: 0.2 }} />
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8696a0", background: "#222e35" }}>
+            <div style={{ width: "250px", height: "250px", borderRadius: "50%", background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2rem" }}>
+              <MessageSquare size={100} style={{ opacity: 0.1 }} />
             </div>
-            <h3>Select a conversation</h3>
-            <p style={{ marginTop: "0.5rem" }}>Connect with your leads in real-time.</p>
+            <h2 style={{ color: "#e9edef", fontWeight: "300" }}>WhatsApp for Business</h2>
+            <p style={{ maxWidth: "400px", textAlign: "center", lineHeight: "1.6", fontSize: "0.9rem" }}>
+              Send and receive messages without keeping your phone online.<br />
+              Use WhatsApp on up to 4 linked devices and 1 phone at the same time.
+            </p>
+            <div style={{ marginTop: "auto", paddingBottom: "2rem", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem" }}>
+              <Clock size={14} /> End-to-end encrypted
+            </div>
           </div>
         )}
       </div>
 
-      {/* Template Modal */}
+      {/* Modals remain same but with better styling */}
       {showTemplateModal && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: "500px", maxHeight: "80vh", overflowY: "auto", padding: "2rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-              <h3 style={{ marginBottom: "1.5rem" }}>Send Template Message</h3>
-              <button onClick={() => setShowTemplateModal(false)} style={{ background: "transparent", border: "none", color: "white", cursor: "pointer" }}>X</button>
-            </div>
-            
-            <div style={{ marginBottom: "1rem" }}>
-              <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Quick Presets (Auto-fill)</label>
-              <select 
-                style={{ width: "100%", padding: "12px", background: "rgba(37, 211, 102, 0.1)", border: "1px solid var(--accent-primary)", color: "white", borderRadius: "10px", marginTop: "5px" }}
-                onChange={(e) => handlePresetSelect(e.target.value)}
-                value={selectedPreset}
-              >
-                <option value="">-- Choose a Saved Preset --</option>
-                {presets.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-              </select>
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(11, 20, 26, 0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#222e35", width: "550px", maxHeight: "90vh", overflowY: "auto", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
+            <div style={{ padding: "20px 24px", background: "#202c33", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "12px 12px 0 0" }}>
+              <h3 style={{ margin: 0, color: "#e9edef" }}>Send Template Message</h3>
+              <button onClick={() => setShowTemplateModal(false)} style={{ background: "transparent", border: "none", color: "#aebac1", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
             </div>
 
-            <div style={{ textAlign: "center", margin: "10px 0", fontSize: "0.7rem", color: "var(--text-secondary)" }}>- OR SELECT RAW TEMPLATE -</div>
-
-            <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Meta Template</label>
-            <select 
-              style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px", marginTop: "5px", marginBottom: "1.5rem" }}
-              onChange={(e) => {
-                handleTemplateSelect(templates.find(t => t.name === e.target.value));
-                setSelectedPreset("");
-              }}
-              value={selectedTemplate?.name || ""}
-            >
-              <option value="">-- Select Template --</option>
-              {templates.map(t => <option key={t._id} value={t.name}>{t.name}</option>)}
-            </select>
-
-            {selectedTemplate && (
-              <div style={{ marginBottom: "1.5rem" }}>
-                <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>Variables detected:</p>
-                {Object.keys(templateVars).map(key => {
-                  const isMedia = ["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type));
-                  const label = isMedia ? `${key.split("_")[1]} URL` : `${key.split("_")[0]} Variable ${key.split("_")[1]}`;
-                  const placeholder = isMedia ? `https://example.com/${key.split("_")[1].toLowerCase()}.jpg` : `Value for {{${key.split("_")[1]}}}`;
-                  
-                  return (
-                    <div key={key} style={{ marginBottom: "10px" }}>
-                      <label style={{ fontSize: "0.75rem", color: "var(--accent-primary)" }}>{label}</label>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input 
-                          type="text" 
-                          style={{ flex: 1, padding: "10px", background: "var(--bg-secondary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px", marginTop: "4px" }}
-                          value={templateVars[key]}
-                          onChange={(e) => setTemplateVars({...templateVars, [key]: e.target.value})}
-                          placeholder={placeholder}
-                        />
-                        {isMedia && (
-                          <>
-                            <input type="file" id={`chat-upload-${key}`} style={{ display: "none" }} onChange={(e) => handleFileUpload(e, key)} accept="image/*,video/*,application/pdf" />
-                            <button 
-                              onClick={() => document.getElementById(`chat-upload-${key}`).click()}
-                              disabled={isUploading}
-                              style={{ marginTop: "4px", padding: "0 15px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px", fontSize: "0.7rem", cursor: "pointer" }}
-                            >
-                              {isUploading ? "..." : "Upload"}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+            <div style={{ padding: "24px" }}>
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ fontSize: "0.85rem", color: "#00a884", display: "block", marginBottom: "8px" }}>Quick Presets (Auto-fill)</label>
+                <select
+                  style={{ width: "100%", padding: "12px", background: "#2a3942", border: "1px solid #3b4a54", color: "#d1d7db", borderRadius: "8px", outline: "none" }}
+                  onChange={(e) => handlePresetSelect(e.target.value)}
+                  value={selectedPreset}
+                >
+                  <option value="">-- Choose a Saved Preset --</option>
+                  {presets.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                </select>
               </div>
-            )}
 
-            <button 
-              onClick={sendTemplate} 
-              disabled={!selectedTemplate}
-              className="btn-primary" 
-              style={{ width: "100%", padding: "12px", opacity: selectedTemplate ? 1 : 0.5 }}
-            >
-              Send Template Message
-            </button>
+              <div style={{ textAlign: "center", margin: "20px 0", fontSize: "0.75rem", color: "#8696a0", position: "relative" }}>
+                <span style={{ background: "#222e35", padding: "0 10px", position: "relative", zIndex: 1 }}>OR SELECT RAW TEMPLATE</span>
+                <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: "1px", background: "#3b4a54" }}></div>
+              </div>
+
+              <div style={{ marginBottom: "24px" }}>
+                <label style={{ fontSize: "0.85rem", color: "#8696a0", display: "block", marginBottom: "8px" }}>Meta Template</label>
+                <select
+                  style={{ width: "100%", padding: "12px", background: "#2a3942", border: "1px solid #3b4a54", color: "#d1d7db", borderRadius: "8px", outline: "none" }}
+                  onChange={(e) => {
+                    handleTemplateSelect(templates.find(t => t.name === e.target.value));
+                    setSelectedPreset("");
+                  }}
+                  value={selectedTemplate?.name || ""}
+                >
+                  <option value="">-- Select Template --</option>
+                  {templates.map(t => <option key={t._id} value={t.name}>{t.name}</option>)}
+                </select>
+              </div>
+
+              {selectedTemplate && (
+                <div style={{ background: "#182229", padding: "16px", borderRadius: "8px", marginBottom: "24px" }}>
+                  <p style={{ fontSize: "0.85rem", color: "#00a884", marginBottom: "15px", fontWeight: "600" }}>Customize Variables:</p>
+                  {Object.keys(templateVars).map(key => {
+                    const isMedia = ["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type));
+                    const label = isMedia ? `${key.split("_")[1]} URL` : `${key.split("_")[0]} {{${key.split("_")[1]}}}`;
+
+                    return (
+                      <div key={key} style={{ marginBottom: "15px" }}>
+                        <label style={{ fontSize: "0.75rem", color: "#8696a0" }}>{label}</label>
+                        <div style={{ display: "flex", gap: "10px", marginTop: "5px" }}>
+                          <input
+                            type="text"
+                            style={{ flex: 1, padding: "10px", background: "#2a3942", border: "1px solid #3b4a54", color: "#d1d7db", borderRadius: "6px", outline: "none", fontSize: "0.85rem" }}
+                            value={templateVars[key]}
+                            onChange={(e) => setTemplateVars({ ...templateVars, [key]: e.target.value })}
+                            placeholder={isMedia ? "https://..." : "Enter text..."}
+                          />
+                          {isMedia && (
+                            <>
+                              <input type="file" id={`chat-upload-${key}`} style={{ display: "none" }} onChange={(e) => handleFileUpload(e, key)} />
+                              <button
+                                onClick={() => document.getElementById(`chat-upload-${key}`).click()}
+                                disabled={isUploading}
+                                style={{ padding: "0 15px", background: "#3b4a54", border: "none", color: "#e9edef", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer" }}
+                              >
+                                {isUploading ? "..." : "Upload"}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                onClick={sendTemplate}
+                disabled={!selectedTemplate}
+                style={{
+                  width: "100%",
+                  padding: "14px",
+                  background: selectedTemplate ? "#00a884" : "#3b4a54",
+                  color: "#111b21",
+                  border: "none",
+                  borderRadius: "8px",
+                  fontWeight: "700",
+                  cursor: selectedTemplate ? "pointer" : "not-allowed",
+                  fontSize: "1rem"
+                }}
+              >
+                Send Template
+              </button>
+            </div>
           </div>
         </div>
       )}
-      {/* New Chat Modal */}
+
       {showNewChatModal && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: "400px", padding: "2rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1.5rem" }}>
-              <h3>Start New Chat</h3>
-              <button onClick={() => setShowNewChatModal(false)} style={{ background: "transparent", border: "none", color: "white", cursor: "pointer" }}>X</button>
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(11, 20, 26, 0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#222e35", width: "400px", borderRadius: "12px", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
+            <div style={{ padding: "20px 24px", background: "#202c33", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "12px 12px 0 0" }}>
+              <h3 style={{ margin: 0, color: "#e9edef" }}>New Chat</h3>
+              <button onClick={() => setShowNewChatModal(false)} style={{ background: "transparent", border: "none", color: "#aebac1", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
             </div>
-            <form onSubmit={handleNewChat}>
-              <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Phone Number (with country code)</label>
-              <input 
-                type="text" 
+            <form onSubmit={handleNewChat} style={{ padding: "24px" }}>
+              <label style={{ fontSize: "0.85rem", color: "#8696a0", display: "block", marginBottom: "8px" }}>Phone Number (with country code)</label>
+              <input
+                type="text"
                 placeholder="e.g. 919801017333"
-                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px", marginTop: "5px", marginBottom: "1.5rem" }}
+                style={{ width: "100%", padding: "12px", background: "#2a3942", border: "1px solid #3b4a54", color: "#d1d7db", borderRadius: "8px", outline: "none", marginBottom: "20px" }}
                 value={newChatPhone}
                 onChange={(e) => setNewChatPhone(e.target.value)}
+                autoFocus
                 required
               />
-              <button type="submit" className="btn-primary" style={{ width: "100%", padding: "12px" }}>
+              <button type="submit" style={{ width: "100%", padding: "12px", background: "#00a884", color: "#111b21", border: "none", borderRadius: "8px", fontWeight: "700", cursor: "pointer" }}>
                 Start Chatting
               </button>
             </form>
@@ -603,3 +682,4 @@ const ChatModule = () => {
 };
 
 export default ChatModule;
+

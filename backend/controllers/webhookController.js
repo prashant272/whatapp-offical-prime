@@ -18,28 +18,51 @@ export const verifyWebhook = (req, res) => {
 };
 
 export const handleWebhook = async (req, res) => {
-  console.log("---- WEBHOOK DEBUG START ----");
-  console.log("BODY:", JSON.stringify(req.body, null, 2));
-  console.log("---- WEBHOOK DEBUG END ----");
+  console.log(" \n\n🔔 --- NEW WEBHOOK REQUEST ---");
+  console.log(JSON.stringify(req.body, null, 2));
+  console.log("-------------------------------\n");
 
   const body = req.body;
   
   if (body.object === "whatsapp_business_account") {
     try {
-      const entry = body.entry?.[0];
-      const changes = entry?.changes?.[0];
-      const value = changes?.value;
+      const value = body.entry?.[0]?.changes?.[0]?.value;
       const message = value?.messages?.[0];
+      const status = value?.statuses?.[0];
+
+      if (status) {
+        console.log(`📈 Message Status Update: ${status.status} for ${status.id}`);
+        return res.sendStatus(200);
+      }
 
       if (message) {
-        console.log(`✅ MATCHED MESSAGE: From ${message.from}`);
         const from = message.from; 
-        const bodyContent = message.text?.body || "Non-text message received";
+        let bodyContent = "";
+        let type = message.type || "text";
+
+        if (type === "text") {
+          bodyContent = message.text?.body;
+        } else if (type === "button") {
+          bodyContent = message.button?.text;
+        } else if (type === "interactive") {
+          const interactive = message.interactive;
+          bodyContent = interactive?.button_reply?.title || interactive?.list_reply?.title || interactive?.button_reply?.id;
+        } else if (type === "image") {
+          bodyContent = message.image?.caption || "Image received";
+        }
+
+        // Final fallback if nothing worked
+        if (!bodyContent) {
+          bodyContent = `Received ${type} message`;
+        }
+
+        console.log(`📩 PROCESSED: [${type}] "${bodyContent}" from ${from}`);
 
         const newMessage = new Message({
           from,
           to: process.env.PHONE_NUMBER_ID,
           body: bodyContent,
+          type,
           direction: "inbound"
         });
         await newMessage.save();
@@ -58,8 +81,6 @@ export const handleWebhook = async (req, res) => {
         conversation.lastMessageTime = new Date();
         conversation.unreadCount += 1;
         await conversation.save();
-
-        console.log(`📩 SAVED! Message from ${from}: ${bodyContent}`);
       }
       res.sendStatus(200);
     } catch (err) {

@@ -95,6 +95,11 @@ export const sendChatTemplateMessage = async (req, res) => {
       from: "me",
       to,
       body: `[Template: ${templateName}]`,
+      type: "template",
+      templateData: {
+        name: templateName,
+        components: templateComponents
+      },
       direction: "outbound"
     });
     await newMessage.save();
