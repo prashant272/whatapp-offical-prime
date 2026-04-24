@@ -3,6 +3,7 @@ import Conversation from "../models/Conversation.js";
 import Contact from "../models/Contact.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getMediaUrl } from "../services/whatsappService.js";
+import { getIO } from "../utils/socket.js";
 
 export const verifyWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -38,6 +39,11 @@ export const handleWebhook = async (req, res) => {
           { messageId: status.id },
           { status: status.status }
         );
+
+        // Notify UI about status update
+        const io = getIO();
+        io.emit("status_update", { messageId: status.id, status: status.status });
+
         return res.sendStatus(200);
       }
 
@@ -76,7 +82,7 @@ export const handleWebhook = async (req, res) => {
         const newMessage = new Message({
           messageId: message.id,
           from,
-          to: process.env.PHONE_NUMBER_ID,
+          to: "me", // Changed from process.env.PHONE_NUMBER_ID for consistency
           body: bodyContent,
           type,
           mediaUrl,
@@ -110,6 +116,10 @@ export const handleWebhook = async (req, res) => {
         conversation.lastMessageTime = new Date();
         conversation.unreadCount += 1;
         await conversation.save();
+
+        // Notify UI about NEW MESSAGE
+        const io = getIO();
+        io.emit("new_message", { message: newMessage, conversation });
       }
       res.sendStatus(200);
     } catch (err) {

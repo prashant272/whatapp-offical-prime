@@ -12,10 +12,11 @@ export const throttleCampaign = async (contacts, templateName, sendFunction, onP
       const delay = Math.floor(Math.random() * 2000) + 1000;
       await new Promise(resolve => setTimeout(resolve, delay));
 
-      await sendFunction(contact.phone, templateName, language, templateComponents);
+      const res = await sendFunction(contact.phone, templateName, language, templateComponents);
+      const messageId = res.messages?.[0]?.id;
       
       successCount++;
-      logs.push({ phone: contact.phone, status: "sent" });
+      logs.push({ phone: contact.phone, status: "sent", messageId });
     } catch (error) {
       failureCount++;
       logs.push({ phone: contact.phone, status: "failed", error: error.message || "Unknown error" });
@@ -23,7 +24,7 @@ export const throttleCampaign = async (contacts, templateName, sendFunction, onP
     }
 
     if (onProgress) {
-      await onProgress(successCount, failureCount, logs);
+      await onProgress(successCount, failureCount, logs, logs[logs.length - 1]);
     }
   }
 

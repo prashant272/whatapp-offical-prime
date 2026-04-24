@@ -16,56 +16,44 @@ import activityRoutes from "./routes/activityRoutes.js";
 import presetRoutes from "./routes/presetRoutes.js";
 import { errorHandler } from "./utils/errorHandler.js";
 
+import { createServer } from "http";
+import { initSocket } from "./utils/socket.js";
+
 dotenv.config();
 connectDB();
 
 const app = express();
+const httpServer = createServer(app);
+
+// Initialize Socket.io
+initSocket(httpServer);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
 // --- ROUTES ---
-
-// 1. Templates
+// ... (omitted routes for brevity, assuming replace_file_content handles the whole block)
 app.use("/api/templates", templateRoutes);
-
-// 2. Campaigns
 app.use("/api/campaigns", campaignRoutes);
-
-// 3. Webhooks
 app.use("/webhook", webhookRoutes);
-
-// 4. Chat & Messages
-app.use("/api", chatRoutes); // /api/conversations, /api/messages/...
-
-// 5. Contacts & Uploads
+app.use("/api", chatRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/upload", uploadRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/activities", activityRoutes);
+app.use("/api/presets", presetRoutes);
 
-// --- ROUTES ---
-
-// 1. Root Status Check (Health Check)
 app.get("/", (req, res) => {
   res.status(200).json({ 
     message: "WhatsApp Dashboard API is Running",
     status: "UP", 
-    timestamp: new Date(),
-    uptime: process.uptime()
+    timestamp: new Date()
   });
 });
-
-// 2. Auth & User Management
-app.use("/api/auth", authRoutes);
-app.use("/api/users", userRoutes);
-
-// 7. Activity Logs
-app.use("/api/activities", activityRoutes);
-
-// 8. Template Presets
-app.use("/api/presets", presetRoutes);
 
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Backend running on port ${PORT} 🚀`));
+httpServer.listen(PORT, () => console.log(`Backend running on port ${PORT} 🚀`));

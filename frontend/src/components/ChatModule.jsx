@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
 import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, CheckCircle2, AlertCircle, FileText, Plus, Paperclip, Loader2 } from "lucide-react";
+import { io } from "socket.io-client";
 
 import { API_BASE } from "../api";
 
@@ -23,6 +24,7 @@ const ChatModule = () => {
   const [templateVars, setTemplateVars] = useState({});
   const scrollRef = useRef();
   const [prevMsgCount, setPrevMsgCount] = useState(0);
+  const [showContactInfo, setShowContactInfo] = useState(false);
 
   const currentUser = JSON.parse(localStorage.getItem("userInfo"));
   const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
@@ -103,31 +105,72 @@ const ChatModule = () => {
     }
   };
 
+  // Socket.io Real-time connection
   useEffect(() => {
-    const fetchPresets = async () => {
+    const fetchInitialData = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/presets`, config);
-        setPresets(res.data);
+        const [convs, temps, pres, execs] = await Promise.all([
+          axios.get(`${API_BASE}/conversations`, config),
+          axios.get(`${API_BASE}/templates`, config),
+          axios.get(`${API_BASE}/presets`, config),
+          axios.get(`${API_BASE}/users`, config).catch(() => ({ data: [] }))
+        ]);
+        setConversations(Array.isArray(convs.data) ? convs.data : []);
+        setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
+        setPresets(Array.isArray(pres.data) ? pres.data : []);
+        if (currentUser.role !== "Executive") {
+          setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager") : []);
+        }
       } catch (err) {
-        console.error("Error fetching presets:", err);
+        console.error("Initial fetch error:", err);
       }
     };
 
-    fetchConversations();
-    fetchTemplates();
-    fetchPresets();
-    fetchExecutives();
-    const interval = setInterval(fetchConversations, 10000);
-    return () => clearInterval(interval);
+    fetchInitialData();
+
+    const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const socket = io(socketUrl);
+
+    socket.on("new_message", ({ message, conversation }) => {
+      // 1. Update Conversations List
+      setConversations(prev => {
+        const index = prev.findIndex(c => c.phone === conversation.phone);
+        if (index !== -1) {
+          const updated = [...prev];
+          updated[index] = { ...updated[index], ...conversation };
+          return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
+        } else {
+          return [conversation, ...prev];
+        }
+      });
+
+      // 2. Update Messages if current chat is open
+      if (selectedChatRef.current && selectedChatRef.current.phone === message.from || selectedChatRef.current?.phone === message.to) {
+        setMessages(prev => {
+          // Avoid duplicate messages if already sent via handleSend
+          if (prev.find(m => m._id === message._id || (m.messageId && m.messageId === message.messageId))) {
+            return prev;
+          }
+          return [...prev, message];
+        });
+      }
+    });
+
+    socket.on("status_update", ({ messageId, status }) => {
+      setMessages(prev => prev.map(m => m.messageId === messageId ? { ...m, status } : m));
+    });
+
+    return () => socket.disconnect();
   }, []);
 
+  // Use a ref to track selectedChat inside socket callback
+  const selectedChatRef = useRef(selectedChat);
   useEffect(() => {
+    selectedChatRef.current = selectedChat;
     if (selectedChat) {
       fetchMessages(selectedChat.phone);
-      const interval = setInterval(() => fetchMessages(selectedChat.phone), 5000);
-      return () => clearInterval(interval);
     }
-  }, [selectedChat?._id]);
+  }, [selectedChat]);
 
 
 
@@ -228,13 +271,13 @@ const ChatModule = () => {
     }
   };
 
-  const updateStatus = async (status) => {
+  const handleUpdateStatus = async (status) => {
     if (!selectedChat) return;
     try {
       await axios.post(`${API_BASE}/conversations/status`, {
         phone: selectedChat.phone,
         status
-      });
+      }, config);
       fetchConversations();
     } catch (err) {
       alert("Error updating status: " + err.message);
@@ -348,10 +391,10 @@ const ChatModule = () => {
   return (
     <div className="chat-container glass-card" style={{
       display: "grid",
-      gridTemplateColumns: "350px 1fr",
-      height: "600px",
+      gridTemplateColumns: showContactInfo ? "350px 1fr 300px" : "350px 1fr",
+      height: "700px",
       width: "100%",
-      maxWidth: "1250px",
+      maxWidth: showContactInfo ? "100%" : "1250px",
       margin: "20px 0",
       padding: 0,
       overflow: "hidden",
@@ -469,13 +512,18 @@ const ChatModule = () => {
         {selectedChat ? (
           <>
             <div style={{ padding: "10px 16px", background: "#202c33", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "60px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{ width: "35px", height: "35px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7" }}>
-                  <User size={20} />
+              <div 
+                style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}
+                onClick={() => setShowContactInfo(!showContactInfo)}
+              >
+                <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7", fontSize: "1.2rem", fontWeight: "bold" }}>
+                  {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <h4 style={{ margin: 0, fontSize: "0.95rem", color: "#e9edef" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
-                  <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>Online</span>
+                  <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>
+                    {selectedChat.contact?.name ? selectedChat.phone : "Online"}
+                  </span>
                 </div>
               </div>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
@@ -644,6 +692,43 @@ const ChatModule = () => {
           </div>
         )}
       </div>
+
+      {/* Contact Info Sidebar */}
+      {showContactInfo && selectedChat && (
+        <div style={{ background: "#111b21", borderLeft: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "12px 16px", background: "#202c33", display: "flex", alignItems: "center", gap: "20px", height: "60px" }}>
+            <button onClick={() => setShowContactInfo(false)} style={{ background: "transparent", border: "none", color: "#aebac1", cursor: "pointer" }}>✕</button>
+            <span style={{ color: "#e9edef", fontSize: "0.95rem" }}>Contact Info</span>
+          </div>
+          
+          <div className="chat-scroll" style={{ flex: 1, overflowY: "auto", padding: "24px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ width: "200px", height: "200px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7", fontSize: "5rem", marginBottom: "20px", boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>
+              {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
+            </div>
+            <h3 style={{ color: "#e9edef", margin: "0 0 5px 0", fontSize: "1.2rem" }}>{selectedChat.contact?.name || "Unknown"}</h3>
+            <p style={{ color: "#8696a0", margin: "0 0 30px 0", fontSize: "0.9rem" }}>{selectedChat.phone}</p>
+            
+            <div style={{ width: "100%", background: "#202c33", borderRadius: "12px", padding: "20px", marginBottom: "20px" }}>
+              <label style={{ color: "#00a884", fontSize: "0.8rem", display: "block", marginBottom: "10px" }}>Status</label>
+              <div style={{ color: "#e9edef", fontSize: "0.95rem" }}>{selectedChat.status || "New"}</div>
+            </div>
+
+            <div style={{ width: "100%", background: "#202c33", borderRadius: "12px", padding: "20px" }}>
+              <label style={{ color: "#00a884", fontSize: "0.8rem", display: "block", marginBottom: "10px" }}>Assigned To</label>
+              <div style={{ color: "#e9edef", fontSize: "0.95rem" }}>{selectedChat.assignedTo?.name || "Unassigned"}</div>
+            </div>
+
+            <div style={{ width: "100%", marginTop: "30px" }}>
+              <button 
+                onClick={() => alert("Notes feature coming soon!")}
+                style={{ width: "100%", padding: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid #3b4a54", color: "#ff4757", borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem" }}
+              >
+                Block Contact
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals remain same but with better styling */}
       {showTemplateModal && (

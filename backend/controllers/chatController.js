@@ -1,9 +1,10 @@
 import Conversation from "../models/Conversation.js";
 import Template from "../models/Template.js";
 import Message from "../models/Message.js";
-import { sendTextMessage, sendTemplateMessage } from "../services/whatsappService.js";
+import { sendTextMessage, sendTemplateMessage, sendImageMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
+import { getIO } from "../utils/socket.js";
 
 export const getConversations = async (req, res) => {
   try {
@@ -55,11 +56,15 @@ export const sendMessage = async (req, res) => {
     });
     await newMessage.save();
 
-    await Conversation.findOneAndUpdate(
+    const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to },
       { lastMessage: body, lastMessageTime: new Date() },
-      { upsert: true }
+      { upsert: true, new: true }
     );
+
+    // Socket Emit
+    const io = getIO();
+    io.emit("new_message", { message: newMessage, conversation: updatedConv });
 
     await logActivity(req.user._id, "SEND_MESSAGE", `Sent text message: ${body.substring(0, 50)}...`, to);
 
@@ -113,11 +118,15 @@ export const sendChatTemplateMessage = async (req, res) => {
     });
     await newMessage.save();
 
-    await Conversation.findOneAndUpdate(
+    const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to },
       { lastMessage: newMessage.body, lastMessageTime: new Date() },
-      { upsert: true }
+      { upsert: true, new: true }
     );
+
+    // Socket Emit
+    const io = getIO();
+    io.emit("new_message", { message: newMessage, conversation: updatedConv });
 
     await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
 
@@ -147,11 +156,15 @@ export const sendChatImageMessage = async (req, res) => {
     });
     await newMessage.save();
 
-    await Conversation.findOneAndUpdate(
+    const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to },
       { lastMessage: caption || "📷 Image", lastMessageTime: new Date() },
-      { upsert: true }
+      { upsert: true, new: true }
     );
+
+    // Socket Emit
+    const io = getIO();
+    io.emit("new_message", { message: newMessage, conversation: updatedConv });
 
     await logActivity(req.user._id, "SEND_IMAGE", `Sent image: ${imageUrl}`, to);
 

@@ -38,70 +38,68 @@ export const startCampaign = async (req, res) => {
       contacts,
       templateName,
       sendTemplateMessage,
-      async (success, failure, logs) => {
-        // Find the template to reconstruct message for logs
-        const fullTemplate = await Template.findById(template._id);
-        
-        for (const log of logs) {
-          if (log.status === "sent") {
-            // Reconstruct a preview of the message for the chat history
-            let messageBody = `Campaign [${name}]: ${templateName}`;
-            if (fullTemplate) {
-              const bodyComp = fullTemplate.components.find(c => c.type === "BODY");
-              if (bodyComp && bodyComp.text) {
-                let text = bodyComp.text;
-                // Simple replacement for logs (using values from templateComponents if available)
-                if (templateComponents) {
-                  const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
-                  bodyParams.forEach((p, idx) => {
-                    text = text.replace(`{{${idx + 1}}}`, p.text || "");
-                  });
-                }
-                messageBody = text;
+      async (success, failure, logs, latestLog) => {
+        if (latestLog && latestLog.status === "sent") {
+          const log = latestLog;
+          // Reconstruct a preview of the message for the chat history
+          let messageBody = `Campaign [${name}]: ${templateName}`;
+          
+          if (template) {
+            const bodyComp = template.components.find(c => c.type === "BODY");
+            if (bodyComp && bodyComp.text) {
+              let text = bodyComp.text;
+              // Simple replacement for logs (using values from templateComponents if available)
+              if (templateComponents) {
+                const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
+                bodyParams.forEach((p, idx) => {
+                  text = text.replace(`{{${idx + 1}}}`, p.text || "");
+                });
               }
+              messageBody = text;
             }
-
-            let contact = await Contact.findOne({ phone: log.phone });
-            if (!contact) {
-              contact = new Contact({ name: `User ${log.phone}`, phone: log.phone });
-              await contact.save();
-            }
-
-            // Extract Header Image if any
-            let mediaUrl = null;
-            if (templateComponents) {
-              const headerComp = templateComponents.find(c => c.type === "header");
-              if (headerComp && headerComp.parameters) {
-                const imgParam = headerComp.parameters.find(p => p.type === "image");
-                if (imgParam) mediaUrl = imgParam.image?.link;
-              }
-            }
-
-            const newMessage = new Message({
-              from: "me",
-              to: log.phone,
-              body: messageBody,
-              type: "template",
-              templateData: {
-                name: templateName,
-                components: templateComponents
-              },
-              mediaUrl: mediaUrl,
-              direction: "outbound",
-              status: "sent"
-            });
-            await newMessage.save();
-
-            await Conversation.findOneAndUpdate(
-              { phone: log.phone },
-              { 
-                contact: contact._id,
-                lastMessage: newMessage.body, 
-                lastMessageTime: new Date() 
-              },
-              { upsert: true }
-            );
           }
+
+          let contact = await Contact.findOne({ phone: log.phone });
+          if (!contact) {
+            contact = new Contact({ name: `User ${log.phone}`, phone: log.phone });
+            await contact.save();
+          }
+
+          // Extract Header Image if any
+          let mediaUrl = null;
+          if (templateComponents) {
+            const headerComp = templateComponents.find(c => c.type === "header");
+            if (headerComp && headerComp.parameters) {
+              const imgParam = headerComp.parameters.find(p => p.type === "image");
+              if (imgParam) mediaUrl = imgParam.image?.link;
+            }
+          }
+
+          const newMessage = new Message({
+            messageId: log.messageId, // WAMID for status tracking
+            from: "me",
+            to: log.phone,
+            body: messageBody,
+            type: "template",
+            templateData: {
+              name: templateName,
+              components: templateComponents
+            },
+            mediaUrl: mediaUrl,
+            direction: "outbound",
+            status: "sent"
+          });
+          await newMessage.save();
+
+          await Conversation.findOneAndUpdate(
+            { phone: log.phone },
+            { 
+              contact: contact._id,
+              lastMessage: newMessage.body, 
+              lastMessageTime: new Date() 
+            },
+            { upsert: true }
+          );
         }
         
         await Campaign.findByIdAndUpdate(campaign._id, {
