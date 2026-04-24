@@ -117,9 +117,12 @@ export const handleWebhook = async (req, res) => {
         conversation.unreadCount += 1;
         await conversation.save();
 
+        // Populate contact before emitting
+        const populatedConv = await Conversation.findById(conversation._id).populate("contact");
+
         // Notify UI about NEW MESSAGE
         const io = getIO();
-        io.emit("new_message", { message: newMessage, conversation });
+        io.emit("new_message", { message: newMessage, conversation: populatedConv });
       }
       res.sendStatus(200);
     } catch (err) {

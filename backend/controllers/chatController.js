@@ -62,9 +62,11 @@ export const sendMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
+
     // Socket Emit
     const io = getIO();
-    io.emit("new_message", { message: newMessage, conversation: updatedConv });
+    io.emit("new_message", { message: newMessage, conversation: populatedConv });
 
     await logActivity(req.user._id, "SEND_MESSAGE", `Sent text message: ${body.substring(0, 50)}...`, to);
 
@@ -124,9 +126,11 @@ export const sendChatTemplateMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
+
     // Socket Emit
     const io = getIO();
-    io.emit("new_message", { message: newMessage, conversation: updatedConv });
+    io.emit("new_message", { message: newMessage, conversation: populatedConv });
 
     await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
 
@@ -162,9 +166,11 @@ export const sendChatImageMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
+
     // Socket Emit
     const io = getIO();
-    io.emit("new_message", { message: newMessage, conversation: updatedConv });
+    io.emit("new_message", { message: newMessage, conversation: populatedConv });
 
     await logActivity(req.user._id, "SEND_IMAGE", `Sent image: ${imageUrl}`, to);
 
