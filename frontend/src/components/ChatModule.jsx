@@ -368,6 +368,28 @@ const ChatModule = () => {
 
   const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
 
+  const formatWhatsAppText = (text) => {
+    if (!text) return "";
+    // Escaping HTML to prevent XSS
+    let formatted = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Bold: *text*
+    formatted = formatted.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
+    // Italic: _text_
+    formatted = formatted.replace(/_([^_]+)_/g, "<em>$1</em>");
+    // Strikethrough: ~text~
+    formatted = formatted.replace(/~([^~]+)~/g, "<del>$1</del>");
+    // Monospace: `text`
+    formatted = formatted.replace(/`([^`]+)`/g, "<code>$1</code>");
+    // Line breaks
+    formatted = formatted.replace(/\n/g, "<br />");
+
+    return formatted;
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case "Interested": return "#25d366";
@@ -587,18 +609,20 @@ const ChatModule = () => {
                             />
                           )}
                           
-                          <div style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}>
-                            {/* Reconstructing template body text if possible, else showing fallback */}
-                            {(() => {
-                              const template = templates.find(t => t.name === msg.templateData.name);
-                              let text = template?.components.find(c => c.type === "BODY")?.text || msg.body;
-                              const params = msg.templateData.components.find(c => c.type === "body")?.parameters || [];
-                              params.forEach((p, i) => {
-                                text = text.replace(`{{${i+1}}}`, p.text || "");
-                              });
-                              return text;
-                            })()}
-                          </div>
+                          <div 
+                            style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
+                            dangerouslySetInnerHTML={{
+                              __html: (() => {
+                                const template = templates.find(t => t.name === msg.templateData.name);
+                                let text = template?.components.find(c => c.type === "BODY")?.text || msg.body;
+                                const params = msg.templateData.components.find(c => c.type === "body")?.parameters || [];
+                                params.forEach((p, i) => {
+                                  text = text.replace(`{{${i+1}}}`, p.text || "");
+                                });
+                                return formatWhatsAppText(text);
+                              })()
+                            }}
+                          />
 
                           {/* Rendering Buttons from the template structure in DB */}
                           {templates.find(t => t.name === msg.templateData.name)?.components.find(c => c.type === "BUTTONS")?.buttons?.map((btn, i) => (
@@ -617,7 +641,10 @@ const ChatModule = () => {
                               onDoubleClick={() => window.open(msg.mediaUrl, "_blank")}
                             />
                           )}
-                          <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
+                          <div 
+                            style={{ whiteSpace: "pre-wrap" }}
+                            dangerouslySetInnerHTML={{ __html: formatWhatsAppText(msg.body) }}
+                          />
                         </div>
                       )}
 
@@ -664,14 +691,71 @@ const ChatModule = () => {
                 {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
               </button>
               
-              <input
-                type="text"
+              <textarea
                 placeholder="Type a message"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                style={{ flex: 1, padding: "8px 12px", background: "#2a3942", border: "none", color: "#d1d7db", borderRadius: "8px", outline: "none" }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(e);
+                  }
+                  
+                  // Keyboard Shortcuts: Ctrl+B or Cmd+B for Bold
+                  if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+                    e.preventDefault();
+                    const start = e.target.selectionStart;
+                    const end = e.target.selectionEnd;
+                    const text = newMessage;
+                    const selected = text.substring(start, end);
+                    const before = text.substring(0, start);
+                    const after = text.substring(end);
+                    setNewMessage(`${before}*${selected}*${after}`);
+                    // Setting cursor position after state update is tricky, 
+                    // but usually, React will keep it at the end of the text.
+                  }
+                  
+                  // Keyboard Shortcuts: Ctrl+I or Cmd+I for Italic
+                  if ((e.ctrlKey || e.metaKey) && e.key === "i") {
+                    e.preventDefault();
+                    const start = e.target.selectionStart;
+                    const end = e.target.selectionEnd;
+                    const text = newMessage;
+                    const selected = text.substring(start, end);
+                    const before = text.substring(0, start);
+                    const after = text.substring(end);
+                    setNewMessage(`${before}_${selected}_${after}`);
+                  }
+
+                  // Keyboard Shortcut: Ctrl+N for New Line
+                  if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+                    e.preventDefault();
+                    const start = e.target.selectionStart;
+                    const end = e.target.selectionEnd;
+                    const text = newMessage;
+                    const before = text.substring(0, start);
+                    const after = text.substring(end);
+                    setNewMessage(`${before}\n${after}`);
+                  }
+                }}
+                rows="1"
+                style={{ 
+                  flex: 1, 
+                  padding: "10px 12px", 
+                  background: "#2a3942", 
+                  border: "none", 
+                  color: "#d1d7db", 
+                  borderRadius: "8px", 
+                  outline: "none", 
+                  resize: "none",
+                  fontFamily: "inherit",
+                  fontSize: "0.9rem",
+                  lineHeight: "1.4",
+                  maxHeight: "100px",
+                  overflowY: "auto"
+                }}
               />
-              <button type="submit" style={{ background: "transparent", border: "none", color: "#00a884", cursor: "pointer" }}>
+              <button type="submit" style={{ background: "transparent", border: "none", color: "#00a884", cursor: "pointer", padding: "5px" }}>
                 <Send size={24} />
               </button>
             </form>
