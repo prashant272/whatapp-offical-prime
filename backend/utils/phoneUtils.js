@@ -6,8 +6,8 @@
 export const normalizePhone = (phone) => {
   if (!phone) return "";
   
-  // Remove any non-numeric characters (spaces, dashes, plus)
-  let cleanPhone = phone.replace(/\D/g, "");
+  // Ensure phone is a string and remove any non-numeric characters
+  let cleanPhone = phone.toString().replace(/\D/g, "");
   
   // If it's 10 digits, add 91 at the beginning
   if (cleanPhone.length === 10) {
