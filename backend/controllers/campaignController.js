@@ -16,7 +16,8 @@ export const startCampaign = async (req, res) => {
     const uniquePhones = [...new Set(contacts.map(phone => normalizePhone(phone)))];
     console.log(`🚀 Campaign "${name}": Cleaned duplicates. ${contacts.length} -> ${uniquePhones.length} unique contacts.`);
     
-    contacts = uniquePhones;
+    // Convert back to object format expected by throttleCampaign
+    contacts = uniquePhones.map(phone => ({ phone }));
 
     const template = await Template.findOne({ name: templateName });
     if (!template) return res.status(404).json({ error: "Template not found" });
