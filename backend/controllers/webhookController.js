@@ -1,6 +1,7 @@
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import Contact from "../models/Contact.js";
+import { normalizePhone } from "../utils/phoneUtils.js";
 
 export const verifyWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -36,7 +37,7 @@ export const handleWebhook = async (req, res) => {
       }
 
       if (message) {
-        const from = message.from; 
+        const from = normalizePhone(message.from); 
         let bodyContent = "";
         let type = message.type || "text";
 

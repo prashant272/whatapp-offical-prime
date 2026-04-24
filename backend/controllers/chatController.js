@@ -3,6 +3,7 @@ import Template from "../models/Template.js";
 import Message from "../models/Message.js";
 import { sendTextMessage, sendTemplateMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { normalizePhone } from "../utils/phoneUtils.js";
 
 export const getConversations = async (req, res) => {
   try {
@@ -38,7 +39,8 @@ export const getMessages = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { to, body } = req.body;
+    const { body } = req.body;
+    const to = normalizePhone(req.body.to);
     const metaRes = await sendTextMessage(to, body);
     console.log("📤 Meta Send Response:", metaRes);
 
@@ -83,7 +85,8 @@ export const updateConversationStatus = async (req, res) => {
 
 export const sendChatTemplateMessage = async (req, res) => {
   try {
-    const { to, templateName, templateComponents } = req.body;
+    const { templateName, templateComponents } = req.body;
+    const to = normalizePhone(req.body.to);
     
     // Find template in DB to get correct language
     const template = await Template.findOne({ name: templateName });
