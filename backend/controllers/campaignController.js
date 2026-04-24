@@ -12,8 +12,10 @@ export const startCampaign = async (req, res) => {
   try {
     let { name, templateName, contacts, templateComponents } = req.body;
     
-    // 1. Normalize and De-duplicate contacts (Prevent multiple messages to same person)
-    const uniquePhones = [...new Set(contacts.map(phone => normalizePhone(phone)))];
+    // 1. Normalize and De-duplicate contacts (Handle both string and object formats)
+    const rawPhones = contacts.map(c => typeof c === 'object' ? c.phone : c);
+    const uniquePhones = [...new Set(rawPhones.map(phone => normalizePhone(phone)))];
+    
     console.log(`🚀 Campaign "${name}": Cleaned duplicates. ${contacts.length} -> ${uniquePhones.length} unique contacts.`);
     
     // Convert back to object format expected by throttleCampaign
