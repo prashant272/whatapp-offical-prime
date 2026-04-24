@@ -44,7 +44,10 @@ export const sendMessage = async (req, res) => {
     const metaRes = await sendTextMessage(to, body);
     console.log("📤 Meta Send Response:", metaRes);
 
+    const messageId = metaRes.messages?.[0]?.id;
+
     const newMessage = new Message({
+      messageId,
       from: "me",
       to,
       body,
@@ -94,7 +97,10 @@ export const sendChatTemplateMessage = async (req, res) => {
 
     const metaRes = await sendTemplateMessage(to, templateName, lang, templateComponents);
     
+    const messageId = metaRes.messages?.[0]?.id;
+
     const newMessage = new Message({
+      messageId,
       from: "me",
       to,
       body: `[Template: ${templateName}]`,
@@ -114,6 +120,40 @@ export const sendChatTemplateMessage = async (req, res) => {
     );
 
     await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
+
+    res.json({ success: true, message: newMessage });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+export const sendChatImageMessage = async (req, res) => {
+  try {
+    const { imageUrl, caption } = req.body;
+    const to = normalizePhone(req.body.to);
+
+    const metaRes = await sendImageMessage(to, imageUrl, caption);
+    const messageId = metaRes.messages?.[0]?.id;
+
+    const newMessage = new Message({
+      messageId,
+      from: "me",
+      to,
+      body: caption || "Image sent",
+      type: "image",
+      mediaUrl: imageUrl,
+      direction: "outbound",
+      status: "sent"
+    });
+    await newMessage.save();
+
+    await Conversation.findOneAndUpdate(
+      { phone: to },
+      { lastMessage: caption || "📷 Image", lastMessageTime: new Date() },
+      { upsert: true }
+    );
+
+    await logActivity(req.user._id, "SEND_IMAGE", `Sent image: ${imageUrl}`, to);
 
     res.json({ success: true, message: newMessage });
   } catch (err) {

@@ -2,6 +2,7 @@ import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import Contact from "../models/Contact.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
+import { getMediaUrl } from "../services/whatsappService.js";
 
 export const verifyWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -32,7 +33,11 @@ export const handleWebhook = async (req, res) => {
       const status = value?.statuses?.[0];
 
       if (status) {
-        console.log(`📈 Message Status Update: ${status.status} for ${status.id}`);
+        console.log(`📈 Status Update: ${status.status} for ${status.id}`);
+        await Message.findOneAndUpdate(
+          { messageId: status.id },
+          { status: status.status }
+        );
         return res.sendStatus(200);
       }
 
@@ -40,6 +45,8 @@ export const handleWebhook = async (req, res) => {
         const from = normalizePhone(message.from); 
         let bodyContent = "";
         let type = message.type || "text";
+
+        let mediaUrl = null;
 
         if (type === "text") {
           bodyContent = message.text?.body;
@@ -50,6 +57,13 @@ export const handleWebhook = async (req, res) => {
           bodyContent = interactive?.button_reply?.title || interactive?.list_reply?.title || interactive?.button_reply?.id;
         } else if (type === "image") {
           bodyContent = message.image?.caption || "Image received";
+          if (message.image?.id) {
+            try {
+              mediaUrl = await getMediaUrl(message.image.id);
+            } catch (err) {
+              console.error("Error fetching media URL:", err);
+            }
+          }
         }
 
         // Final fallback if nothing worked
@@ -60,21 +74,35 @@ export const handleWebhook = async (req, res) => {
         console.log(`📩 PROCESSED: [${type}] "${bodyContent}" from ${from}`);
 
         const newMessage = new Message({
+          messageId: message.id,
           from,
           to: process.env.PHONE_NUMBER_ID,
           body: bodyContent,
           type,
+          mediaUrl,
           direction: "inbound"
         });
         await newMessage.save();
 
         let conversation = await Conversation.findOne({ phone: from });
+        let contact = await Contact.findOne({ phone: from });
+        
+        // Extract Profile Name from Meta Webhook
+        const profileName = value?.contacts?.[0]?.profile?.name;
+
+        if (!contact) {
+          contact = new Contact({ 
+            name: profileName || `User ${from}`, 
+            phone: from 
+          });
+          await contact.save();
+        } else if (profileName && contact.name.startsWith("User ")) {
+          // Update generic name with real profile name if found
+          contact.name = profileName;
+          await contact.save();
+        }
+
         if (!conversation) {
-          let contact = await Contact.findOne({ phone: from });
-          if (!contact) {
-            contact = new Contact({ name: `User ${from}`, phone: from });
-            await contact.save();
-          }
           conversation = new Conversation({ contact: contact._id, phone: from });
         }
         

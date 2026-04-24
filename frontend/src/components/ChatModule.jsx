@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
-import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, CheckCircle2, AlertCircle, FileText, Plus } from "lucide-react";
+import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, CheckCircle2, AlertCircle, FileText, Plus, Paperclip, Loader2 } from "lucide-react";
 
 import { API_BASE } from "../api";
 
@@ -12,25 +12,6 @@ const ChatModule = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-
-  const handleFileUpload = async (e, key) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const uploadData = new FormData();
-    uploadData.append("file", file);
-    try {
-      setIsUploading(true);
-      const res = await axios.post(`${API_BASE}/upload`, uploadData, {
-        headers: { ...config.headers, "Content-Type": "multipart/form-data" }
-      });
-      setTemplateVars({ ...templateVars, [key]: res.data.url });
-    } catch (err) {
-      alert("Upload failed: " + (err.response?.data?.error || err.message));
-    } finally {
-      setIsUploading(false);
-    }
-  };
   const [templates, setTemplates] = useState([]);
   const [presets, setPresets] = useState([]);
   const [selectedPreset, setSelectedPreset] = useState("");
@@ -63,6 +44,9 @@ const ChatModule = () => {
   useEffect(() => {
     setPrevMsgCount(0);
   }, [selectedChat?.phone]);
+
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchMessages = async (phone) => {
     try {
@@ -197,7 +181,50 @@ const ChatModule = () => {
         fetchConversations();
       }
     } catch (err) {
-      alert("Error sending message: " + err.message);
+      console.error("Error sending message:", err);
+      const errorMsg = err.response?.data?.error || "Failed to send message";
+      if (errorMsg.includes("24-hour") || err.response?.status === 400) {
+        alert("WhatsApp Rule: You can only send a Template message to this number right now (24-hour window closed).");
+      } else {
+        alert("Error: " + errorMsg);
+      }
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedChat) return;
+
+    try {
+      setIsUploading(true);
+      const uploadData = new FormData();
+      uploadData.append("file", file);
+
+      // 1. Upload to Cloudinary via your existing upload endpoint
+      const uploadRes = await axios.post(`${API_BASE}/upload`, uploadData, {
+        headers: { 
+          ...config.headers,
+          "Content-Type": "multipart/form-data" 
+        }
+      });
+
+      const imageUrl = uploadRes.data.url;
+
+      // 2. Send Image Message via WhatsApp
+      const res = await axios.post(`${API_BASE}/messages/send-image`, {
+        to: selectedChat.phone,
+        imageUrl: imageUrl,
+        caption: newMessage // Use current text input as caption if any
+      }, config);
+
+      setMessages([...messages, res.data.message]);
+      setNewMessage("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      console.error("Error uploading/sending image:", err);
+      alert("Failed to send image: " + (err.response?.data?.error || err.message));
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -533,12 +560,38 @@ const ChatModule = () => {
                           ))}
                         </div>
                       ) : (
-                        <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                          {msg.mediaUrl && (
+                            <img 
+                              src={msg.mediaUrl} 
+                              alt="Received" 
+                              style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover" }} 
+                              onDoubleClick={() => window.open(msg.mediaUrl, "_blank")}
+                            />
+                          )}
+                          <div style={{ whiteSpace: "pre-wrap" }}>{msg.body}</div>
+                        </div>
                       )}
 
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", gap: "4px" }}>
+                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", gap: "2px", alignItems: "center" }}>
                         <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        {msg.direction === "outbound" && <CheckCircle2 size={10} style={{ color: "#53bdeb" }} />}
+                        {msg.direction === "outbound" && (
+                          <div style={{ display: "flex", marginLeft: "2px" }}>
+                            {msg.status === "read" ? (
+                              <div style={{ display: "flex" }}>
+                                <CheckCircle2 size={11} style={{ color: "#53bdeb" }} />
+                                <CheckCircle2 size={11} style={{ color: "#53bdeb", marginLeft: "-6px" }} />
+                              </div>
+                            ) : msg.status === "delivered" ? (
+                              <div style={{ display: "flex" }}>
+                                <CheckCircle2 size={11} style={{ color: "#8696a0" }} />
+                                <CheckCircle2 size={11} style={{ color: "#8696a0", marginLeft: "-6px" }} />
+                              </div>
+                            ) : (
+                              <CheckCircle2 size={11} style={{ color: "#8696a0" }} />
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -546,7 +599,23 @@ const ChatModule = () => {
               ))}
             </div>
 
-            <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#202c33", display: "flex", gap: "10px" }}>
+            <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#202c33", display: "flex", gap: "10px", alignItems: "center" }}>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleImageUpload} 
+                accept="image/*" 
+                style={{ display: "none" }} 
+              />
+              <button 
+                type="button" 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                style={{ background: "transparent", border: "none", color: "#8696a0", cursor: "pointer", padding: "5px" }}
+              >
+                {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
+              </button>
+              
               <input
                 type="text"
                 placeholder="Type a message"

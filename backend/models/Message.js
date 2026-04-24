@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 const messageSchema = new mongoose.Schema({
+  messageId: { type: String, unique: true, sparse: true },
   from: { type: String, required: true },
   to: { type: String, required: true },
   body: { type: String, required: true },
@@ -12,7 +13,7 @@ const messageSchema = new mongoose.Schema({
   },
   timestamp: { type: Date, default: Date.now },
   direction: { type: String, enum: ["inbound", "outbound"], required: true },
-  status: { type: String, default: "received" }
+  status: { type: String, default: "sent" }
 });
 
 const Message = mongoose.model("Message", messageSchema);

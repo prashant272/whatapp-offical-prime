@@ -6,11 +6,18 @@ import Conversation from "../models/Conversation.js";
 import { throttleCampaign } from "../utils/messageThrottler.js";
 import { sendTemplateMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { normalizePhone } from "../utils/phoneUtils.js";
 
 export const startCampaign = async (req, res) => {
   try {
-    const { name, templateName, contacts, templateComponents } = req.body;
+    let { name, templateName, contacts, templateComponents } = req.body;
     
+    // 1. Normalize and De-duplicate contacts (Prevent multiple messages to same person)
+    const uniquePhones = [...new Set(contacts.map(phone => normalizePhone(phone)))];
+    console.log(`🚀 Campaign "${name}": Cleaned duplicates. ${contacts.length} -> ${uniquePhones.length} unique contacts.`);
+    
+    contacts = uniquePhones;
+
     const template = await Template.findOne({ name: templateName });
     if (!template) return res.status(404).json({ error: "Template not found" });
 

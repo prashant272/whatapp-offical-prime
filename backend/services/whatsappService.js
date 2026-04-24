@@ -83,13 +83,49 @@ export const getTemplates = async () => {
   } catch (error) {
     throw error.response?.data || error;
   }
-};export const deleteMetaTemplate = async (templateName) => {
+};
+
+export const sendImageMessage = async (to, imageUrl, caption = "") => {
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to,
+        type: "image",
+        image: {
+          link: imageUrl,
+          caption: caption
+        },
+      },
+      { headers }
+    );
+    return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+export const deleteMetaTemplate = async (templateName) => {
   try {
     const res = await axios.delete(
       `${BASE_URL}/${WABA_ID}/message_templates?name=${templateName}`,
       { headers }
     );
     return res.data;
+  } catch (error) {
+    throw error.response?.data || error;
+  }
+};
+
+/**
+ * Get the download URL for a media file from WhatsApp
+ */
+export const getMediaUrl = async (mediaId) => {
+  try {
+    const res = await axios.get(`${BASE_URL}/${mediaId}`, { headers });
+    return res.data.url;
   } catch (error) {
     throw error.response?.data || error;
   }
