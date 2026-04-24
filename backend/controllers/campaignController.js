@@ -67,11 +67,28 @@ export const startCampaign = async (req, res) => {
               await contact.save();
             }
 
+            // Extract Header Image if any
+            let mediaUrl = null;
+            if (templateComponents) {
+              const headerComp = templateComponents.find(c => c.type === "header");
+              if (headerComp && headerComp.parameters) {
+                const imgParam = headerComp.parameters.find(p => p.type === "image");
+                if (imgParam) mediaUrl = imgParam.image?.link;
+              }
+            }
+
             const newMessage = new Message({
               from: "me",
               to: log.phone,
               body: messageBody,
-              direction: "outbound"
+              type: "template",
+              templateData: {
+                name: templateName,
+                components: templateComponents
+              },
+              mediaUrl: mediaUrl,
+              direction: "outbound",
+              status: "sent"
             });
             await newMessage.save();
 
