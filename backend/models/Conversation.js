@@ -5,7 +5,6 @@ const conversationSchema = new mongoose.Schema({
   phone: { type: String, required: true, unique: true },
   lastMessage: { type: String },
   lastMessageTime: { type: Date, default: Date.now },
-  lastCustomerMessageAt: { type: Date },
   unreadCount: { type: Number, default: 0 },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   status: { 

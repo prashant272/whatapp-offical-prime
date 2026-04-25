@@ -173,10 +173,11 @@ const ChatModule = () => {
 
         if (index !== -1) {
           const updated = [...prev];
+          // Ensure updatedConvData (new socket data) overwrites the old fields
           const finalConv = { ...updated[index], ...updatedConvData };
           updated[index] = finalConv;
           
-          // Update selectedChat in real-time is now handled by derived useMemo
+          console.log("📥 Socket sync:", finalConv.phone, "Timer set to:", finalConv.lastCustomerMessageAt);
           return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
         } else {
           const newConv = { ...updatedConvData };
@@ -203,16 +204,16 @@ const ChatModule = () => {
     return () => socket.disconnect();
   }, []);
 
-  // 24-Hour Window Timer Logic
+  // 24-Hour Window Timer Logic - Simple & Reliable (Derived from messages)
   useEffect(() => {
     const updateTimer = () => {
-      // Fallback to lastMessageTime if lastCustomerMessageAt is missing (for older messages)
-      const lastActionTime = selectedChat?.lastCustomerMessageAt || selectedChat?.lastMessageTime;
+      // Find the latest inbound message from the current messages list
+      const lastInbound = [...messages].reverse().find(m => m.direction === "inbound");
       
-      if (lastActionTime) {
-        const lastMsg = new Date(lastActionTime).getTime();
+      if (lastInbound) {
+        const lastMsgTime = new Date(lastInbound.timestamp).getTime();
         const now = new Date().getTime();
-        const diff = (24 * 60 * 60 * 1000) - (now - lastMsg);
+        const diff = (24 * 60 * 60 * 1000) - (now - lastMsgTime);
         
         if (diff > 0) {
           const h = Math.floor(diff / (1000 * 60 * 60));
@@ -227,10 +228,10 @@ const ChatModule = () => {
       }
     };
 
-    updateTimer(); // Initial call
+    updateTimer();
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
-  }, [selectedChat]);
+  }, [messages]); // Updates whenever messages update
 
   // Socket.io selectedChat tracking is now handled by derived state
 
@@ -570,7 +571,6 @@ const ChatModule = () => {
               style={{ 
                 padding: "6px 16px", 
                 borderRadius: "20px", 
-                border: "none", 
                 background: filter === "all" ? "#e7fce3" : "#ffffff", 
                 color: filter === "all" ? "#008069" : "#667781", 
                 fontSize: "0.8rem", 
@@ -586,7 +586,6 @@ const ChatModule = () => {
               style={{ 
                 padding: "6px 16px", 
                 borderRadius: "20px", 
-                border: "none", 
                 background: filter === "unread" ? "#e7fce3" : "#ffffff", 
                 color: filter === "unread" ? "#008069" : "#667781", 
                 fontSize: "0.8rem", 

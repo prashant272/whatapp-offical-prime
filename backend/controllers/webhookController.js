@@ -114,7 +114,6 @@ export const handleWebhook = async (req, res) => {
         
         conversation.lastMessage = bodyContent;
         conversation.lastMessageTime = new Date();
-        conversation.lastCustomerMessageAt = new Date();
         conversation.unreadCount += 1;
         await conversation.save();
 
