@@ -1,5 +1,5 @@
 import express from "express";
-import { getConversations, getMessages, sendMessage, updateConversationStatus, sendChatTemplateMessage, assignConversation, sendChatImageMessage } from "../controllers/chatController.js";
+import { getConversations, getMessages, sendMessage, updateConversationStatus, sendChatTemplateMessage, assignConversation, sendChatImageMessage, markAsRead } from "../controllers/chatController.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -11,5 +11,6 @@ router.post("/messages/send-image", protect, sendChatImageMessage);
 router.post("/conversations/status", protect, updateConversationStatus);
 router.post("/messages/send-template", protect, sendChatTemplateMessage);
 router.post("/conversations/assign", protect, restrictTo("Admin", "Manager"), assignConversation);
+router.post("/conversations/mark-read", protect, markAsRead);
 
 export default router;

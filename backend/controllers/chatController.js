@@ -58,7 +58,7 @@ export const sendMessage = async (req, res) => {
 
     const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to },
-      { lastMessage: body, lastMessageTime: new Date() },
+      { lastMessage: body, lastMessageTime: new Date(), unreadCount: 0 },
       { upsert: true, new: true }
     );
 
@@ -122,7 +122,7 @@ export const sendChatTemplateMessage = async (req, res) => {
 
     const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to },
-      { lastMessage: newMessage.body, lastMessageTime: new Date() },
+      { lastMessage: newMessage.body, lastMessageTime: new Date(), unreadCount: 0 },
       { upsert: true, new: true }
     );
 
@@ -162,7 +162,7 @@ export const sendChatImageMessage = async (req, res) => {
 
     const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to },
-      { lastMessage: caption || "📷 Image", lastMessageTime: new Date() },
+      { lastMessage: caption || "📷 Image", lastMessageTime: new Date(), unreadCount: 0 },
       { upsert: true, new: true }
     );
 
@@ -193,6 +193,16 @@ export const assignConversation = async (req, res) => {
     await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName}`, phone);
 
     res.json({ message: "Conversation assigned", conversation });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const markAsRead = async (req, res) => {
+  try {
+    const { phone } = req.body;
+    await Conversation.findOneAndUpdate({ phone }, { unreadCount: 0 });
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

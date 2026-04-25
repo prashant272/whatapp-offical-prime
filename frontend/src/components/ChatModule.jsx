@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
-import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, CheckCircle2, AlertCircle, FileText, Plus, Paperclip, Loader2 } from "lucide-react";
+import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, Check, AlertCircle, FileText, Plus, Paperclip, Loader2 } from "lucide-react";
 import { io } from "socket.io-client";
 
 import { API_BASE } from "../api";
@@ -135,17 +135,25 @@ const ChatModule = () => {
       // 1. Update Conversations List
       setConversations(prev => {
         const index = prev.findIndex(c => c.phone === conversation.phone);
+        let updatedConvData = { ...conversation };
+
+        // If this is the active chat, reset unreadCount locally and on server
+        if (selectedChatRef.current?.phone === conversation.phone) {
+          updatedConvData.unreadCount = 0;
+          axios.post(`${API_BASE}/conversations/mark-read`, { phone: conversation.phone }, config).catch(() => {});
+        }
+
         if (index !== -1) {
           const updated = [...prev];
-          updated[index] = { ...updated[index], ...conversation };
+          updated[index] = { ...updated[index], ...updatedConvData };
           return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
         } else {
-          return [conversation, ...prev];
+          return [updatedConvData, ...prev];
         }
       });
 
       // 2. Update Messages if current chat is open
-      if (selectedChatRef.current && selectedChatRef.current.phone === message.from || selectedChatRef.current?.phone === message.to) {
+      if (selectedChatRef.current && (selectedChatRef.current.phone === message.from || selectedChatRef.current?.phone === message.to)) {
         setMessages(prev => {
           // Avoid duplicate messages if already sent via handleSend
           if (prev.find(m => m._id === message._id || (m.messageId && m.messageId === message.messageId))) {
@@ -169,6 +177,10 @@ const ChatModule = () => {
     selectedChatRef.current = selectedChat;
     if (selectedChat) {
       fetchMessages(selectedChat.phone);
+      // Reset unreadCount locally when selecting a chat
+      setConversations(prev => prev.map(c => 
+        c.phone === selectedChat.phone ? { ...c, unreadCount: 0 } : c
+      ));
     }
   }, [selectedChat]);
 
@@ -401,13 +413,15 @@ const ChatModule = () => {
   };
 
   const [searchTerm, setSearchTerm] = useState("");
+  const [filter, setFilter] = useState("all");
+
+  const unreadCountTotal = useMemo(() => conversations.filter(c => c.unreadCount > 0).length, [conversations]);
 
   const filteredConversations = conversations.filter(c => {
     const term = searchTerm.toLowerCase().trim();
-    if (!term) return true;
-    const phoneMatch = c.phone.includes(term);
-    const nameMatch = c.contact?.name?.toLowerCase().includes(term);
-    return phoneMatch || nameMatch;
+    const matchesSearch = !term || (c.phone.includes(term) || c.contact?.name?.toLowerCase().includes(term));
+    const matchesFilter = filter === "all" || (filter === "unread" && c.unreadCount > 0);
+    return matchesSearch && matchesFilter;
   });
 
   return (
@@ -484,7 +498,7 @@ const ChatModule = () => {
 
       {/* Sidebar */}
       <div className="sidebar-container" style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "12px", background: "#202c33", flexShrink: 0, height: "110px" }}>
+        <div style={{ padding: "12px", background: "#202c33", flexShrink: 0, height: "155px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#e9edef" }}>Chats</h3>
             <div style={{ display: "flex", gap: "15px", color: "#aebac1" }}>
@@ -502,9 +516,47 @@ const ChatModule = () => {
               style={{ width: "100%", padding: "8px 12px 8px 40px", background: "#2a3942", border: "none", color: "#d1d7db", borderRadius: "8px", fontSize: "0.85rem", outline: "none" }}
             />
           </div>
+
+          <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+            <button 
+              onClick={() => setFilter("all")}
+              style={{ 
+                padding: "6px 16px", 
+                borderRadius: "20px", 
+                border: "none", 
+                background: filter === "all" ? "#2a3942" : "transparent", 
+                color: filter === "all" ? "#00a884" : "#8696a0", 
+                fontSize: "0.8rem", 
+                cursor: "pointer",
+                fontWeight: "500",
+                border: filter === "all" ? "1px solid #00a884" : "1px solid transparent"
+              }}
+            >
+              All
+            </button>
+            <button 
+              onClick={() => setFilter("unread")}
+              style={{ 
+                padding: "6px 16px", 
+                borderRadius: "20px", 
+                border: "none", 
+                background: filter === "unread" ? "#2a3942" : "transparent", 
+                color: filter === "unread" ? "#00a884" : "#8696a0", 
+                fontSize: "0.8rem", 
+                cursor: "pointer",
+                fontWeight: "500",
+                border: filter === "unread" ? "1px solid #00a884" : "1px solid transparent",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              Unread {unreadCountTotal > 0 && <span style={{ background: "#00a884", color: "#111b21", borderRadius: "50%", padding: "1px 6px", fontSize: "0.7rem", fontWeight: "bold" }}>{unreadCountTotal}</span>}
+            </button>
+          </div>
         </div>
 
-        <div className="chat-scroll" style={{ height: "calc(100% - 110px)", overflowY: "scroll", overflowX: "hidden", display: "block" }}>
+        <div className="chat-scroll" style={{ height: "calc(100% - 155px)", overflowY: "scroll", overflowX: "hidden", display: "block" }}>
           {filteredConversations.map((chat) => (
             <div
               key={chat._id}
@@ -520,9 +572,26 @@ const ChatModule = () => {
                   <span style={{ fontWeight: "600", color: "#e9edef", fontSize: "0.95rem" }}>{chat.contact?.name || chat.phone}</span>
                   <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>{chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
                 </div>
-                <p style={{ fontSize: "0.8rem", color: "#8696a0", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {chat.lastMessage || "No messages"}
-                </p>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <p style={{ fontSize: "0.8rem", color: "#8696a0", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
+                    {chat.lastMessage || "No messages"}
+                  </p>
+                  {chat.unreadCount > 0 && (
+                    <span style={{ 
+                      background: "#00a884", 
+                      color: "#111b21", 
+                      borderRadius: "50%", 
+                      padding: "2px 6px", 
+                      fontSize: "0.7rem", 
+                      fontWeight: "bold",
+                      minWidth: "18px",
+                      textAlign: "center",
+                      marginLeft: "8px"
+                    }}>
+                      {chat.unreadCount}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -654,16 +723,18 @@ const ChatModule = () => {
                           <div style={{ display: "flex", marginLeft: "2px" }}>
                             {msg.status === "read" ? (
                               <div style={{ display: "flex" }}>
-                                <CheckCircle2 size={11} style={{ color: "#53bdeb" }} />
-                                <CheckCircle2 size={11} style={{ color: "#53bdeb", marginLeft: "-6px" }} />
+                                <Check size={15} style={{ color: "#53bdeb" }} />
+                                <Check size={15} style={{ color: "#53bdeb", marginLeft: "-11px" }} />
                               </div>
                             ) : msg.status === "delivered" ? (
                               <div style={{ display: "flex" }}>
-                                <CheckCircle2 size={11} style={{ color: "#8696a0" }} />
-                                <CheckCircle2 size={11} style={{ color: "#8696a0", marginLeft: "-6px" }} />
+                                <Check size={15} style={{ color: "#8696a0" }} />
+                                <Check size={15} style={{ color: "#8696a0", marginLeft: "-11px" }} />
                               </div>
+                            ) : msg.status === "failed" ? (
+                              <AlertCircle size={14} style={{ color: "#ff4757" }} />
                             ) : (
-                              <CheckCircle2 size={11} style={{ color: "#8696a0" }} />
+                              <Check size={15} style={{ color: "#8696a0" }} />
                             )}
                           </div>
                         )}
