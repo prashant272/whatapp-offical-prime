@@ -12,7 +12,11 @@ const ChatModule = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
-  const [selectedChat, setSelectedChat] = useState(null);
+  // Derived active chat for perfect real-time sync
+  const selectedChat = useMemo(() => {
+    return conversations.find(c => c._id === chatId);
+  }, [chatId, conversations]);
+
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -99,19 +103,18 @@ const ChatModule = () => {
     }
   };
 
+  // Sync active chat state with ref for socket
+  const selectedChatRef = useRef(selectedChat);
   useEffect(() => {
-    if (chatId && conversations.length > 0) {
-      const chat = conversations.find(c => c._id === chatId);
-      if (chat) {
-        // Update selectedChat if it's not set OR if the data has changed (like lastCustomerMessageAt)
-        if (!selectedChat || JSON.stringify(chat) !== JSON.stringify(selectedChat)) {
-          setSelectedChat(chat);
-        }
-      }
-    } else if (!chatId && selectedChat) {
-      setSelectedChat(null);
+    selectedChatRef.current = selectedChat;
+    if (selectedChat) {
+      fetchMessages(selectedChat.phone);
+      // Reset unreadCount locally on select
+      setConversations(prev => prev.map(c => 
+        c.phone === selectedChat.phone ? { ...c, unreadCount: 0 } : c
+      ));
     }
-  }, [chatId, conversations, selectedChat]);
+  }, [selectedChat?.phone, selectedChat?._id]);
 
   const fetchExecutives = async () => {
     if (currentUser.role === "Executive") return;
@@ -173,17 +176,10 @@ const ChatModule = () => {
           const finalConv = { ...updated[index], ...updatedConvData };
           updated[index] = finalConv;
           
-          // Update selectedChat in real-time if it's the active one
-          if (selectedChatRef.current?.phone === conversation.phone) {
-            setSelectedChat(finalConv);
-          }
-          
+          // Update selectedChat in real-time is now handled by derived useMemo
           return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
         } else {
           const newConv = { ...updatedConvData };
-          if (selectedChatRef.current?.phone === conversation.phone) {
-            setSelectedChat(newConv);
-          }
           return [newConv, ...prev];
         }
       });
@@ -236,18 +232,7 @@ const ChatModule = () => {
     return () => clearInterval(timer);
   }, [selectedChat]);
 
-  // Use a ref to track selectedChat inside socket callback
-  const selectedChatRef = useRef(selectedChat);
-  useEffect(() => {
-    selectedChatRef.current = selectedChat;
-    if (selectedChat) {
-      fetchMessages(selectedChat.phone);
-      // Reset unreadCount locally when selecting a chat
-      setConversations(prev => prev.map(c => 
-        c.phone === selectedChat.phone ? { ...c, unreadCount: 0 } : c
-      ));
-    }
-  }, [selectedChat]);
+  // Socket.io selectedChat tracking is now handled by derived state
 
 
 
