@@ -3,6 +3,7 @@ import axios from "axios";
 import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud } from "lucide-react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
+import { io } from "socket.io-client";
 
 import { API_BASE } from "../api";
 
@@ -67,6 +68,20 @@ const CampaignManager = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Socket for real-time progress
+    const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const socket = io(socketUrl);
+
+    socket.on("campaign_progress", ({ campaignId, sentCount, failedCount, status, logs }) => {
+      setCampaigns(prev => prev.map(c => 
+        c._id === campaignId 
+          ? { ...c, sentCount, failedCount, status, logs } 
+          : c
+      ));
+    });
+
+    return () => socket.disconnect();
   }, []);
 
   const handleTemplateChange = (e) => {

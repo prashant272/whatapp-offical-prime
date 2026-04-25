@@ -7,6 +7,7 @@ import { throttleCampaign } from "../utils/messageThrottler.js";
 import { sendTemplateMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
+import { getIO } from "../utils/socket.js";
 
 export const startCampaign = async (req, res) => {
   try {
@@ -91,22 +92,39 @@ export const startCampaign = async (req, res) => {
           });
           await newMessage.save();
 
-          await Conversation.findOneAndUpdate(
+          const updatedConv = await Conversation.findOneAndUpdate(
             { phone: log.phone },
             { 
               contact: contact._id,
               lastMessage: newMessage.body, 
-              lastMessageTime: new Date() 
+              lastMessageTime: new Date(),
+              unreadCount: 0
             },
-            { upsert: true }
-          );
+            { upsert: true, new: true }
+          ).populate("contact");
+
+          // Notify UI about NEW MESSAGE from campaign
+          const io = getIO();
+          io.emit("new_message", { message: newMessage, conversation: updatedConv });
         }
+        
+        const currentStatus = (success + failure === contacts.length) ? "COMPLETED" : "RUNNING";
         
         await Campaign.findByIdAndUpdate(campaign._id, {
           sentCount: success,
           failedCount: failure,
           logs: logs,
-          status: (success + failure === contacts.length) ? "COMPLETED" : "RUNNING"
+          status: currentStatus
+        });
+
+        // Emit Campaign Progress to UI
+        const io = getIO();
+        io.emit("campaign_progress", {
+          campaignId: campaign._id,
+          sentCount: success,
+          failedCount: failure,
+          status: currentStatus,
+          logs: logs
         });
       },
       templateComponents || [],
