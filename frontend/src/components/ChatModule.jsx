@@ -942,10 +942,11 @@ const ChatModule = () => {
             <div style={{ width: "250px", height: "250px", borderRadius: "50%", background: "rgba(0,0,0,0.03)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2rem" }}>
               <MessageSquare size={100} style={{ opacity: 0.1 }} />
             </div>
-            <h2 style={{ color: "var(--text-primary)", fontWeight: "300" }}>WhatsApp for Business</h2>
+            <h2 style={{ color: "var(--text-primary)", fontWeight: "300" }}>Prime Impact Solutions</h2>
             <p style={{ maxWidth: "400px", textAlign: "center", lineHeight: "1.6", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
-              Send and receive messages without keeping your phone online.<br />
-              Use WhatsApp on up to 4 linked devices and 1 phone at the same time.
+              Power your business with the official WhatsApp Business API.
+              <br />
+              Prime Impact Solutions helps you automate conversations, run campaigns, and scale customer engagement effortlessly.
             </p>
             <div style={{ marginTop: "auto", paddingBottom: "2rem", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
               <Clock size={14} /> End-to-end encrypted
