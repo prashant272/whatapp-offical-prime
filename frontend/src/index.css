@@ -1,14 +1,14 @@
 :root {
-  --bg-primary: #0a0a0c;
-  --bg-secondary: #141418;
-  --bg-tertiary: #1c1c24;
-  --accent-primary: #25d366; /* WhatsApp Green */
-  --accent-secondary: #1ebea5;
-  --text-primary: #ffffff;
-  --text-secondary: #94a3b8;
-  --border-color: rgba(255, 255, 255, 0.08);
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --bg-primary: #f0f2f5;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f8f9fa;
+  --accent-primary: #00a884; 
+  --accent-secondary: #008069;
+  --text-primary: #000000;
+  --text-secondary: #1a1a1a;
+  --border-color: #ced4da;
+  --glass-bg: #ffffff;
+  --glass-border: #adb5bd;
 }
 
 * {
@@ -87,19 +87,56 @@ body {
   display: flex;
   align-items: center;
   gap: 0.8rem;
-  color: var(--text-secondary);
+  color: #111b21;
   text-decoration: none;
   padding: 0.8rem 1rem;
   border-radius: 8px;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
+  font-weight: 500;
 }
 
 .nav-link.active, .nav-link:hover {
-  background: rgba(37, 211, 102, 0.1);
-  color: var(--accent-primary);
+  background: #f0f2f5;
+  color: #111b21;
+}
+
+.nav-link.active {
+  background: rgba(0, 168, 132, 0.1);
+  color: #008069;
 }
 
 h1, h2, h3 {
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+/* Responsiveness */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 70px !important;
+    padding: 1.5rem 0 !important;
+    align-items: center;
+  }
+  
+  .sidebar h2 span:not(:first-child),
+  .sidebar .nav-link span,
+  .sidebar .user-info-text {
+    display: none !important;
+  }
+
+  .main-content {
+    margin-left: 70px !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 60px !important;
+  }
+  .main-content {
+    margin-left: 60px !important;
+    padding: 1rem !important;
+  }
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
 }

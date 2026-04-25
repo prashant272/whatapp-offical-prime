@@ -43,3 +43,24 @@ export const deletePreset = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const updatePreset = async (req, res) => {
+  try {
+    const { name, config } = req.body;
+    const preset = await TemplatePreset.findById(req.params.id);
+    
+    if (!preset) {
+      return res.status(404).json({ message: "Preset not found" });
+    }
+
+    preset.name = name || preset.name;
+    preset.config = config || preset.config;
+    
+    const updatedPreset = await preset.save();
+    await logActivity(req.user._id, "UPDATE_PRESET", `Updated preset: ${preset.name}`, preset.name);
+    
+    res.json(updatedPreset);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

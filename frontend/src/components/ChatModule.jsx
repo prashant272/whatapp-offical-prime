@@ -3,11 +3,14 @@ import axios from "axios";
 import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, Check, AlertCircle, FileText, Plus, Paperclip, Loader2 } from "lucide-react";
 import { io } from "socket.io-client";
 
+import { useParams, useNavigate } from "react-router-dom";
 import { API_BASE } from "../api";
 
 const STATUS_OPTIONS = ["New", "Interested", "Not Interested", "Follow-up", "Closed"];
 
 const ChatModule = () => {
+  const { chatId } = useParams();
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -95,6 +98,17 @@ const ChatModule = () => {
     }
   };
 
+  useEffect(() => {
+    if (chatId && conversations.length > 0) {
+      const chat = conversations.find(c => c._id === chatId);
+      if (chat && (!selectedChat || selectedChat._id !== chat._id)) {
+        setSelectedChat(chat);
+      }
+    } else if (!chatId && selectedChat) {
+      setSelectedChat(null);
+    }
+  }, [chatId, conversations, selectedChat]);
+
   const fetchExecutives = async () => {
     if (currentUser.role === "Executive") return;
     try {
@@ -115,11 +129,18 @@ const ChatModule = () => {
           axios.get(`${API_BASE}/presets`, config),
           axios.get(`${API_BASE}/users`, config).catch(() => ({ data: [] }))
         ]);
-        setConversations(Array.isArray(convs.data) ? convs.data : []);
+        const initialConvs = Array.isArray(convs.data) ? convs.data : [];
+        setConversations(initialConvs);
         setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
         setPresets(Array.isArray(pres.data) ? pres.data : []);
         if (currentUser.role !== "Executive") {
           setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager") : []);
+        }
+
+        // If chatId in URL, find and set it
+        if (chatId) {
+          const matched = initialConvs.find(c => c._id === chatId);
+          if (matched) setSelectedChat(matched);
         }
       } catch (err) {
         console.error("Initial fetch error:", err);
@@ -425,35 +446,32 @@ const ChatModule = () => {
   });
 
   return (
-    <div className="chat-container glass-card" style={{
+    <div className="chat-container" style={{
       display: "grid",
       gridTemplateColumns: showContactInfo ? "350px 1fr 300px" : "350px 1fr",
-      height: "700px",
+      height: "100vh",
       width: "100%",
-      maxWidth: showContactInfo ? "100%" : "1250px",
-      margin: "20px 0",
+      maxWidth: "100%",
+      margin: 0,
       padding: 0,
       overflow: "hidden",
-      border: "1px solid rgba(255,255,255,0.1)",
-      borderRadius: "12px",
-      background: "#111b21",
-      boxShadow: "0 10px 30px rgba(0,0,0,0.4)",
+      background: "var(--bg-secondary)",
       position: "relative"
     }}>
       <style>{`
         .chat-scroll::-webkit-scrollbar { width: 12px !important; }
-        .chat-scroll::-webkit-scrollbar-track { background: #111b21 !important; }
-        .chat-scroll::-webkit-scrollbar-thumb { background: #ffffff !important; border-radius: 6px; border: 2px solid #111b21; }
-        .chat-scroll::-webkit-scrollbar-thumb:hover { background: #00a884 !important; }
+        .chat-scroll::-webkit-scrollbar-track { background: var(--bg-secondary) !important; }
+        .chat-scroll::-webkit-scrollbar-thumb { background: #8696a0 !important; border-radius: 6px; border: 2px solid var(--bg-secondary); }
+        .chat-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-primary) !important; }
         
         .chat-scroll {
           overflow-y: scroll !important;
           scrollbar-width: auto;
-          scrollbar-color: #ffffff #111b21;
+          scrollbar-color: #8696a0 var(--bg-secondary);
         }
         
-        .chat-item:hover { background: #202c33 !important; }
-        .chat-item.active { background: #2a3942 !important; border-left: 4px solid #00a884 !important; }
+        .chat-item:hover { background: #f5f6f6 !important; }
+        .chat-item.active { background: #f0f2f5 !important; border-left: 4px solid var(--accent-primary) !important; }
         
         .msg-bubble {
           max-width: 65%;
@@ -467,15 +485,15 @@ const ChatModule = () => {
         
         .msg-outbound {
           align-self: flex-end !important;
-          background-color: #005c4b !important;
-          color: #e9edef !important;
+          background-color: #d9fdd3 !important;
+          color: #111b21 !important;
           border-radius: 8px 0 8px 8px;
         }
         
         .msg-inbound {
           align-self: flex-start !important;
-          background-color: #202c33 !important;
-          color: #e9edef !important;
+          background-color: #ffffff !important;
+          color: #111b21 !important;
           border-radius: 0 8px 8px 8px;
         }
 
@@ -483,37 +501,37 @@ const ChatModule = () => {
           display: flex;
           flex-direction: column;
           height: 100%;
-          border-right: 1px solid rgba(255,255,255,0.1);
-          background: #111b21;
+          border-right: 1px solid var(--border-color);
+          background: var(--bg-secondary);
         }
 
         .chat-area-container {
           display: flex;
           flex-direction: column;
           height: 100%;
-          background: #0b141a;
+          background: #efeae2;
           position: relative;
         }
       `}</style>
 
       {/* Sidebar */}
       <div className="sidebar-container" style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "12px", background: "#202c33", flexShrink: 0, height: "155px" }}>
+        <div style={{ padding: "12px", background: "#f0f2f5", flexShrink: 0, height: "155px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <h3 style={{ margin: 0, fontSize: "1.1rem", color: "#e9edef" }}>Chats</h3>
-            <div style={{ display: "flex", gap: "15px", color: "#aebac1" }}>
+            <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-primary)" }}>Chats</h3>
+            <div style={{ display: "flex", gap: "15px", color: "var(--text-secondary)" }}>
               <Plus size={20} cursor="pointer" onClick={() => setShowNewChatModal(true)} />
               <MoreVertical size={20} cursor="pointer" />
             </div>
           </div>
           <div style={{ position: "relative" }}>
-            <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "#8696a0" }} />
+            <Search size={16} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }} />
             <input
               type="text"
               placeholder="Search or start new chat"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              style={{ width: "100%", padding: "8px 12px 8px 40px", background: "#2a3942", border: "none", color: "#d1d7db", borderRadius: "8px", fontSize: "0.85rem", outline: "none" }}
+              style={{ width: "100%", padding: "8px 12px 8px 40px", background: "#ffffff", border: "none", color: "var(--text-primary)", borderRadius: "8px", fontSize: "0.85rem", outline: "none" }}
             />
           </div>
 
@@ -524,12 +542,12 @@ const ChatModule = () => {
                 padding: "6px 16px", 
                 borderRadius: "20px", 
                 border: "none", 
-                background: filter === "all" ? "#2a3942" : "transparent", 
-                color: filter === "all" ? "#00a884" : "#8696a0", 
+                background: filter === "all" ? "#e7fce3" : "#ffffff", 
+                color: filter === "all" ? "#008069" : "#667781", 
                 fontSize: "0.8rem", 
                 cursor: "pointer",
-                fontWeight: "500",
-                border: filter === "all" ? "1px solid #00a884" : "1px solid transparent"
+                fontWeight: "600",
+                border: filter === "all" ? "1px solid #00a884" : "1px solid #e9edef"
               }}
             >
               All
@@ -540,61 +558,101 @@ const ChatModule = () => {
                 padding: "6px 16px", 
                 borderRadius: "20px", 
                 border: "none", 
-                background: filter === "unread" ? "#2a3942" : "transparent", 
-                color: filter === "unread" ? "#00a884" : "#8696a0", 
+                background: filter === "unread" ? "#e7fce3" : "#ffffff", 
+                color: filter === "unread" ? "#008069" : "#667781", 
                 fontSize: "0.8rem", 
                 cursor: "pointer",
-                fontWeight: "500",
-                border: filter === "unread" ? "1px solid #00a884" : "1px solid transparent",
+                fontWeight: "600",
+                border: filter === "unread" ? "1px solid #00a884" : "1px solid #e9edef",
                 display: "flex",
                 alignItems: "center",
                 gap: "6px"
               }}
             >
-              Unread {unreadCountTotal > 0 && <span style={{ background: "#00a884", color: "#111b21", borderRadius: "50%", padding: "1px 6px", fontSize: "0.7rem", fontWeight: "bold" }}>{unreadCountTotal}</span>}
+              Unread {unreadCountTotal > 0 && <span style={{ background: "#00a884", color: "#ffffff", borderRadius: "50%", padding: "1px 6px", fontSize: "0.7rem", fontWeight: "bold" }}>{unreadCountTotal}</span>}
             </button>
           </div>
         </div>
 
-        <div className="chat-scroll" style={{ height: "calc(100% - 155px)", overflowY: "scroll", overflowX: "hidden", display: "block" }}>
-          {filteredConversations.map((chat) => (
-            <div
-              key={chat._id}
-              className={`chat-item ${(selectedChat?._id === chat._id || selectedChat?.phone === chat.phone) ? "active" : ""}`}
-              onClick={() => setSelectedChat(chat)}
-              style={{ padding: "10px 16px", cursor: "pointer", display: "flex", gap: "12px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-            >
-              <div style={{ width: "45px", height: "45px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7" }}>
-                <User size={24} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2px" }}>
-                  <span style={{ fontWeight: "600", color: "#e9edef", fontSize: "0.95rem" }}>{chat.contact?.name || chat.phone}</span>
-                  <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>{chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+        <div className="chat-scroll" style={{ height: "calc(100% - 155px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}>
+          {filteredConversations.map((chat) => {
+            const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);
+            return (
+              <div
+                key={chat._id}
+                className={`chat-item ${isActive ? "active" : ""}`}
+                onClick={() => navigate(`/chats/${chat._id}`)}
+                style={{ 
+                  padding: "12px 16px", 
+                  cursor: "pointer", 
+                  display: "flex", 
+                  gap: "14px", 
+                  alignItems: "center", 
+                  background: isActive ? "#f0f2f5" : "transparent",
+                  borderBottom: "1px solid #f5f6f6",
+                  transition: "background 0.2s"
+                }}
+                onMouseOver={e => !isActive && (e.currentTarget.style.background = "#f5f6f6")}
+                onMouseOut={e => !isActive && (e.currentTarget.style.background = "transparent")}
+              >
+                <div style={{ 
+                  width: "48px", 
+                  height: "48px", 
+                  borderRadius: "50%", 
+                  background: isActive ? "#d1d7db" : "#dfe5e7", 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "center", 
+                  color: "#54656f",
+                  fontWeight: "700",
+                  fontSize: "1.1rem",
+                  flexShrink: 0
+                }}>
+                  {(chat.contact?.name || chat.phone).charAt(0).toUpperCase()}
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <p style={{ fontSize: "0.8rem", color: "#8696a0", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
-                    {chat.lastMessage || "No messages"}
-                  </p>
-                  {chat.unreadCount > 0 && (
-                    <span style={{ 
-                      background: "#00a884", 
-                      color: "#111b21", 
-                      borderRadius: "50%", 
-                      padding: "2px 6px", 
-                      fontSize: "0.7rem", 
-                      fontWeight: "bold",
-                      minWidth: "18px",
-                      textAlign: "center",
-                      marginLeft: "8px"
-                    }}>
-                      {chat.unreadCount}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+                    <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem" }}>{chat.contact?.name || chat.phone}</span>
+                    <span style={{ fontSize: "0.75rem", color: isActive ? "#008069" : "#667781", fontWeight: isActive ? "600" : "normal" }}>
+                      {chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
                     </span>
-                  )}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <p style={{ 
+                      fontSize: "0.85rem", 
+                      color: "#667781", 
+                      margin: 0, 
+                      whiteSpace: "nowrap", 
+                      overflow: "hidden", 
+                      textOverflow: "ellipsis", 
+                      flex: 1,
+                      fontWeight: chat.unreadCount > 0 ? "700" : "400"
+                    }}>
+                      {chat.lastMessage || "No messages"}
+                    </p>
+                    {chat.unreadCount > 0 && (
+                      <span style={{ 
+                        background: "#25d366", 
+                        color: "white", 
+                        borderRadius: "50%", 
+                        padding: "2px 6px", 
+                        fontSize: "0.75rem", 
+                        fontWeight: "800",
+                        minWidth: "20px",
+                        height: "20px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginLeft: "8px"
+                      }}>
+                        {chat.unreadCount}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -602,17 +660,17 @@ const ChatModule = () => {
       <div className="chat-area-container" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
         {selectedChat ? (
           <>
-            <div style={{ padding: "10px 16px", background: "#202c33", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "60px" }}>
+            <div style={{ padding: "10px 16px", background: "#f0f2f5", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "60px" }}>
               <div 
                 style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}
                 onClick={() => setShowContactInfo(!showContactInfo)}
               >
-                <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7", fontSize: "1.2rem", fontWeight: "bold" }}>
+                <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: "#dfe5e7", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696a0", fontSize: "1.2rem", fontWeight: "bold" }}>
                   {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: "0.95rem", color: "#e9edef" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
-                  <span style={{ fontSize: "0.7rem", color: "#8696a0" }}>
+                  <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--text-primary)" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
+                  <span style={{ fontSize: "0.7rem", color: "#667781" }}>
                     {selectedChat.contact?.name ? selectedChat.phone : "Online"}
                   </span>
                 </div>
@@ -621,7 +679,7 @@ const ChatModule = () => {
                 {/* Assignment Dropdown */}
                 {currentUser.role !== "Executive" && (
                   <select 
-                    style={{ background: "#2a3942", color: "#dfe5e7", border: "1px solid #3b4a54", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", outline: "none" }}
+                    style={{ background: "#ffffff", color: "var(--text-primary)", border: "1px solid #e9edef", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", outline: "none" }}
                     value={selectedChat.assignedTo?._id || selectedChat.assignedTo || ""}
                     onChange={(e) => handleAssign(e.target.value)}
                   >
@@ -634,7 +692,7 @@ const ChatModule = () => {
 
                 {/* Status Dropdown */}
                 <select 
-                  style={{ background: getStatusColor(selectedChat.status), color: "#111b21", border: "none", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", outline: "none" }}
+                  style={{ background: getStatusColor(selectedChat.status), color: "#ffffff", border: "none", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", outline: "none" }}
                   value={selectedChat.status || "New"}
                   onChange={(e) => handleUpdateStatus(e.target.value)}
                 >
@@ -643,17 +701,17 @@ const ChatModule = () => {
                   ))}
                 </select>
 
-                <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#111b21", padding: "6px 12px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer" }}>
+                <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#ffffff", padding: "6px 12px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer" }}>
                   Send Template
                 </button>
-                <MoreVertical size={20} style={{ color: "#aebac1", cursor: "pointer" }} />
+                <MoreVertical size={20} style={{ color: "#8696a0", cursor: "pointer" }} />
               </div>
             </div>
 
             <div 
               ref={scrollRef}
               className="chat-scroll"
-              style={{ height: "calc(100% - 120px)", padding: "20px", overflowY: "scroll", display: "flex", flexDirection: "column", background: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')", backgroundBlendMode: "soft-light", backgroundColor: "#0b141a" }}
+              style={{ height: "calc(100% - 120px)", padding: "20px", overflowY: "scroll", display: "flex", flexDirection: "column", background: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')", backgroundBlendMode: "soft-light", backgroundColor: "#efeae2" }}
             >
               {Object.entries(messageGroups).map(([date, msgs]) => (
                 <div key={date} style={{ display: "flex", flexDirection: "column" }}>
@@ -745,7 +803,7 @@ const ChatModule = () => {
               ))}
             </div>
 
-            <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#202c33", display: "flex", gap: "10px", alignItems: "center" }}>
+            <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#f0f2f5", display: "flex", gap: "10px", alignItems: "center" }}>
               <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -757,7 +815,7 @@ const ChatModule = () => {
                 type="button" 
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                style={{ background: "transparent", border: "none", color: "#8696a0", cursor: "pointer", padding: "5px" }}
+                style={{ background: "transparent", border: "none", color: "#667781", cursor: "pointer", padding: "5px" }}
               >
                 {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
               </button>
@@ -782,8 +840,6 @@ const ChatModule = () => {
                     const before = text.substring(0, start);
                     const after = text.substring(end);
                     setNewMessage(`${before}*${selected}*${after}`);
-                    // Setting cursor position after state update is tricky, 
-                    // but usually, React will keep it at the end of the text.
                   }
                   
                   // Keyboard Shortcuts: Ctrl+I or Cmd+I for Italic
@@ -813,9 +869,9 @@ const ChatModule = () => {
                 style={{ 
                   flex: 1, 
                   padding: "10px 12px", 
-                  background: "#2a3942", 
+                  background: "#ffffff", 
                   border: "none", 
-                  color: "#d1d7db", 
+                  color: "var(--text-primary)", 
                   borderRadius: "8px", 
                   outline: "none", 
                   resize: "none",
@@ -832,16 +888,16 @@ const ChatModule = () => {
             </form>
           </>
         ) : (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8696a0", background: "#222e35" }}>
-            <div style={{ width: "250px", height: "250px", borderRadius: "50%", background: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2rem" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8696a0", background: "#f8f9fa" }}>
+            <div style={{ width: "250px", height: "250px", borderRadius: "50%", background: "rgba(0,0,0,0.03)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2rem" }}>
               <MessageSquare size={100} style={{ opacity: 0.1 }} />
             </div>
-            <h2 style={{ color: "#e9edef", fontWeight: "300" }}>WhatsApp for Business</h2>
-            <p style={{ maxWidth: "400px", textAlign: "center", lineHeight: "1.6", fontSize: "0.9rem" }}>
+            <h2 style={{ color: "var(--text-primary)", fontWeight: "300" }}>WhatsApp for Business</h2>
+            <p style={{ maxWidth: "400px", textAlign: "center", lineHeight: "1.6", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
               Send and receive messages without keeping your phone online.<br />
               Use WhatsApp on up to 4 linked devices and 1 phone at the same time.
             </p>
-            <div style={{ marginTop: "auto", paddingBottom: "2rem", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem" }}>
+            <div style={{ marginTop: "auto", paddingBottom: "2rem", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
               <Clock size={14} /> End-to-end encrypted
             </div>
           </div>

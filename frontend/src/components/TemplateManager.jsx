@@ -167,34 +167,51 @@ const TemplateManager = () => {
     }
   };
 
-  const handleOpenPresetModal = (tpl) => {
+  const handleOpenPresetModal = (tpl, existingPreset = null) => {
     setSelectedTemplateForPreset(tpl);
-    const vars = {};
-    tpl.components.forEach(comp => {
-      if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
-        vars[`HEADER_${comp.format}`] = "";
-      }
-      const matches = (comp.text || "").match(/{{(\d+)}}/g);
-      if (matches) {
-        matches.forEach(m => {
-          const num = m.replace(/{{|}}/g, "");
-          vars[`${comp.type}_${num}`] = "";
-        });
-      }
-    });
-    setTemplateVars(vars);
+    if (existingPreset) {
+      setPresetName(existingPreset.name);
+      setTemplateVars(existingPreset.config || {});
+      // Set _id for edit mode
+      setSelectedTemplateForPreset({ ...tpl, _id_preset: existingPreset._id });
+    } else {
+      setPresetName("");
+      const vars = {};
+      tpl.components.forEach(comp => {
+        if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
+          vars[`HEADER_${comp.format}`] = "";
+        }
+        const matches = (comp.text || "").match(/{{(\d+)}}/g);
+        if (matches) {
+          matches.forEach(m => {
+            const num = m.replace(/{{|}}/g, "");
+            vars[`${comp.type}_${num}`] = "";
+          });
+        }
+      });
+      setTemplateVars(vars);
+    }
     setShowPresetModal(true);
   };
 
   const handleSavePreset = async () => {
     if (!presetName) return alert("Please enter a preset name.");
     try {
-      await axios.post(`${API_BASE}/presets`, {
-        name: presetName,
-        template: selectedTemplateForPreset._id,
-        config: templateVars
-      }, config);
-      alert("✅ Preset saved successfully!");
+      const isEdit = !!selectedTemplateForPreset._id_preset;
+      if (isEdit) {
+        await axios.put(`${API_BASE}/presets/${selectedTemplateForPreset._id_preset}`, {
+          name: presetName,
+          config: templateVars
+        }, config);
+        alert("✅ Preset updated successfully!");
+      } else {
+        await axios.post(`${API_BASE}/presets`, {
+          name: presetName,
+          template: selectedTemplateForPreset._id,
+          config: templateVars
+        }, config);
+        alert("✅ Preset saved successfully!");
+      }
       setShowPresetModal(false);
       setPresetName("");
       fetchPresets();
@@ -309,7 +326,7 @@ const TemplateManager = () => {
               borderRadius: "20px",
               border: "1px solid var(--glass-border)",
               background: filter === f ? "var(--accent-primary)" : "var(--bg-secondary)",
-              color: filter === f ? "black" : "white",
+              color: filter === f ? "var(--bg-primary)" : "var(--text-primary)",
               fontSize: "0.8rem",
               fontWeight: "600",
               cursor: "pointer",
@@ -329,7 +346,7 @@ const TemplateManager = () => {
               <input 
                 type="text" 
                 placeholder="e.g. promotional_offer" 
-                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                 value={formData.name}
                 onChange={(e) => setFormData({...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")})}
                 required
@@ -339,7 +356,7 @@ const TemplateManager = () => {
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Category</label>
               <select 
-                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                 value={formData.category}
                 onChange={(e) => setFormData({...formData, category: e.target.value})}
               >
@@ -353,7 +370,7 @@ const TemplateManager = () => {
             <div>
               <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Header Type</label>
               <select 
-                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                 value={formData.headerType}
                 onChange={(e) => setFormData({...formData, headerType: e.target.value})}
               >
@@ -369,7 +386,7 @@ const TemplateManager = () => {
                 <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Header Text</label>
                 <input 
                   type="text" 
-                  style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+                  style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                   value={formData.headerText}
                   onChange={(e) => setFormData({...formData, headerText: e.target.value})}
                 />
@@ -381,7 +398,7 @@ const TemplateManager = () => {
             <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Message Body</label>
             <textarea 
               rows="4" 
-              style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px", fontFamily: "inherit" }}
+              style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px", fontFamily: "inherit" }}
               placeholder="Hi {{1}}, here is your code {{2}}."
               value={formData.body}
               onChange={(e) => setFormData({...formData, body: e.target.value})}
@@ -393,7 +410,7 @@ const TemplateManager = () => {
             <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Footer Text (Optional)</label>
             <input 
               type="text" 
-              style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+              style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
               value={formData.footerText}
               onChange={(e) => setFormData({...formData, footerText: e.target.value})}
             />
@@ -403,8 +420,8 @@ const TemplateManager = () => {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
               <label style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>Buttons (Max 3)</label>
               <div style={{ display: "flex", gap: "8px" }}>
-                <button type="button" onClick={() => addButton("QUICK_REPLY")} style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "5px" }}>+ Quick Reply</button>
-                <button type="button" onClick={() => addButton("URL")} style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "5px" }}>+ Website Link</button>
+                <button type="button" onClick={() => addButton("QUICK_REPLY")} style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(0,0,0,0.05)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "5px" }}>+ Quick Reply</button>
+                <button type="button" onClick={() => addButton("URL")} style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(0,0,0,0.05)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "5px" }}>+ Website Link</button>
               </div>
             </div>
             
@@ -414,7 +431,7 @@ const TemplateManager = () => {
                 <input 
                   type="text" 
                   placeholder="Button Label"
-                  style={{ flex: 1, padding: "8px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "6px", fontSize: "0.85rem" }}
+                  style={{ flex: 1, padding: "8px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "6px", fontSize: "0.85rem" }}
                   value={btn.text}
                   onChange={(e) => updateButton(idx, "text", e.target.value)}
                 />
@@ -422,7 +439,7 @@ const TemplateManager = () => {
                   <input 
                     type="text" 
                     placeholder="https://example.com"
-                    style={{ flex: 1.5, padding: "8px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "6px", fontSize: "0.85rem" }}
+                    style={{ flex: 1.5, padding: "8px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "6px", fontSize: "0.85rem" }}
                     value={btn.url}
                     onChange={(e) => updateButton(idx, "url", e.target.value)}
                   />
@@ -449,18 +466,26 @@ const TemplateManager = () => {
             <div key={p._id} className="glass-card" style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <h4 style={{ color: "var(--accent-primary)", margin: 0 }}>{p.name}</h4>
-                <button 
-                  onClick={() => handleDeletePreset(p._id)} 
-                  style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer" }}
-                  onMouseOver={e => e.currentTarget.style.color = "#ef4444"}
-                  onMouseOut={e => e.currentTarget.style.color = "#64748b"}
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <button 
+                    onClick={() => handleOpenPresetModal(p.template, p)} 
+                    style={{ background: "transparent", border: "none", color: "var(--accent-primary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: "bold" }}
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    onClick={() => handleDeletePreset(p._id)} 
+                    style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer" }}
+                    onMouseOver={e => e.currentTarget.style.color = "#ef4444"}
+                    onMouseOut={e => e.currentTarget.style.color = "#64748b"}
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
               
               <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                Base Template: <span style={{ color: "white" }}>{p.template?.name}</span>
+                Base Template: <span style={{ color: "var(--text-primary)" }}>{p.template?.name}</span>
               </div>
 
               {/* Minimal Preview */}
@@ -470,11 +495,23 @@ const TemplateManager = () => {
                 padding: "10px",
                 fontSize: "0.85rem",
                 color: "#303030",
-                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)"
+                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)",
+                minHeight: "150px"
               }}>
                 {p.template?.components?.map((comp, idx) => {
                   if (comp.type === "HEADER") {
-                    if (comp.format === "IMAGE") return <div key={idx} style={{ background: "#ddd", height: "80px", borderRadius: "5px", marginBottom: "5px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", color: "#888" }}>[IMAGE: {p.config?.[`HEADER_IMAGE`] || "Default"}]</div>;
+                    if (comp.format === "IMAGE") {
+                      const imgUrl = p.config?.[`HEADER_IMAGE`];
+                      return (
+                        <div key={idx} style={{ background: "#ddd", height: "100px", borderRadius: "5px", marginBottom: "8px", overflow: "hidden" }}>
+                          {imgUrl ? (
+                            <img src={imgUrl} alt="Header" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : (
+                            <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", color: "#888" }}>[IMAGE MISSING]</div>
+                          )}
+                        </div>
+                      );
+                    }
                     return <div key={idx} style={{ fontWeight: "bold", fontSize: "0.9rem", marginBottom: "5px" }}>{formatPreviewText(comp.text, "HEADER", p.config)}</div>;
                   }
                   if (comp.type === "BODY") return <div key={idx} style={{ whiteSpace: "pre-wrap" }}>{formatPreviewText(comp.text, "BODY", p.config)}</div>;
@@ -558,67 +595,113 @@ const TemplateManager = () => {
       {/* Preset Creation Modal */}
       {showPresetModal && (
         <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div className="glass-card" style={{ width: "95%", maxWidth: "900px", padding: "2rem", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "2rem" }}>
-            <div>
-              <h3 style={{ marginBottom: "1.5rem" }}>Save Template Preset</h3>
+          <div className="glass-card" style={{ 
+            width: "95%", 
+            maxWidth: "1000px", 
+            height: "85vh", 
+            padding: "1.5rem", 
+            display: "flex", 
+            gap: "1.5rem", 
+            overflow: "hidden",
+            position: "relative"
+          }}>
+            <button 
+              onClick={() => setShowPresetModal(false)}
+              className="close-modal-btn"
+              style={{ 
+                position: "absolute", 
+                top: "15px", 
+                right: "15px", 
+                background: "rgba(0,0,0,0.05)", 
+                border: "none", 
+                color: "var(--text-primary)", 
+                cursor: "pointer", 
+                zIndex: 10,
+                width: "32px",
+                height: "32px",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s"
+              }}
+            >
+              <Plus size={20} style={{ transform: "rotate(45deg)" }} />
+            </button>
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", flex: 1.2 }}>
+              <h3 style={{ marginBottom: "1rem", fontSize: "1.2rem", flexShrink: 0 }}>{selectedTemplateForPreset?._id_preset ? "Edit Template Preset" : "Save Template Preset"}</h3>
               
-              <div style={{ marginBottom: "1.2rem" }}>
-                <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Preset Name</label>
-                <input 
-                  type="text" 
-                  style={{ width: "100%", padding: "10px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px" }}
-                  value={presetName}
-                  onChange={(e) => setPresetName(e.target.value)}
-                  placeholder="e.g. Order_Confirmed_Offer"
-                />
-              </div>
+              <div style={{ overflowY: "auto", paddingRight: "10px", flex: 1, marginBottom: "1rem" }}>
+                <div style={{ marginBottom: "1rem" }}>
+                  <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Preset Name</label>
+                  <input 
+                    type="text" 
+                    style={{ width: "100%", padding: "10px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "8px" }}
+                    value={presetName}
+                    onChange={(e) => setPresetName(e.target.value)}
+                    placeholder="e.g. Order_Confirmed_Offer"
+                  />
+                </div>
 
-              <div style={{ maxHeight: "350px", overflowY: "auto", paddingRight: "10px" }}>
-                <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "1rem" }}>Fill default values:</p>
-                {Object.keys(templateVars).map(key => {
-                  const isMedia = ["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type));
-                  return (
-                    <div key={key} style={{ marginBottom: "12px" }}>
-                      <label style={{ fontSize: "0.75rem", color: "var(--accent-primary)", display: "block", marginBottom: "4px" }}>{isMedia ? `${key.split("_")[1]} URL` : `${key.split("_")[0]} Var ${key.split("_")[1]}`}</label>
-                      <div style={{ display: "flex", gap: "8px" }}>
-                        <input 
-                          type="text" 
-                          style={{ flex: 1, padding: "10px", background: "var(--bg-secondary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px" }}
-                          value={templateVars[key]}
-                          onChange={(e) => setTemplateVars({...templateVars, [key]: e.target.value})}
-                          placeholder={isMedia ? "https://..." : "Value"}
-                        />
-                        {isMedia && (
-                          <>
+                <div style={{ marginBottom: "1rem" }}>
+                  <p style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--text-primary)", marginBottom: "0.8rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "5px" }}>Variables & Media</p>
+                  {Object.keys(templateVars).map(key => {
+                    const isMedia = ["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type));
+                    return (
+                      <div key={key} style={{ marginBottom: "12px" }}>
+                        <label style={{ fontSize: "0.75rem", color: "var(--accent-primary)", display: "block", marginBottom: "4px", fontWeight: "700" }}>{isMedia ? `${key.split("_")[1]} URL` : `BODY Var ${key.split("_")[1]}`}</label>
+                        <div style={{ display: "flex", gap: "8px", flexDirection: isMedia ? "row" : "column" }}>
+                          {isMedia ? (
                             <input 
-                              type="file" 
-                              id={`upload-${key}`} 
-                              style={{ display: "none" }} 
-                              onChange={(e) => handleFileUpload(e, key)}
-                              accept="image/*,video/*,application/pdf"
+                              type="text" 
+                              style={{ flex: 1, padding: "10px", background: "var(--bg-secondary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "8px", fontSize: "0.85rem" }}
+                              value={templateVars[key]}
+                              onChange={(e) => setTemplateVars({...templateVars, [key]: e.target.value})}
+                              placeholder="https://..."
                             />
-                            <button 
-                              onClick={() => document.getElementById(`upload-${key}`).click()}
-                              style={{ padding: "0 15px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px", fontSize: "0.7rem", cursor: "pointer" }}
-                            >
-                              Upload
-                            </button>
-                          </>
-                        )}
+                          ) : (
+                            <input 
+                              type="text" 
+                              style={{ flex: 1, padding: "10px", background: "var(--bg-secondary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "8px", fontSize: "0.85rem" }}
+                              value={templateVars[key]}
+                              onChange={(e) => setTemplateVars({...templateVars, [key]: e.target.value})}
+                              placeholder="Value (Single line only)"
+                            />
+                          )}
+                          {isMedia && (
+                            <>
+                              <input 
+                                type="file" 
+                                id={`upload-${key}`} 
+                                style={{ display: "none" }} 
+                                onChange={(e) => handleFileUpload(e, key)}
+                                accept="image/*,video/*,application/pdf"
+                              />
+                              <button 
+                                onClick={() => document.getElementById(`upload-${key}`).click()}
+                                style={{ padding: "0 15px", background: "var(--accent-primary)", border: "none", color: "white", borderRadius: "8px", fontSize: "0.75rem", cursor: "pointer", fontWeight: "600" }}
+                              >
+                                Upload
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
-              <div style={{ display: "flex", gap: "10px", marginTop: "1.5rem" }}>
-                <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setShowPresetModal(false)}>Cancel</button>
-                <button className="btn-primary" style={{ flex: 2 }} onClick={handleSavePreset}>Save Preset</button>
+              <div style={{ display: "flex", gap: "10px", marginTop: "auto", paddingTop: "1rem", borderTop: "1px solid var(--border-color)", flexShrink: 0 }}>
+                <button className="btn-secondary" style={{ flex: 1, padding: "12px" }} onClick={() => setShowPresetModal(false)}>Cancel</button>
+                <button className="btn-primary" style={{ flex: 2, padding: "12px" }} onClick={handleSavePreset}>
+                  {selectedTemplateForPreset?._id_preset ? "Update Preset" : "Save Preset"}
+                </button>
               </div>
             </div>
 
             {/* LIVE PREVIEW SIDE */}
-            <div style={{ background: "#e5ddd5", borderRadius: "15px", padding: "20px", display: "flex", flexDirection: "column", border: "1px solid rgba(0,0,0,0.1)" }}>
+            <div style={{ background: "#e5ddd5", borderRadius: "15px", padding: "15px", display: "flex", flexDirection: "column", border: "1px solid rgba(0,0,0,0.1)", overflowY: "auto", flex: 0.8 }}>
               <div style={{ fontSize: "0.75rem", color: "#667781", marginBottom: "10px", textAlign: "center", background: "#d1d7db", padding: "4px 10px", borderRadius: "5px", alignSelf: "center" }}>PREVIEW</div>
               
               <div style={{ background: "white", padding: "10px", borderRadius: "0 10px 10px 10px", maxWidth: "90%", alignSelf: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", position: "relative" }}>

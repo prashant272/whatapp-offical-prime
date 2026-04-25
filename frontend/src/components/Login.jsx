@@ -26,13 +26,13 @@ const Login = ({ onLogin }) => {
   };
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0a" }}>
-      <div className="glass-card" style={{ width: "400px", padding: "2.5rem" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-primary)" }}>
+      <div className="glass-card" style={{ width: "400px", padding: "2.5rem", background: "var(--bg-secondary)", border: "1px solid var(--border-color)", boxShadow: "0 10px 40px rgba(0,0,0,0.05)" }}>
         <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          <div style={{ width: "60px", height: "60px", background: "var(--accent-primary)", borderRadius: "15px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem", color: "black" }}>
+          <div style={{ width: "60px", height: "60px", background: "var(--accent-primary)", borderRadius: "15px", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem", color: "white" }}>
             <LogIn size={32} />
           </div>
-          <h2 style={{ margin: 0 }}>Welcome Back</h2>
+          <h2 style={{ margin: 0, color: "var(--text-primary)" }}>Welcome Back</h2>
           <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginTop: "5px" }}>Log in to manage your WhatsApp dashboard</p>
         </div>
 
@@ -50,7 +50,7 @@ const Login = ({ onLogin }) => {
               <input 
                 type="email" 
                 placeholder="admin@example.com"
-                style={{ width: "100%", padding: "12px 12px 12px 40px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+                style={{ width: "100%", padding: "12px 12px 12px 40px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -65,7 +65,7 @@ const Login = ({ onLogin }) => {
               <input 
                 type="password" 
                 placeholder="••••••••"
-                style={{ width: "100%", padding: "12px 12px 12px 40px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px" }}
+                style={{ width: "100%", padding: "12px 12px 12px 40px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

@@ -289,11 +289,25 @@ const CampaignManager = () => {
               position: "relative"
             }}>
               {selectedTemplate.components.map((comp, idx) => {
-                if (comp.type === "HEADER") return (
-                  <div key={idx} style={{ fontWeight: "bold", borderBottom: "1px solid #f0f0f0", marginBottom: "8px", paddingBottom: "4px", fontSize: "1.05rem" }}>
-                    {formatPreviewText(comp.text, "HEADER")}
-                  </div>
-                );
+                if (comp.type === "HEADER") {
+                  if (comp.format === "IMAGE") {
+                    const imgUrl = templateVars[`HEADER_IMAGE`];
+                    return (
+                      <div key={idx} style={{ background: "#ddd", height: "140px", borderRadius: "8px", marginBottom: "10px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {imgUrl ? (
+                          <img src={imgUrl} alt="Header" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <div style={{ fontSize: "0.7rem", color: "#888" }}>[IMAGE PREVIEW]</div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={idx} style={{ fontWeight: "bold", borderBottom: "1px solid #f0f0f0", marginBottom: "8px", paddingBottom: "4px", fontSize: "1.05rem" }}>
+                      {formatPreviewText(comp.text, "HEADER")}
+                    </div>
+                  );
+                }
                 if (comp.type === "BODY") return (
                   <div key={idx} style={{ whiteSpace: "pre-wrap", lineHeight: "1.4" }}>
                     {formatPreviewText(comp.text, "BODY")}
@@ -337,8 +351,8 @@ const CampaignManager = () => {
           <div>
             <div style={{ background: "var(--bg-tertiary)", padding: "1.5rem", borderRadius: "12px", border: "1px solid var(--glass-border)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "1.5rem" }}>
-                <div style={{ background: "var(--accent-primary)", padding: "8px", borderRadius: "8px" }}>
-                  <Type size={20} color="black" />
+                <div style={{ background: "var(--accent-primary)", padding: "8px", borderRadius: "8px", color: "white" }}>
+                  <Type size={20} />
                 </div>
                 <div>
                   <h5 style={{ margin: 0 }}>Custom Variables</h5>
@@ -363,7 +377,7 @@ const CampaignManager = () => {
                         <div style={{ display: "flex", gap: "8px" }}>
                           <input 
                             type="text"
-                            style={{ flex: 1, padding: "12px", background: "var(--bg-secondary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px", fontSize: "0.9rem" }}
+                            style={{ flex: 1, padding: "12px", background: "white", border: "1px solid var(--border-color)", color: "#000000", borderRadius: "10px", fontSize: "0.95rem", fontWeight: "600" }}
                             placeholder={placeholder}
                             value={templateVars[key]}
                             onChange={(e) => handleVarChange(key, e.target.value)}
@@ -376,7 +390,7 @@ const CampaignManager = () => {
                                 type="button"
                                 onClick={() => document.getElementById(`campaign-upload-${key}`).click()}
                                 disabled={isUploading}
-                                style={{ padding: "0 15px", background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px", fontSize: "0.7rem", cursor: "pointer" }}
+                                style={{ padding: "0 15px", background: "var(--accent-primary)", border: "none", color: "white", borderRadius: "10px", fontSize: "0.8rem", cursor: "pointer", fontWeight: "600" }}
                               >
                                 {isUploading ? "..." : "Upload"}
                               </button>
@@ -421,7 +435,7 @@ const CampaignManager = () => {
               <label>Campaign Name</label>
               <input 
                 type="text" 
-                style={{ width: "100%", padding: "10px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px", marginTop: "5px" }}
+                style={{ width: "100%", padding: "12px", background: "white", border: "1px solid var(--border-color)", color: "#000000", borderRadius: "10px", marginTop: "8px", fontSize: "0.95rem", fontWeight: "600" }}
                 placeholder="e.g. Festival Greeting April"
                 value={newCampaign.name}
                 onChange={e => setNewCampaign({...newCampaign, name: e.target.value})}
@@ -435,7 +449,7 @@ const CampaignManager = () => {
                 <span style={{ fontSize: "0.7rem", color: "var(--accent-primary)" }}>Presets auto-fill everything</span>
               </label>
               <select 
-                style={{ width: "100%", padding: "10px", background: "rgba(37, 211, 102, 0.1)", border: "1px solid var(--accent-primary)", color: "white", borderRadius: "8px", marginTop: "5px", marginBottom: "10px" }}
+                style={{ width: "100%", padding: "10px", background: "rgba(0, 168, 132, 0.1)", border: "1px solid var(--accent-primary)", color: "var(--text-primary)", borderRadius: "8px", marginTop: "5px", marginBottom: "10px" }}
                 value={selectedPreset}
                 onChange={(e) => handlePresetChange(e.target.value)}
               >
@@ -444,7 +458,7 @@ const CampaignManager = () => {
               </select>
 
               <select 
-                style={{ width: "100%", padding: "10px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px" }}
+                style={{ width: "100%", padding: "10px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "8px" }}
                 value={newCampaign.templateName}
                 onChange={(e) => {
                   handleTemplateChange(e);
@@ -475,7 +489,7 @@ const CampaignManager = () => {
                 <button 
                   type="button" 
                   onClick={() => fileInputRef.current.click()}
-                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", color: "white", padding: "4px 12px", borderRadius: "6px", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "5px", cursor: "pointer" }}
+                  style={{ background: "#f0f2f5", border: "1px solid var(--border-color)", color: "var(--text-primary)", padding: "6px 14px", borderRadius: "8px", fontSize: "0.8rem", display: "flex", alignItems: "center", gap: "5px", cursor: "pointer", fontWeight: "600" }}
                 >
                   <FileUp size={14} /> Upload File
                 </button>
@@ -491,8 +505,8 @@ const CampaignManager = () => {
             </div>
             <textarea 
               rows="6" 
-              style={{ width: "100%", padding: "10px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "8px", marginTop: "5px", fontFamily: "monospace", fontSize: "0.9rem" }}
-              placeholder="919801017333&#10;917004455666"
+              style={{ width: "100%", padding: "12px", background: "white", border: "1px solid var(--border-color)", color: "#000000", borderRadius: "10px", marginTop: "10px", fontFamily: "monospace", fontSize: "0.95rem", fontWeight: "600" }}
+              placeholder="Enter or paste phone numbers here (one per line, e.g. 919876543210)..."
               value={newCampaign.contactsRaw}
               onChange={e => setNewCampaign({...newCampaign, contactsRaw: e.target.value})}
               required
@@ -504,8 +518,19 @@ const CampaignManager = () => {
 
           {renderTemplatePreview()}
 
-          <button type="submit" className="btn-primary" style={{ width: "100%", marginTop: "2rem", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}>
-            <Play size={18} fill="currentColor" /> Launch Campaign
+          <button type="submit" className="btn-primary" style={{ 
+            width: "100%", 
+            marginTop: "2rem", 
+            display: "flex", 
+            justifyContent: "center", 
+            alignItems: "center", 
+            gap: "10px", 
+            padding: "1rem", 
+            fontSize: "1.1rem", 
+            fontWeight: "700",
+            boxShadow: "0 4px 15px rgba(37, 211, 102, 0.3)"
+          }}>
+            <Play size={20} fill="currentColor" /> Launch Bulk Campaign
           </button>
         </form>
       ) : (
@@ -514,8 +539,8 @@ const CampaignManager = () => {
             <div key={camp._id} className="glass-card">
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
                 <div>
-                  <h4 style={{ fontSize: "1.1rem" }}>{camp.name}</h4>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)" }}>{camp.template?.name} • {new Date(camp.createdAt).toLocaleDateString()}</p>
+                  <h4 style={{ fontSize: "1.1rem", color: "var(--text-primary)", fontWeight: "800" }}>{camp.name}</h4>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", fontWeight: "500" }}>{camp.template?.name} • {new Date(camp.createdAt).toLocaleDateString()}</p>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "rgba(37, 211, 102, 0.1)", color: "var(--accent-primary)", padding: "4px 12px", borderRadius: "15px", fontSize: "0.75rem", fontWeight: "700" }}>
                   {camp.status === "COMPLETED" ? <CheckCircle2 size={14} /> : <div className="animate-pulse" style={{ background: "var(--accent-primary)", width: "6px", height: "6px", borderRadius: "50%" }}></div>}
@@ -535,26 +560,26 @@ const CampaignManager = () => {
 
               <div style={{ display: "flex", gap: "2rem", alignItems: "center" }}>
                 <div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Total</span>
-                  <p style={{ fontWeight: "700" }}>{camp.totalContacts}</p>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: "700" }}>Total</span>
+                  <p style={{ fontWeight: "800", color: "var(--text-primary)", fontSize: "1.1rem" }}>{camp.totalContacts}</p>
                 </div>
                 <div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Sent</span>
-                  <p style={{ fontWeight: "700", color: "var(--accent-primary)" }}>{camp.sentCount}</p>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: "700" }}>Sent</span>
+                  <p style={{ fontWeight: "800", color: "var(--accent-primary)", fontSize: "1.1rem" }}>{camp.sentCount}</p>
                 </div>
                 <div>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Failed</span>
-                  <p style={{ fontWeight: "700", color: "#ff4757" }}>{camp.failedCount}</p>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-secondary)", fontWeight: "700" }}>Failed</span>
+                  <p style={{ fontWeight: "800", color: "#ff4757", fontSize: "1.1rem" }}>{camp.failedCount}</p>
                 </div>
-                <button 
-                  onClick={() => {
-                    setSelectedLogs(camp.logs || []);
-                    setShowLogsModal(true);
-                  }}
-                  style={{ marginLeft: "auto", background: "rgba(255,255,255,0.05)", border: "1px solid var(--glass-border)", color: "white", padding: "6px 15px", borderRadius: "8px", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
-                >
-                  <List size={14} /> View Details
-                </button>
+                  <button 
+                    onClick={() => {
+                      setSelectedLogs(camp.logs || []);
+                      setShowLogsModal(true);
+                    }}
+                    style={{ marginLeft: "auto", background: "var(--bg-primary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", padding: "8px 16px", borderRadius: "8px", fontSize: "0.8rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px", fontWeight: "600" }}
+                  >
+                    <List size={14} /> View Details
+                  </button>
               </div>
             </div>
           ))}
@@ -572,7 +597,7 @@ const CampaignManager = () => {
           <div className="glass-card" style={{ width: "600px", maxWidth: "90%", padding: "2rem", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1.5rem" }}>
               <h3>Campaign Details</h3>
-              <button onClick={() => setShowLogsModal(false)} style={{ background: "transparent", border: "none", color: "white", cursor: "pointer", fontSize: "1.2rem" }}>X</button>
+              <button onClick={() => setShowLogsModal(false)} style={{ background: "transparent", border: "none", color: "var(--text-primary)", cursor: "pointer", fontSize: "1.2rem" }}>X</button>
             </div>
             
             <div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem" }}>
