@@ -157,7 +157,9 @@ const ChatModule = () => {
     fetchInitialData();
 
     const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
-    const socket = io(socketUrl);
+    const socket = io(socketUrl, {
+      query: { userId: currentUser._id, role: currentUser.role }
+    });
 
     socket.on("new_message", ({ message, conversation }) => {
       // 1. Update Conversations List
@@ -465,15 +467,55 @@ const ChatModule = () => {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filter, setFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [userFilter, setUserFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const unreadCountTotal = useMemo(() => conversations.filter(c => c.unreadCount > 0).length, [conversations]);
 
-  const filteredConversations = conversations.filter(c => {
-    const term = searchTerm.toLowerCase().trim();
-    const matchesSearch = !term || (c.phone.includes(term) || c.contact?.name?.toLowerCase().includes(term));
-    const matchesFilter = filter === "all" || (filter === "unread" && c.unreadCount > 0);
-    return matchesSearch && matchesFilter;
-  });
+  const filteredConversations = useMemo(() => {
+    let result = conversations;
+
+    // 1. Unread/All/Window Filter
+    if (filter === "unread") {
+      result = result.filter(c => c.unreadCount > 0);
+    } else if (filter === "window") {
+      const now = new Date().getTime();
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+      result = result.filter(c => {
+        if (!c.lastCustomerMessageAt) return false;
+        return (now - new Date(c.lastCustomerMessageAt).getTime()) < twentyFourHours;
+      });
+    }
+
+    // 2. Status Filter
+    if (statusFilter !== "All") {
+      result = result.filter(c => c.status === statusFilter);
+    }
+
+    // 3. User Filter
+    if (userFilter !== "All") {
+      if (userFilter === "Unassigned") {
+        result = result.filter(c => !c.assignedTo);
+      } else {
+        result = result.filter(c => 
+          (typeof c.assignedTo === 'object' ? c.assignedTo?._id : c.assignedTo) === userFilter
+        );
+      }
+    }
+
+    // 4. Search Query
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(c => 
+        (c.contact?.name || "").toLowerCase().includes(q) || 
+        c.phone.includes(q) ||
+        (c.lastMessage || "").toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  }, [conversations, filter, statusFilter, userFilter, searchQuery]);
 
   return (
     <div className="chat-container" style={{
@@ -546,7 +588,7 @@ const ChatModule = () => {
 
       {/* Sidebar */}
       <div className="sidebar-container" style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "12px", background: "#f0f2f5", flexShrink: 0, height: "155px" }}>
+        <div style={{ padding: "12px", background: "#f0f2f5", flexShrink: 0, height: "200px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-primary)" }}>Chats</h3>
             <div style={{ display: "flex", gap: "15px", color: "var(--text-secondary)" }}>
@@ -559,8 +601,8 @@ const ChatModule = () => {
             <input
               type="text"
               placeholder="Search or start new chat"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: "100%", padding: "8px 12px 8px 40px", background: "#ffffff", border: "none", color: "var(--text-primary)", borderRadius: "8px", fontSize: "0.85rem", outline: "none" }}
             />
           </div>
@@ -599,10 +641,79 @@ const ChatModule = () => {
             >
               Unread {unreadCountTotal > 0 && <span style={{ background: "#00a884", color: "#ffffff", borderRadius: "50%", padding: "1px 6px", fontSize: "0.7rem", fontWeight: "bold" }}>{unreadCountTotal}</span>}
             </button>
+            <button 
+              onClick={() => setFilter("window")}
+              style={{ 
+                padding: "6px 16px", 
+                borderRadius: "20px", 
+                background: filter === "window" ? "#e7fce3" : "#ffffff", 
+                color: filter === "window" ? "#008069" : "#667781", 
+                fontSize: "0.8rem", 
+                cursor: "pointer",
+                fontWeight: "600",
+                border: filter === "window" ? "1px solid #00a884" : "1px solid #e9edef",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px"
+              }}
+            >
+              Window
+            </button>
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
+            <select 
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              style={{ 
+                flex: 1, 
+                padding: "8px 10px", 
+                background: "#ffffff", 
+                border: "1px solid #e9edef", 
+                borderRadius: "8px", 
+                fontSize: "0.75rem", 
+                color: "#54656f",
+                outline: "none",
+                cursor: "pointer",
+                fontWeight: "500"
+              }}
+            >
+              <option value="All">Status: All</option>
+              <option value="New">New</option>
+              <option value="Interested">Interested</option>
+              <option value="Not Interested">Not Interested</option>
+              <option value="Follow-up">Follow-up</option>
+              <option value="Closed">Closed</option>
+            </select>
+
+            {currentUser.role !== "Executive" && (
+              <select 
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                style={{ 
+                  flex: 1, 
+                  padding: "8px 10px", 
+                  background: "#ffffff", 
+                  border: "1px solid #e9edef", 
+                  borderRadius: "8px", 
+                  fontSize: "0.75rem", 
+                  color: "#54656f",
+                  outline: "none",
+                  cursor: "pointer",
+                  fontWeight: "500"
+                }}
+              >
+                <option value="All">User: All</option>
+                <option value="Unassigned">Unassigned</option>
+                {executives.map(ex => (
+                  <option key={ex._id} value={ex._id}>{ex.name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
-        <div className="chat-scroll" style={{ height: "calc(100% - 155px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}>
+        <div className="chat-scroll" style={{ height: "calc(100% - 200px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}>
           {filteredConversations.map((chat) => {
             const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);
             return (

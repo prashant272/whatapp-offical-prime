@@ -4,7 +4,7 @@ import Message from "../models/Message.js";
 import { sendTextMessage, sendTemplateMessage, sendImageMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
-import { getIO } from "../utils/socket.js";
+import { getIO, smartEmit } from "../utils/socket.js";
 
 export const getConversations = async (req, res) => {
   try {
@@ -64,9 +64,8 @@ export const sendMessage = async (req, res) => {
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
 
-    // Socket Emit
-    const io = getIO();
-    io.emit("new_message", { message: newMessage, conversation: populatedConv });
+    // Smart Socket Emit
+    smartEmit("new_message", { message: newMessage, conversation: populatedConv });
 
     await logActivity(req.user._id, "SEND_MESSAGE", `Sent text message: ${body.substring(0, 50)}...`, to);
 
@@ -128,9 +127,8 @@ export const sendChatTemplateMessage = async (req, res) => {
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
 
-    // Socket Emit
-    const io = getIO();
-    io.emit("new_message", { message: newMessage, conversation: populatedConv });
+    // Smart Socket Emit
+    smartEmit("new_message", { message: newMessage, conversation: populatedConv });
 
     await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
 
@@ -168,9 +166,8 @@ export const sendChatImageMessage = async (req, res) => {
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
 
-    // Socket Emit
-    const io = getIO();
-    io.emit("new_message", { message: newMessage, conversation: populatedConv });
+    // Smart Socket Emit
+    smartEmit("new_message", { message: newMessage, conversation: populatedConv });
 
     await logActivity(req.user._id, "SEND_IMAGE", `Sent image: ${imageUrl}`, to);
 

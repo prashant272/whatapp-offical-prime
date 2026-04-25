@@ -3,7 +3,7 @@ import Conversation from "../models/Conversation.js";
 import Contact from "../models/Contact.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getMediaUrl } from "../services/whatsappService.js";
-import { getIO } from "../utils/socket.js";
+import { getIO, smartEmit } from "../utils/socket.js";
 
 export const verifyWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -114,15 +114,15 @@ export const handleWebhook = async (req, res) => {
         
         conversation.lastMessage = bodyContent;
         conversation.lastMessageTime = new Date();
+        conversation.lastCustomerMessageAt = new Date();
         conversation.unreadCount += 1;
         await conversation.save();
 
         // Populate contact before emitting
         const populatedConv = await Conversation.findById(conversation._id).populate("contact");
 
-        // Notify UI about NEW MESSAGE
-        const io = getIO();
-        io.emit("new_message", { message: newMessage, conversation: populatedConv });
+        // Notify UI about NEW MESSAGE (Smart Route)
+        smartEmit("new_message", { message: newMessage, conversation: populatedConv });
       }
       res.sendStatus(200);
     } catch (err) {

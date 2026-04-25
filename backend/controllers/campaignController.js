@@ -7,7 +7,7 @@ import { throttleCampaign } from "../utils/messageThrottler.js";
 import { sendTemplateMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
-import { getIO } from "../utils/socket.js";
+import { getIO, smartEmit } from "../utils/socket.js";
 
 export const startCampaign = async (req, res) => {
   try {
@@ -103,9 +103,8 @@ export const startCampaign = async (req, res) => {
             { upsert: true, new: true }
           ).populate("contact");
 
-          // Notify UI about NEW MESSAGE from campaign
-          const io = getIO();
-          io.emit("new_message", { message: newMessage, conversation: updatedConv });
+          // Smart Notify UI about NEW MESSAGE from campaign
+          smartEmit("new_message", { message: newMessage, conversation: updatedConv });
         }
         
         const currentStatus = (success + failure === contacts.length) ? "COMPLETED" : "RUNNING";
