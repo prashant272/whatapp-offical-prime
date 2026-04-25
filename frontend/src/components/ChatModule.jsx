@@ -102,8 +102,11 @@ const ChatModule = () => {
   useEffect(() => {
     if (chatId && conversations.length > 0) {
       const chat = conversations.find(c => c._id === chatId);
-      if (chat && (!selectedChat || selectedChat._id !== chat._id)) {
-        setSelectedChat(chat);
+      if (chat) {
+        // Update selectedChat if it's not set OR if the data has changed (like lastCustomerMessageAt)
+        if (!selectedChat || JSON.stringify(chat) !== JSON.stringify(selectedChat)) {
+          setSelectedChat(chat);
+        }
       }
     } else if (!chatId && selectedChat) {
       setSelectedChat(null);
@@ -167,10 +170,21 @@ const ChatModule = () => {
 
         if (index !== -1) {
           const updated = [...prev];
-          updated[index] = { ...updated[index], ...updatedConvData };
+          const finalConv = { ...updated[index], ...updatedConvData };
+          updated[index] = finalConv;
+          
+          // Update selectedChat in real-time if it's the active one
+          if (selectedChatRef.current?.phone === conversation.phone) {
+            setSelectedChat(finalConv);
+          }
+          
           return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
         } else {
-          return [updatedConvData, ...prev];
+          const newConv = { ...updatedConvData };
+          if (selectedChatRef.current?.phone === conversation.phone) {
+            setSelectedChat(newConv);
+          }
+          return [newConv, ...prev];
         }
       });
 
