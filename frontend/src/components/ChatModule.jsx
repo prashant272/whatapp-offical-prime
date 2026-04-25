@@ -28,6 +28,7 @@ const ChatModule = () => {
   const scrollRef = useRef();
   const [prevMsgCount, setPrevMsgCount] = useState(0);
   const [showContactInfo, setShowContactInfo] = useState(false);
+  const [windowTimeLeft, setWindowTimeLeft] = useState(null);
 
   const currentUser = JSON.parse(localStorage.getItem("userInfo"));
   const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
@@ -191,6 +192,35 @@ const ChatModule = () => {
 
     return () => socket.disconnect();
   }, []);
+
+  // 24-Hour Window Timer Logic
+  useEffect(() => {
+    const updateTimer = () => {
+      // Fallback to lastMessageTime if lastCustomerMessageAt is missing (for older messages)
+      const lastActionTime = selectedChat?.lastCustomerMessageAt || selectedChat?.lastMessageTime;
+      
+      if (lastActionTime) {
+        const lastMsg = new Date(lastActionTime).getTime();
+        const now = new Date().getTime();
+        const diff = (24 * 60 * 60 * 1000) - (now - lastMsg);
+        
+        if (diff > 0) {
+          const h = Math.floor(diff / (1000 * 60 * 60));
+          const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+          const s = Math.floor((diff % (1000 * 60)) / 1000);
+          setWindowTimeLeft(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+        } else {
+          setWindowTimeLeft(null);
+        }
+      } else {
+        setWindowTimeLeft(null);
+      }
+    };
+
+    updateTimer(); // Initial call
+    const timer = setInterval(updateTimer, 1000);
+    return () => clearInterval(timer);
+  }, [selectedChat]);
 
   // Use a ref to track selectedChat inside socket callback
   const selectedChatRef = useRef(selectedChat);
@@ -708,6 +738,13 @@ const ChatModule = () => {
               </div>
             </div>
 
+            {/* 24h Window Timer Bar */}
+            {windowTimeLeft && (
+              <div style={{ background: "#f0f2f5", padding: "4px 16px", borderBottom: "1px solid rgba(0,0,0,0.05)", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontSize: "0.75rem", color: "#008069", fontWeight: "600" }}>
+                <Clock size={14} /> 24h Service Window: {windowTimeLeft} remaining
+              </div>
+            )}
+
             <div 
               ref={scrollRef}
               className="chat-scroll"
@@ -803,89 +840,104 @@ const ChatModule = () => {
               ))}
             </div>
 
-            <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#f0f2f5", display: "flex", gap: "10px", alignItems: "center" }}>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleImageUpload} 
-                accept="image/*" 
-                style={{ display: "none" }} 
-              />
-              <button 
-                type="button" 
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                style={{ background: "transparent", border: "none", color: "#667781", cursor: "pointer", padding: "5px" }}
-              >
-                {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
-              </button>
-              
-              <textarea
-                placeholder="Type a message"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSend(e);
-                  }
-                  
-                  // Keyboard Shortcuts: Ctrl+B or Cmd+B for Bold
-                  if ((e.ctrlKey || e.metaKey) && e.key === "b") {
-                    e.preventDefault();
-                    const start = e.target.selectionStart;
-                    const end = e.target.selectionEnd;
-                    const text = newMessage;
-                    const selected = text.substring(start, end);
-                    const before = text.substring(0, start);
-                    const after = text.substring(end);
-                    setNewMessage(`${before}*${selected}*${after}`);
-                  }
-                  
-                  // Keyboard Shortcuts: Ctrl+I or Cmd+I for Italic
-                  if ((e.ctrlKey || e.metaKey) && e.key === "i") {
-                    e.preventDefault();
-                    const start = e.target.selectionStart;
-                    const end = e.target.selectionEnd;
-                    const text = newMessage;
-                    const selected = text.substring(start, end);
-                    const before = text.substring(0, start);
-                    const after = text.substring(end);
-                    setNewMessage(`${before}_${selected}_${after}`);
-                  }
+            {windowTimeLeft ? (
+              <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#f0f2f5", display: "flex", gap: "10px", alignItems: "center" }}>
+                <input 
+                  type="file" 
+                  ref={fileInputRef} 
+                  onChange={handleImageUpload} 
+                  accept="image/*" 
+                  style={{ display: "none" }} 
+                />
+                <button 
+                  type="button" 
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                  style={{ background: "transparent", border: "none", color: "#667781", cursor: "pointer", padding: "5px" }}
+                >
+                  {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
+                </button>
+                
+                <textarea
+                  placeholder="Type a message"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend(e);
+                    }
+                    
+                    // Keyboard Shortcuts: Ctrl+B or Cmd+B for Bold
+                    if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+                      e.preventDefault();
+                      const start = e.target.selectionStart;
+                      const end = e.target.selectionEnd;
+                      const text = newMessage;
+                      const selected = text.substring(start, end);
+                      const before = text.substring(0, start);
+                      const after = text.substring(end);
+                      setNewMessage(`${before}*${selected}*${after}`);
+                    }
+                    
+                    // Keyboard Shortcuts: Ctrl+I or Cmd+I for Italic
+                    if ((e.ctrlKey || e.metaKey) && e.key === "i") {
+                      e.preventDefault();
+                      const start = e.target.selectionStart;
+                      const end = e.target.selectionEnd;
+                      const text = newMessage;
+                      const selected = text.substring(start, end);
+                      const before = text.substring(0, start);
+                      const after = text.substring(end);
+                      setNewMessage(`${before}_${selected}_${after}`);
+                    }
 
-                  // Keyboard Shortcut: Ctrl+N for New Line
-                  if ((e.ctrlKey || e.metaKey) && e.key === "n") {
-                    e.preventDefault();
-                    const start = e.target.selectionStart;
-                    const end = e.target.selectionEnd;
-                    const text = newMessage;
-                    const before = text.substring(0, start);
-                    const after = text.substring(end);
-                    setNewMessage(`${before}\n${after}`);
-                  }
-                }}
-                rows="1"
-                style={{ 
-                  flex: 1, 
-                  padding: "10px 12px", 
-                  background: "#ffffff", 
-                  border: "none", 
-                  color: "var(--text-primary)", 
-                  borderRadius: "8px", 
-                  outline: "none", 
-                  resize: "none",
-                  fontFamily: "inherit",
-                  fontSize: "0.9rem",
-                  lineHeight: "1.4",
-                  maxHeight: "100px",
-                  overflowY: "auto"
-                }}
-              />
-              <button type="submit" style={{ background: "transparent", border: "none", color: "#00a884", cursor: "pointer", padding: "5px" }}>
-                <Send size={24} />
-              </button>
-            </form>
+                    // Keyboard Shortcut: Ctrl+N for New Line
+                    if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+                      e.preventDefault();
+                      const start = e.target.selectionStart;
+                      const end = e.target.selectionEnd;
+                      const text = newMessage;
+                      const before = text.substring(0, start);
+                      const after = text.substring(end);
+                      setNewMessage(`${before}\n${after}`);
+                    }
+                  }}
+                  rows="1"
+                  style={{ 
+                    flex: 1, 
+                    padding: "10px 12px", 
+                    background: "#ffffff", 
+                    border: "none", 
+                    color: "var(--text-primary)", 
+                    borderRadius: "8px", 
+                    outline: "none", 
+                    resize: "none",
+                    fontFamily: "inherit",
+                    fontSize: "0.9rem",
+                    lineHeight: "1.4",
+                    maxHeight: "100px",
+                    overflowY: "auto"
+                  }}
+                />
+                <button type="submit" style={{ background: "transparent", border: "none", color: "#00a884", cursor: "pointer", padding: "5px" }}>
+                  <Send size={24} />
+                </button>
+              </form>
+            ) : (
+              <div style={{ padding: "15px 20px", background: "#f0f2f5", display: "flex", flexDirection: "column", alignItems: "center", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
+                <p style={{ fontSize: "0.85rem", color: "#667781", margin: "0 0 10px 0", textAlign: "center" }}>
+                  <Clock size={14} style={{ verticalAlign: "middle", marginRight: "5px" }} />
+                  The 24-hour service window is closed. You can only send Template Messages.
+                </p>
+                <button 
+                  onClick={() => setShowTemplateModal(true)}
+                  style={{ background: "#00a884", border: "none", color: "white", padding: "8px 24px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "700", cursor: "pointer" }}
+                >
+                  Send Template to Re-open Window
+                </button>
+              </div>
+            )}
           </>
         ) : (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8696a0", background: "#f8f9fa" }}>
