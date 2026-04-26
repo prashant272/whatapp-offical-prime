@@ -62,13 +62,14 @@ export const handleWebhook = async (req, res) => {
         } else if (type === "interactive") {
           const interactive = message.interactive;
           bodyContent = interactive?.button_reply?.title || interactive?.list_reply?.title || interactive?.button_reply?.id;
-        } else if (type === "image") {
-          bodyContent = message.image?.caption || "Image received";
-          if (message.image?.id) {
+        } else if (type === "image" || type === "video" || type === "audio" || type === "document") {
+          const media = message[type];
+          bodyContent = media?.caption || `${type.charAt(0).toUpperCase() + type.slice(1)} received`;
+          if (media?.id) {
             try {
-              mediaUrl = await getMediaUrl(message.image.id);
+              mediaUrl = await getMediaUrl(media.id);
             } catch (err) {
-              console.error("Error fetching media URL:", err);
+              console.error(`Error fetching ${type} URL:`, err);
             }
           }
         }

@@ -9,6 +9,10 @@ import { getIO, smartEmit } from "../utils/socket.js";
 export const getConversations = async (req, res) => {
   try {
     const filter = {};
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
     if (req.user.role === "Executive") {
       filter.assignedTo = req.user._id;
     }
@@ -16,8 +20,16 @@ export const getConversations = async (req, res) => {
     const conversations = await Conversation.find(filter)
       .populate("contact")
       .populate("assignedTo", "name")
-      .sort({ lastMessageTime: -1 });
-    res.json(conversations);
+      .sort({ lastMessageTime: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Conversation.countDocuments(filter);
+
+    res.json({
+      conversations,
+      hasMore: total > skip + conversations.length
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -26,13 +38,27 @@ export const getConversations = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { phone } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
     const messages = await Message.find({
       $or: [{ from: phone }, { to: phone }]
-    }).sort({ timestamp: 1 });
+    })
+    .sort({ timestamp: -1 }) // Get latest first for pagination
+    .skip(skip)
+    .limit(limit);
     
+    const total = await Message.countDocuments({
+      $or: [{ from: phone }, { to: phone }]
+    });
+
     await Conversation.findOneAndUpdate({ phone }, { unreadCount: 0 });
     
-    res.json(messages);
+    res.json({
+      messages: messages.reverse(), // Reverse back for chronological UI
+      hasMore: total > skip + messages.length
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

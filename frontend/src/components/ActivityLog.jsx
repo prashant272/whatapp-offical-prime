@@ -7,14 +7,24 @@ import { API_BASE } from "../api";
 const ActivityLog = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const fetchLogs = async () => {
+  const fetchLogs = async (p = 1) => {
+    if (loading) return;
     setLoading(true);
     try {
       const userInfo = JSON.parse(localStorage.getItem("userInfo"));
       const config = { headers: { Authorization: `Bearer ${userInfo.token}` } };
-      const res = await axios.get(`${API_BASE}/activities`, config);
-      setLogs(res.data);
+      const res = await axios.get(`${API_BASE}/activities?page=${p}&limit=50`, config);
+      
+      const newLogs = res.data.logs || [];
+      if (p === 1) {
+        setLogs(newLogs);
+      } else {
+        setLogs(prev => [...prev, ...newLogs]);
+      }
+      setHasMore(res.data.hasMore);
     } catch (err) {
       console.error("Error fetching logs:", err);
     } finally {
@@ -23,8 +33,17 @@ const ActivityLog = () => {
   };
 
   useEffect(() => {
-    fetchLogs();
+    fetchLogs(1);
   }, []);
+
+  const handleScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    if (scrollHeight - scrollTop - clientHeight < 100 && hasMore && !loading) {
+      const nextPage = page + 1;
+      fetchLogs(nextPage);
+      setPage(nextPage);
+    }
+  };
 
   const getActionIcon = (action) => {
     switch (action) {
@@ -58,7 +77,11 @@ const ActivityLog = () => {
         </button>
       </div>
 
-      <div className="chat-scroll" style={{ background: "rgba(255,255,255,0.02)", borderRadius: "15px", border: "1px solid var(--glass-border)", overflowY: "auto", maxHeight: "70vh" }}>
+      <div 
+        className="chat-scroll" 
+        onScroll={handleScroll}
+        style={{ background: "rgba(255,255,255,0.02)", borderRadius: "15px", border: "1px solid var(--glass-border)", overflowY: "auto", maxHeight: "70vh" }}
+      >
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ textAlign: "left", fontSize: "0.8rem", color: "var(--text-secondary)", borderBottom: "1px solid var(--glass-border)" }}>

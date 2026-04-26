@@ -19,12 +19,22 @@ export const getActivities = async (req, res) => {
       filter.user = req.user._id;
     }
 
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
     const logs = await ActivityLog.find(filter)
       .populate("user", "name role")
       .sort({ timestamp: -1 })
-      .limit(100);
+      .skip(skip)
+      .limit(limit);
 
-    res.json(logs);
+    const total = await ActivityLog.countDocuments(filter);
+
+    res.json({
+      logs,
+      hasMore: total > skip + logs.length
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -12,20 +12,24 @@ const ChatModule = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const [conversations, setConversations] = useState([]);
+  const [convPage, setConvPage] = useState(1);
+  const [hasMoreConvs, setHasMoreConvs] = useState(true);
+  const [isFetchingConvs, setIsFetchingConvs] = useState(false);
+
+  const [messages, setMessages] = useState([]);
+  const [msgPage, setMsgPage] = useState(1);
+  const [hasMoreMsgs, setHasMoreMsgs] = useState(true);
+  const [isFetchingMsgs, setIsFetchingMsgs] = useState(false);
+
   // Derived active chat for perfect real-time sync
   const selectedChat = useMemo(() => {
     if (!chatId) return null;
-    
-    // Check if it's a "virtual" chat for a new number
     if (chatId.startsWith("new:")) {
       const phone = chatId.split(":")[1];
       return { phone, status: "New", isNew: true };
     }
-
     return conversations.find(c => c._id === chatId);
   }, [chatId, conversations]);
-
-  const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState([]);
@@ -66,33 +70,80 @@ const ChatModule = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  const fetchMessages = async (phone) => {
+  const fetchMessages = async (phone, page = 1) => {
     try {
-      const res = await axios.get(`${API_BASE}/messages/${phone}`, config);
-      const newMsgs = Array.isArray(res.data) ? res.data : [];
-      setMessages(prev => {
-        if (prev.length === newMsgs.length && JSON.stringify(prev[prev.length-1]) === JSON.stringify(newMsgs[newMsgs.length-1])) {
-          return prev; // No change, don't trigger re-render
-        }
-        return newMsgs;
-      });
+      if (page === 1) setLoading(true);
+      const res = await axios.get(`${API_BASE}/messages/${phone}?page=${page}&limit=50`, config);
+      const newMsgs = res.data.messages || [];
+      
+      if (page === 1) {
+        setMessages(newMsgs);
+        setMsgPage(1);
+      } else {
+        setMessages(prev => [...newMsgs, ...prev]);
+      }
+      setHasMoreMsgs(res.data.hasMore);
     } catch (err) {
       console.error("Error fetching messages:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchConversations = async () => {
+  const fetchMoreMessages = async () => {
+    if (!hasMoreMsgs || isFetchingMsgs || !selectedChat) return;
+    setIsFetchingMsgs(true);
+    const nextPage = msgPage + 1;
+    await fetchMessages(selectedChat.phone, nextPage);
+    setMsgPage(nextPage);
+    setIsFetchingMsgs(false);
+  };
+
+  const fetchConversations = async (page = 1) => {
     try {
-      const res = await axios.get(`${API_BASE}/conversations`, config);
-      const newData = Array.isArray(res.data) ? res.data : [];
-      setConversations(prev => {
-        if (JSON.stringify(prev) === JSON.stringify(newData)) return prev;
-        return newData;
-      });
+      const res = await axios.get(`${API_BASE}/conversations?page=${page}&limit=20`, config);
+      const newData = res.data.conversations || [];
       
+      if (page === 1) {
+        setConversations(newData);
+        setConvPage(1);
+      } else {
+        setConversations(prev => [...prev, ...newData]);
+      }
+      setHasMoreConvs(res.data.hasMore);
       // We no longer need to manually update selectedChat because it's derived from conversations
     } catch (err) {
       console.error("Error fetching conversations:", err);
+    }
+  };
+
+  const fetchMoreConversations = async () => {
+    if (!hasMoreConvs || isFetchingConvs) return;
+    setIsFetchingConvs(true);
+    const nextPage = convPage + 1;
+    await fetchConversations(nextPage);
+    setConvPage(nextPage);
+    setIsFetchingConvs(false);
+  };
+
+  const handleSidebarScroll = (e) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      fetchMoreConversations();
+    }
+  };
+
+  const handleMessageScroll = (e) => {
+    if (e.target.scrollTop === 0 && hasMoreMsgs && !isFetchingMsgs) {
+      const oldScrollHeight = e.target.scrollHeight;
+      fetchMoreMessages().then(() => {
+        // Maintain scroll position after loading more
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight - oldScrollHeight;
+          }
+        }, 100);
+      });
     }
   };
 
@@ -133,19 +184,22 @@ const ChatModule = () => {
     const fetchInitialData = async () => {
       try {
         const [convs, temps, pres, execs] = await Promise.all([
-          axios.get(`${API_BASE}/conversations`, config),
+          axios.get(`${API_BASE}/conversations?page=1&limit=20`, config),
           axios.get(`${API_BASE}/templates`, config),
           axios.get(`${API_BASE}/presets`, config),
           axios.get(`${API_BASE}/users`, config).catch(() => ({ data: [] }))
         ]);
-        const initialConvs = Array.isArray(convs.data) ? convs.data : [];
+        
+        const initialConvs = Array.isArray(convs.data.conversations) ? convs.data.conversations : [];
         setConversations(initialConvs);
+        setHasMoreConvs(convs.data.hasMore);
+        setConvPage(1);
+        
         setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
         setPresets(Array.isArray(pres.data) ? pres.data : []);
         if (currentUser.role !== "Executive") {
           setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager") : []);
         }
-
       } catch (err) {
         console.error("Initial fetch error:", err);
       }
@@ -300,12 +354,30 @@ const ChatModule = () => {
     const file = e.target.files[0];
     if (!file || !selectedChat) return;
 
+    // 0. CREATE INSTANT PREVIEW (Optimistic UI)
+    const previewUrl = URL.createObjectURL(file);
+    const tempId = "temp-" + Date.now();
+    const optimisticMsg = {
+      _id: tempId,
+      from: "me",
+      to: selectedChat.phone,
+      body: newMessage || "Image",
+      type: "image",
+      mediaUrl: previewUrl,
+      direction: "outbound",
+      status: "sending",
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, optimisticMsg]);
+    setNewMessage(""); // Clear text input immediately
+
     try {
       setIsUploading(true);
       const uploadData = new FormData();
       uploadData.append("file", file);
 
-      // 1. Upload to Cloudinary via your existing upload endpoint
+      // 1. Upload to Cloudinary in background
       const uploadRes = await axios.post(`${API_BASE}/upload`, uploadData, {
         headers: { 
           ...config.headers,
@@ -319,14 +391,17 @@ const ChatModule = () => {
       const res = await axios.post(`${API_BASE}/messages/send-image`, {
         to: selectedChat.phone,
         imageUrl: imageUrl,
-        caption: newMessage // Use current text input as caption if any
+        caption: optimisticMsg.body
       }, config);
 
-      setMessages([...messages, res.data.message]);
-      setNewMessage("");
+      // 3. Replace Temp Message with Real Message
+      setMessages(prev => prev.map(m => m._id === tempId ? res.data.message : m));
+      
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
       console.error("Error uploading/sending image:", err);
+      // Mark as failed in UI
+      setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
       alert("Failed to send image: " + (err.response?.data?.error || err.message));
     } finally {
       setIsUploading(false);
@@ -710,7 +785,11 @@ const ChatModule = () => {
           </div>
         </div>
 
-        <div className="chat-scroll" style={{ height: "calc(100% - 200px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}>
+        <div 
+          className="chat-scroll" 
+          onScroll={handleSidebarScroll}
+          style={{ height: "calc(100% - 200px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}
+        >
           {filteredConversations.map((chat) => {
             const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);
             return (
@@ -854,8 +933,10 @@ const ChatModule = () => {
             <div 
               ref={scrollRef}
               className="chat-scroll"
+              onScroll={handleMessageScroll}
               style={{ height: "calc(100% - 120px)", padding: "20px", overflowY: "scroll", display: "flex", flexDirection: "column", background: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')", backgroundBlendMode: "soft-light", backgroundColor: "#efeae2" }}
             >
+              {isFetchingMsgs && <div style={{ textAlign: "center", padding: "10px", color: "#8696a0", fontSize: "0.8rem", background: "rgba(255,255,255,0.8)", borderRadius: "8px", margin: "0 auto 10px auto", width: "fit-content" }}>Loading older messages...</div>}
               {Object.entries(messageGroups).map(([date, msgs]) => (
                 <div key={date} style={{ display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", justifyContent: "center", margin: "15px 0" }}>
@@ -867,7 +948,16 @@ const ChatModule = () => {
                     <div
                       key={msg._id}
                       className={`msg-bubble ${msg.direction === "outbound" ? "msg-outbound" : "msg-inbound"}`}
+                      style={{ 
+                        opacity: msg.status === "sending" ? 0.6 : 1,
+                        position: "relative"
+                      }}
                     >
+                      {msg.status === "sending" && (
+                        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10 }}>
+                          <Loader2 className="animate-spin" size={24} color="#00a884" />
+                        </div>
+                      )}
                       {msg.type === "template" && msg.templateData ? (
                         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                           {/* Image rendering if available */}
@@ -904,12 +994,36 @@ const ChatModule = () => {
                       ) : (
                         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                           {msg.mediaUrl && (
-                            <img 
-                              src={msg.mediaUrl} 
-                              alt="Received" 
-                              style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover" }} 
-                              onDoubleClick={() => window.open(msg.mediaUrl, "_blank")}
-                            />
+                            <div style={{ marginBottom: "5px" }}>
+                              {msg.type === "image" ? (
+                                <img 
+                                  src={msg.mediaUrl} 
+                                  alt="Received" 
+                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }} 
+                                  onDoubleClick={() => window.open(msg.mediaUrl, "_blank")}
+                                />
+                              ) : msg.type === "video" ? (
+                                <video 
+                                  src={msg.mediaUrl} 
+                                  controls 
+                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px" }} 
+                                />
+                              ) : msg.type === "audio" ? (
+                                <audio 
+                                  src={msg.mediaUrl} 
+                                  controls 
+                                  style={{ width: "100%" }} 
+                                />
+                              ) : (
+                                <div style={{ background: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
+                                  <FileText size={24} color="#8696a0" />
+                                  <div style={{ flex: 1, overflow: "hidden" }}>
+                                    <p style={{ margin: 0, fontSize: "0.85rem", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.body || "Document"}</p>
+                                    <a href={msg.mediaUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download File</a>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           )}
                           <div 
                             style={{ whiteSpace: "pre-wrap" }}
