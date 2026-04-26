@@ -545,6 +545,12 @@ const ChatModule = () => {
 
   const unreadCountTotal = useMemo(() => conversations.filter(c => c.unreadCount > 0).length, [conversations]);
 
+  const getProxiedUrl = (url) => {
+    if (!url) return "";
+    if (url.includes("cloudinary.com") || url.startsWith("blob:")) return url;
+    return `${API_BASE}/api/media/proxy?url=${encodeURIComponent(url)}`;
+  };
+
   const filteredConversations = useMemo(() => {
     let result = conversations;
 
@@ -997,20 +1003,20 @@ const ChatModule = () => {
                             <div style={{ marginBottom: "5px" }}>
                               {msg.type === "image" ? (
                                 <img 
-                                  src={msg.mediaUrl} 
+                                  src={getProxiedUrl(msg.mediaUrl)} 
                                   alt="Received" 
                                   style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }} 
-                                  onDoubleClick={() => window.open(msg.mediaUrl, "_blank")}
+                                  onDoubleClick={() => window.open(getProxiedUrl(msg.mediaUrl), "_blank")}
                                 />
                               ) : msg.type === "video" ? (
                                 <video 
-                                  src={msg.mediaUrl} 
+                                  src={getProxiedUrl(msg.mediaUrl)} 
                                   controls 
                                   style={{ width: "100%", borderRadius: "8px", maxHeight: "250px" }} 
                                 />
                               ) : msg.type === "audio" ? (
                                 <audio 
-                                  src={msg.mediaUrl} 
+                                  src={getProxiedUrl(msg.mediaUrl)} 
                                   controls 
                                   style={{ width: "100%" }} 
                                 />
@@ -1019,7 +1025,7 @@ const ChatModule = () => {
                                   <FileText size={24} color="#8696a0" />
                                   <div style={{ flex: 1, overflow: "hidden" }}>
                                     <p style={{ margin: 0, fontSize: "0.85rem", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.body || "Document"}</p>
-                                    <a href={msg.mediaUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download File</a>
+                                    <a href={getProxiedUrl(msg.mediaUrl)} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download File</a>
                                   </div>
                                 </div>
                               )}
@@ -1345,4 +1351,3 @@ const ChatModule = () => {
 };
 
 export default ChatModule;
-
