@@ -5,7 +5,9 @@ import { protect } from "../middleware/authMiddleware.js";
 const router = express.Router();
 
 router.get("/proxy", async (req, res) => {
-  const { url } = req.query;
+  // Use originalUrl to get the full encoded URL including its own query params
+  const fullUrl = req.originalUrl.split("url=")[1];
+  const url = fullUrl ? decodeURIComponent(fullUrl) : null;
 
   if (!url) {
     return res.status(400).json({ error: "URL is required" });
