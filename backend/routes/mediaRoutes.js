@@ -4,7 +4,7 @@ import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/proxy", protect, async (req, res) => {
+router.get("/proxy", async (req, res) => {
   const { url } = req.query;
 
   if (!url) {
