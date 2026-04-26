@@ -548,7 +548,7 @@ const ChatModule = () => {
   const getProxiedUrl = (url) => {
     if (!url) return "";
     if (url.includes("cloudinary.com") || url.startsWith("blob:")) return url;
-    return `${API_BASE}/api/media/proxy?url=${encodeURIComponent(url)}`;
+    return `${API_BASE}/media/proxy?url=${encodeURIComponent(url)}`;
   };
 
   const filteredConversations = useMemo(() => {
