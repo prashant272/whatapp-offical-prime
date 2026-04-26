@@ -14,6 +14,14 @@ const ChatModule = () => {
   const [conversations, setConversations] = useState([]);
   // Derived active chat for perfect real-time sync
   const selectedChat = useMemo(() => {
+    if (!chatId) return null;
+    
+    // Check if it's a "virtual" chat for a new number
+    if (chatId.startsWith("new:")) {
+      const phone = chatId.split(":")[1];
+      return { phone, status: "New", isNew: true };
+    }
+
     return conversations.find(c => c._id === chatId);
   }, [chatId, conversations]);
 
@@ -82,13 +90,7 @@ const ChatModule = () => {
         return newData;
       });
       
-      // Only update selected chat if data changed
-      if (selectedChat && !selectedChat.isNew) {
-        const updated = newData.find(c => c.phone === selectedChat.phone);
-        if (updated && JSON.stringify(updated) !== JSON.stringify(selectedChat)) {
-          setSelectedChat(updated);
-        }
-      }
+      // We no longer need to manually update selectedChat because it's derived from conversations
     } catch (err) {
       console.error("Error fetching conversations:", err);
     }
@@ -144,11 +146,6 @@ const ChatModule = () => {
           setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager") : []);
         }
 
-        // If chatId in URL, find and set it
-        if (chatId) {
-          const matched = initialConvs.find(c => c._id === chatId);
-          if (matched) setSelectedChat(matched);
-        }
       } catch (err) {
         console.error("Initial fetch error:", err);
       }
@@ -260,10 +257,10 @@ const ChatModule = () => {
     const existing = conversations.find(c => c.phone === phone);
 
     if (existing) {
-      setSelectedChat(existing);
+      navigate(`/chats/${existing._id}`);
     } else {
-      setSelectedChat({ phone, status: "New", isNew: true });
-      setMessages([]);
+      // For completely new numbers, we use a special prefix
+      navigate(`/chats/new:${phone}`);
     }
 
     setShowNewChatModal(false);

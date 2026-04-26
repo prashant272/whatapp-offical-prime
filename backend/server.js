@@ -14,6 +14,7 @@ import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import activityRoutes from "./routes/activityRoutes.js";
 import presetRoutes from "./routes/presetRoutes.js";
+import autoReplyRoutes from "./routes/autoReplyRoutes.js";
 import { errorHandler } from "./utils/errorHandler.js";
 
 import { createServer } from "http";
@@ -44,6 +45,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/activities", activityRoutes);
 app.use("/api/presets", presetRoutes);
+app.use("/api/auto-replies", autoReplyRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({ 

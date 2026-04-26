@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History } from "lucide-react";
+import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap } from "lucide-react";
 import axios from "axios";
 import { API_BASE } from "./api";
 import TemplateManager from "./components/TemplateManager";
@@ -11,6 +11,7 @@ import ActivityLog from "./components/ActivityLog";
 import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
 import DashboardHome from "./components/DashboardHome";
+import AutoReplyManager from "./components/AutoReplyManager";
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -62,6 +63,7 @@ function App() {
     { id: "templates", label: "Templates", icon: FileText, path: "/templates", roles: ["Admin", "Manager"] },
     { id: "campaigns", label: "Campaigns", icon: Send, path: "/campaigns", roles: ["Admin", "Manager"] },
     { id: "chats", label: "Chats", icon: MessageCircle, path: "/chats", roles: ["Admin", "Manager", "Executive"] },
+    { id: "automation", label: "Automation", icon: Zap, path: "/automation", roles: ["Admin", "Manager"] },
     { id: "activity", label: "Activity", icon: History, path: "/activity", roles: ["Admin", "Manager"] },
     { id: "users", label: "Team", icon: UserPlus, path: "/users", roles: ["Admin"] },
     { id: "analytics", label: "Analytics", icon: BarChart3, path: "/analytics", roles: ["Admin", "Manager"] },
@@ -90,6 +92,7 @@ function App() {
               <Route path="/chats/:chatId" element={<ChatModule />} />
               <Route path="/users" element={<UserManager />} />
               <Route path="/activity" element={<ActivityLog />} />
+              <Route path="/automation" element={<AutoReplyManager />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>

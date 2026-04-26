@@ -4,6 +4,7 @@ import Contact from "../models/Contact.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getMediaUrl } from "../services/whatsappService.js";
 import { getIO, smartEmit } from "../utils/socket.js";
+import { processAutoReply } from "../utils/automationHelper.js";
 
 export const verifyWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -123,6 +124,11 @@ export const handleWebhook = async (req, res) => {
 
         // Notify UI about NEW MESSAGE (Smart Route)
         smartEmit("new_message", { message: newMessage, conversation: populatedConv });
+
+        // 🤖 TRIGGER AUTOMATION (Chatbot)
+        if (type === "text" || type === "interactive" || type === "button") {
+          processAutoReply(from, bodyContent);
+        }
       }
       res.sendStatus(200);
     } catch (err) {
