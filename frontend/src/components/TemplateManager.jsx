@@ -13,6 +13,7 @@ const TemplateManager = () => {
   const [selectedTemplateForPreset, setSelectedTemplateForPreset] = useState(null);
   const [presetName, setPresetName] = useState("");
   const [templateVars, setTemplateVars] = useState({});
+  const [editingPresetId, setEditingPresetId] = useState(null);
   const [filter, setFilter] = useState("ALL");
   const [localPreviews, setLocalPreviews] = useState({});
 
@@ -133,9 +134,8 @@ const TemplateManager = () => {
   const handleSavePreset = async () => {
     if (!presetName) return alert("Please enter a preset name.");
     try {
-      const isEdit = !!selectedTemplateForPreset._id_preset;
-      if (isEdit) {
-        await api.put(`/presets/${selectedTemplateForPreset._id_preset}`, {
+      if (editingPresetId) {
+        await api.put(`/presets/${editingPresetId}`, {
           name: presetName,
           config: templateVars
         });
@@ -149,10 +149,19 @@ const TemplateManager = () => {
         alert("✅ Preset saved successfully!");
       }
       setShowPresetModal(false);
+      setEditingPresetId(null);
       fetchPresets();
     } catch (err) {
       alert("❌ Failed to save preset: " + (err.response?.data?.error || err.message));
     }
+  };
+
+  const handleEditPreset = (p) => {
+    setSelectedTemplateForPreset(p.template);
+    setPresetName(p.name);
+    setTemplateVars(p.config || {});
+    setEditingPresetId(p._id);
+    setShowPresetModal(true);
   };
 
   const handleDeletePreset = async (id) => {
@@ -264,16 +273,45 @@ const TemplateManager = () => {
       {loading ? (
         <div style={{ textAlign: "center", padding: "4rem" }}><RefreshCw className="animate-spin" size={40} color="var(--accent-primary)" /></div>
       ) : filter === "PRESETS" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: "1.5rem" }}>
-          {presets.map(p => (
-            <div key={p._id} className="glass-card">
-              <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <h4>{p.name}</h4>
-                <button onClick={() => handleDeletePreset(p._id)} style={{ border: "none", background: "none" }}><Trash2 size={16} color="#ef4444" /></button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: "1.5rem" }}>
+          {presets.map(p => {
+            const bodyComp = p.template?.components?.find(c => c.type === "BODY");
+            const headerComp = p.template?.components?.find(c => c.type === "HEADER");
+            const imageUrl = p.config?.HEADER_IMAGE || p.config?.HEADER_VIDEO || p.config?.HEADER_DOCUMENT;
+            
+            return (
+              <div key={p._id} className="glass-card" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h4 style={{ margin: 0, color: "var(--accent-primary)" }}>{p.name}</h4>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button onClick={() => handleEditPreset(p)} style={{ border: "none", background: "none", cursor: "pointer", color: "#64748b" }} title="Edit Preset"><RefreshCw size={16} /></button>
+                    <button onClick={() => handleDeletePreset(p._id)} style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={16} color="#ef4444" /></button>
+                  </div>
+                </div>
+                
+                {imageUrl && (
+                  <div style={{ width: "100%", height: "150px", borderRadius: "10px", overflow: "hidden", background: "#f1f5f9" }}>
+                    <img src={imageUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="Preset" />
+                  </div>
+                )}
+                
+                <div style={{ 
+                  background: "#f8fafc", 
+                  padding: "10px", 
+                  borderRadius: "8px", 
+                  fontSize: "0.85rem", 
+                  color: "#334155",
+                  maxHeight: "100px",
+                  overflowY: "auto",
+                  borderLeft: "4px solid var(--accent-primary)"
+                }}>
+                  {bodyComp ? formatPreviewText(bodyComp.text, "BODY", p.config || {}) : "No body text"}
+                </div>
+                
+                <p style={{ fontSize: "0.7rem", color: "#94a3b8", margin: 0 }}>Template: {p.template?.name}</p>
               </div>
-              <p style={{ fontSize: "0.8rem", color: "#667781" }}>Template: {p.template?.name}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div style={{ display: "grid", gap: "1.2rem" }}>
