@@ -111,35 +111,47 @@ const ChatModule = () => {
 
   const fetchConversations = async (page = 1) => {
     try {
-      const res = await api.get(`/conversations?page=${page}&limit=50`);
+      setIsFetchingConvs(true);
+      const res = await api.get(`/conversations?page=${page}&limit=100`);
       const newData = res.data.conversations || [];
       
       if (page === 1) {
         setConversations(newData);
         setConvPage(1);
       } else {
-        setConversations(prev => [...prev, ...newData]);
+        setConversations(prev => {
+          // Prevent duplicates
+          const existingIds = new Set(prev.map(c => c._id));
+          const uniqueNew = newData.filter(c => !existingIds.has(c._id));
+          return [...prev, ...uniqueNew];
+        });
       }
       setHasMoreConvs(res.data.hasMore);
-      // We no longer need to manually update selectedChat because it's derived from conversations
     } catch (err) {
       console.error("Error fetching conversations:", err);
+    } finally {
+      setIsFetchingConvs(false);
     }
   };
 
   const fetchMoreConversations = async () => {
     if (!hasMoreConvs || isFetchingConvs) return;
-    setIsFetchingConvs(true);
+    
     const nextPage = convPage + 1;
-    await fetchConversations(nextPage);
+    console.log(`📜 Infinite Scroll: Loading page ${nextPage}...`);
+    
+    // Set fetching flag IMMEDIATELY to prevent double-triggers
+    setIsFetchingConvs(true);
     setConvPage(nextPage);
-    setIsFetchingConvs(false);
+    
+    await fetchConversations(nextPage);
   };
 
   const handleSidebarScroll = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
     // Trigger when user is within 200px of bottom
     if (scrollHeight - scrollTop - clientHeight < 200 && !isFetchingConvs && hasMoreConvs) {
+      console.log("📜 Infinite Scroll: Loading more chats...");
       fetchMoreConversations();
     }
   };
@@ -202,13 +214,16 @@ const ChatModule = () => {
     const fetchInitialData = async () => {
       try {
         const [convs, temps, pres, execs] = await Promise.all([
-          api.get(`/conversations?page=1&limit=20`),
+          api.get(`/conversations?page=1&limit=100`),
           api.get(`/templates`),
           api.get(`/presets`),
           api.get(`/users`).catch(() => ({ data: [] }))
         ]);
         
         const initialConvs = Array.isArray(convs.data.conversations) ? convs.data.conversations : [];
+        console.log("📊 Received Conversations:", initialConvs.length);
+        console.log("🆔 Active Account:", activeAccount?.name, activeAccount?._id);
+        
         setConversations(initialConvs);
         setHasMoreConvs(convs.data.hasMore);
         setConvPage(1);
@@ -262,7 +277,12 @@ const ChatModule = () => {
           return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
         } else {
           // IMPORTANT: Only add to sidebar if it matches the CURRENTLY VIEWED account
-          const matchesAccount = !activeAccount || String(conversation.whatsappAccountId) === String(activeAccount._id);
+          const matchesAccount = !activeAccount || (function(conv, active) {
+            const chatAccountId = conv.whatsappAccountId ? String(conv.whatsappAccountId) : null;
+            const activeAccountId = String(active.id);
+            if (!chatAccountId && active.name.toLowerCase().includes("primary")) return true;
+            return chatAccountId === activeAccountId;
+          })(conversation, activeAccount);
           
           if (matchesAccount) {
             return [updatedConvData, ...prev];
@@ -655,6 +675,9 @@ const ChatModule = () => {
       );
     }
 
+    // 4. Account Siloing Filter (Removed - Backend already filters this)
+    // result = result.filter(c => ...);
+
     return result;
   }, [conversations, filter, statusFilter, userFilter, searchQuery]);
 
@@ -729,7 +752,7 @@ const ChatModule = () => {
 
       {/* Sidebar */}
       <div className="sidebar-container" style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "12px", background: "#f0f2f5", flexShrink: 0, height: "200px" }}>
+        <div style={{ padding: "12px", background: "#f0f2f5", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
             <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-primary)" }}>Chats</h3>
             <div style={{ display: "flex", gap: "15px", color: "var(--text-secondary)" }}>
@@ -819,6 +842,7 @@ const ChatModule = () => {
             </button>
           </div>
 
+          {/* Restored Status and User Filters */}
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
             <select 
               value={statusFilter}
@@ -837,11 +861,9 @@ const ChatModule = () => {
               }}
             >
               <option value="All">Status: All</option>
-              <option value="New">New</option>
-              <option value="Interested">Interested</option>
-              <option value="Not Interested">Not Interested</option>
-              <option value="Follow-up">Follow-up</option>
-              <option value="Closed">Closed</option>
+              {STATUS_OPTIONS.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
             </select>
 
             {currentUser.role !== "Executive" && (
@@ -861,8 +883,7 @@ const ChatModule = () => {
                   fontWeight: "500"
                 }}
               >
-                <option value="All">User: All</option>
-                <option value="Unassigned">Unassigned</option>
+                <option value="all">User: All</option>
                 {executives.map(ex => (
                   <option key={ex._id} value={ex._id}>{ex.name}</option>
                 ))}
@@ -874,7 +895,7 @@ const ChatModule = () => {
         <div 
           className="chat-scroll" 
           onScroll={handleSidebarScroll}
-          style={{ height: "calc(100% - 260px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}
+          style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "block", background: "white" }}
         >
           {filteredConversations.map((chat) => {
             const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);

@@ -11,9 +11,11 @@ export const getConversations = async (req, res) => {
     const account = req.whatsappAccount;
     const accountId = account?._id;
     
-    // SMART FILTER: If it's the default account, show its own chats + legacy (null) chats
+    // SMART FILTER: If it's the primary/default account, show its own chats + legacy (null) chats
+    const isPrimary = account?.isDefault || account?.name?.toLowerCase().includes("primary");
+    
     let filter = { whatsappAccountId: accountId };
-    if (account?.isDefault) {
+    if (isPrimary) {
       filter = {
         $or: [
           { whatsappAccountId: accountId },
@@ -38,11 +40,14 @@ export const getConversations = async (req, res) => {
       .skip(skip)
       .limit(Number(limit));
 
+    console.log(`📂 API: Found ${conversations.length} conversations for account ${accountId} (Total matches: ${total})`);
+
     res.json({
       conversations,
       currentPage: Number(page),
       totalPages: Math.ceil(total / limit),
-      totalConversations: total
+      totalConversations: total,
+      hasMore: skip + conversations.length < total
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
