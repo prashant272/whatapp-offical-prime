@@ -4,13 +4,15 @@ import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, 
 import { io } from "socket.io-client";
 
 import { useParams, useNavigate } from "react-router-dom";
-import { API_BASE } from "../api";
+import api, { API_BASE } from "../api";
+import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const STATUS_OPTIONS = ["New", "Interested", "Not Interested", "Follow-up", "Closed"];
 
 const ChatModule = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
+  const { accounts, activeAccount, switchAccount } = useWhatsAppAccount();
   const [conversations, setConversations] = useState([]);
   const [convPage, setConvPage] = useState(1);
   const [hasMoreConvs, setHasMoreConvs] = useState(true);
@@ -26,10 +28,15 @@ const ChatModule = () => {
     if (!chatId) return null;
     if (chatId.startsWith("new:")) {
       const phone = chatId.split(":")[1];
-      return { phone, status: "New", isNew: true };
+      return { phone, status: "New", isNew: true, whatsappAccountId: activeAccount?._id };
     }
-    return conversations.find(c => c._id === chatId);
-  }, [chatId, conversations]);
+    const chat = conversations.find(c => c._id === chatId);
+    if (chat && !chat.whatsappAccountId) {
+      // Fallback for legacy chats
+      chat.whatsappAccountId = activeAccount?._id;
+    }
+    return chat;
+  }, [chatId, conversations, activeAccount]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState([]);
@@ -73,7 +80,10 @@ const ChatModule = () => {
   const fetchMessages = async (phone, page = 1) => {
     try {
       if (page === 1) setLoading(true);
-      const res = await axios.get(`${API_BASE}/messages/${phone}?page=${page}&limit=50`, config);
+      // Pass the specific account ID for this chat to ensure we get the right messages
+      const res = await api.get(`/messages/${phone}?page=${page}&limit=50`, {
+        headers: { "x-whatsapp-account-id": selectedChat?.whatsappAccountId }
+      });
       const newMsgs = res.data.messages || [];
       
       if (page === 1) {
@@ -101,7 +111,7 @@ const ChatModule = () => {
 
   const fetchConversations = async (page = 1) => {
     try {
-      const res = await axios.get(`${API_BASE}/conversations?page=${page}&limit=20`, config);
+      const res = await api.get(`/conversations?page=${page}&limit=50`);
       const newData = res.data.conversations || [];
       
       if (page === 1) {
@@ -128,7 +138,8 @@ const ChatModule = () => {
 
   const handleSidebarScroll = (e) => {
     const { scrollTop, scrollHeight, clientHeight } = e.target;
-    if (scrollHeight - scrollTop - clientHeight < 100) {
+    // Trigger when user is within 200px of bottom
+    if (scrollHeight - scrollTop - clientHeight < 200 && !isFetchingConvs && hasMoreConvs) {
       fetchMoreConversations();
     }
   };
@@ -149,7 +160,7 @@ const ChatModule = () => {
 
   const fetchTemplates = async () => {
     try {
-      const res = await axios.get(`${API_BASE}/templates`, config);
+      const res = await api.get("/templates");
       setTemplates(res.data.filter(t => t.status === "APPROVED"));
     } catch (err) {
       console.error("Error fetching templates:", err);
@@ -161,18 +172,25 @@ const ChatModule = () => {
   useEffect(() => {
     selectedChatRef.current = selectedChat;
     if (selectedChat) {
+      // SECURITY CHECK: If the selected chat belongs to a different account, clear it
+      // (Unless we are in 'All' view where activeAccount might be null)
+      if (activeAccount && selectedChat.whatsappAccountId && String(selectedChat.whatsappAccountId) !== String(activeAccount._id)) {
+        console.warn("🚫 Chat account mismatch! Redirecting...");
+        navigate("/chats");
+        return;
+      }
       fetchMessages(selectedChat.phone);
       // Reset unreadCount locally on select
       setConversations(prev => prev.map(c => 
         c.phone === selectedChat.phone ? { ...c, unreadCount: 0 } : c
       ));
     }
-  }, [selectedChat?.phone, selectedChat?._id]);
+  }, [selectedChat?.phone, selectedChat?._id, activeAccount]);
 
   const fetchExecutives = async () => {
     if (currentUser.role === "Executive") return;
     try {
-      const res = await axios.get(`${API_BASE}/users`, config);
+      const res = await api.get("/users");
       setExecutives(res.data.filter(u => u.role === "Executive" || u.role === "Manager"));
     } catch (err) {
       console.error("Error fetching users:", err);
@@ -184,10 +202,10 @@ const ChatModule = () => {
     const fetchInitialData = async () => {
       try {
         const [convs, temps, pres, execs] = await Promise.all([
-          axios.get(`${API_BASE}/conversations?page=1&limit=20`, config),
-          axios.get(`${API_BASE}/templates`, config),
-          axios.get(`${API_BASE}/presets`, config),
-          axios.get(`${API_BASE}/users`, config).catch(() => ({ data: [] }))
+          api.get(`/conversations?page=1&limit=20`),
+          api.get(`/templates`),
+          api.get(`/presets`),
+          api.get(`/users`).catch(() => ({ data: [] }))
         ]);
         
         const initialConvs = Array.isArray(convs.data.conversations) ? convs.data.conversations : [];
@@ -213,38 +231,58 @@ const ChatModule = () => {
     });
 
     socket.on("new_message", ({ message, conversation }) => {
-      // 1. Update Conversations List
+      // 1. Update Conversations List (STRICT MATCH: Phone AND Account ID)
       setConversations(prev => {
-        const index = prev.findIndex(c => c.phone === conversation.phone);
+        // We find the exact match for this message
+        const index = prev.findIndex(c => 
+          c.phone === conversation.phone && 
+          String(c.whatsappAccountId) === String(conversation.whatsappAccountId)
+        );
+        
         let updatedConvData = { ...conversation };
 
-        // If this is the active chat, reset unreadCount locally and on server
-        if (selectedChatRef.current?.phone === conversation.phone) {
+        // Reset unreadCount only if it's the EXACT active chat on the EXACT account
+        const isActive = selectedChatRef.current?.phone === conversation.phone && 
+                        String(selectedChatRef.current?.whatsappAccountId) === String(conversation.whatsappAccountId);
+
+        if (isActive) {
           updatedConvData.unreadCount = 0;
-          axios.post(`${API_BASE}/conversations/mark-read`, { phone: conversation.phone }, config).catch(() => {});
+          api.post("/conversations/mark-read", { 
+            phone: conversation.phone, 
+            whatsappAccountId: conversation.whatsappAccountId 
+          }).catch(() => {});
         }
 
         if (index !== -1) {
+          // Update the SPECIFIC conversation only
           const updated = [...prev];
-          // Ensure updatedConvData (new socket data) overwrites the old fields
           const finalConv = { ...updated[index], ...updatedConvData };
           updated[index] = finalConv;
-          
-          console.log("📥 Socket sync:", finalConv.phone, "Timer set to:", finalConv.lastCustomerMessageAt);
+          // Sort to move updated chat to top
           return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
         } else {
-          const newConv = { ...updatedConvData };
-          return [newConv, ...prev];
+          // IMPORTANT: Only add to sidebar if it matches the CURRENTLY VIEWED account
+          const matchesAccount = !activeAccount || String(conversation.whatsappAccountId) === String(activeAccount._id);
+          
+          if (matchesAccount) {
+            return [updatedConvData, ...prev];
+          }
+          return prev;
         }
       });
 
-      // 2. Update Messages if current chat is open
-      if (selectedChatRef.current && (selectedChatRef.current.phone === message.from || selectedChatRef.current?.phone === message.to)) {
+      // 2. Update Messages if current chat is open (Match by Phone AND Account)
+      console.log(`📩 Socket New Message: Phone ${conversation.phone} | Account ${conversation.whatsappAccountId}`);
+      
+      const isActiveChat = selectedChatRef.current && 
+                          selectedChatRef.current.phone === conversation.phone && 
+                          String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId);
+
+      if (isActiveChat) {
+        console.log("💎 Appending message to ACTIVE chat window");
         setMessages(prev => {
-          // Avoid duplicate messages if already sent via handleSend
-          if (prev.find(m => m._id === message._id || (m.messageId && m.messageId === message.messageId))) {
-            return prev;
-          }
+          const exists = prev.find(m => m._id === message._id || (m.messageId && m.messageId === message.messageId));
+          if (exists) return prev;
           return [...prev, message];
         });
       }
@@ -326,10 +364,12 @@ const ChatModule = () => {
     if (!newMessage.trim() || !selectedChat) return;
 
     try {
-      const res = await axios.post(`${API_BASE}/messages/send`, {
+      const res = await api.post(`/messages/send`, {
         to: selectedChat.phone,
         body: newMessage
-      }, config);
+      }, {
+        headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
+      });
 
       setMessages([...messages, res.data.message]);
       setNewMessage("");
@@ -378,11 +418,8 @@ const ChatModule = () => {
       uploadData.append("file", file);
 
       // 1. Upload to Cloudinary in background
-      const uploadRes = await axios.post(`${API_BASE}/upload`, uploadData, {
-        headers: { 
-          ...config.headers,
-          "Content-Type": "multipart/form-data" 
-        }
+      const uploadRes = await api.post(`/upload`, uploadData, {
+        headers: { "Content-Type": "multipart/form-data" }
       });
 
       const imageUrl = uploadRes.data.url;
@@ -411,13 +448,33 @@ const ChatModule = () => {
   const handleUpdateStatus = async (status) => {
     if (!selectedChat) return;
     try {
-      await axios.post(`${API_BASE}/conversations/status`, {
+      await api.post(`/conversations/status`, {
         phone: selectedChat.phone,
         status
-      }, config);
+      }, {
+        headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
+      });
       fetchConversations();
     } catch (err) {
       alert("Error updating status: " + err.message);
+    }
+  };
+  
+  const handleTemplateImageUpload = async (e, key) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      setIsUploading(true);
+      const uploadData = new FormData();
+      uploadData.append("file", file);
+      const res = await api.post("/upload", uploadData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setTemplateVars(prev => ({ ...prev, [key]: res.data.url }));
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -456,10 +513,13 @@ const ChatModule = () => {
     const headerParams = [];
 
     Object.entries(templateVars).forEach(([key, val]) => {
-      if (key.startsWith("BODY_")) bodyParams.push({ type: "text", text: val });
-      else if (key.startsWith("HEADER_")) {
-        if (["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type))) {
-          const type = key.split("_")[1].toLowerCase();
+      if (key.startsWith("BODY_")) {
+        bodyParams.push({ type: "text", text: val });
+      } else if (key.startsWith("HEADER_") || key.includes("HANDLE")) {
+        // Smart detect header type from template structure
+        const headerComp = selectedTemplate.components.find(c => c.type === "HEADER");
+        if (headerComp && ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format)) {
+          const type = headerComp.format.toLowerCase();
           headerParams.push({ type, [type]: { link: val } });
         } else {
           headerParams.push({ type: "text", text: val });
@@ -471,11 +531,13 @@ const ChatModule = () => {
     if (bodyParams.length > 0) templateComponents.push({ type: "body", parameters: bodyParams });
 
     try {
-      const res = await axios.post(`${API_BASE}/messages/send-template`, {
+      const res = await api.post(`/messages/send-template`, {
         to: selectedChat.phone,
         templateName: selectedTemplate.name,
         templateComponents
-      }, config);
+      }, {
+        headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
+      });
       setMessages([...messages, res.data.message]);
       setShowTemplateModal(false);
       setSelectedTemplate(null);
@@ -545,10 +607,11 @@ const ChatModule = () => {
 
   const unreadCountTotal = useMemo(() => conversations.filter(c => c.unreadCount > 0).length, [conversations]);
 
-  const getProxiedUrl = (url) => {
+  const getProxiedUrl = (url, accountId) => {
     if (!url) return "";
     if (url.includes("cloudinary.com") || url.startsWith("blob:")) return url;
-    return `${API_BASE}/media/proxy?url=${encodeURIComponent(url)}`;
+    const accountParam = accountId ? `&accountId=${accountId}` : "";
+    return `${API_BASE}/media/proxy?url=${encodeURIComponent(url)}${accountParam}`;
   };
 
   const filteredConversations = useMemo(() => {
@@ -685,6 +748,23 @@ const ChatModule = () => {
             />
           </div>
 
+          {/* New Prominent Account Selector */}
+          <div style={{ marginTop: "12px", background: "#ffffff", padding: "8px", borderRadius: "10px", border: "1px solid #e9edef" }}>
+            <p style={{ fontSize: "0.65rem", color: "#667781", fontWeight: "bold", margin: "0 0 4px 4px", textTransform: "uppercase" }}>Active Number</p>
+            <select 
+              value={activeAccount?._id || ""} 
+              onChange={(e) => {
+                const acc = accounts.find(a => a._id === e.target.value);
+                if (acc) switchAccount(acc);
+              }}
+              style={{ width: "100%", padding: "8px", border: "none", background: "none", outline: "none", fontWeight: "700", color: "#111b21", cursor: "pointer", fontSize: "0.9rem" }}
+            >
+              {accounts.map(acc => (
+                <option key={acc._id} value={acc._id}>{acc.name} ({acc.phoneNumberId})</option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
             <button 
               onClick={() => setFilter("all")}
@@ -794,7 +874,7 @@ const ChatModule = () => {
         <div 
           className="chat-scroll" 
           onScroll={handleSidebarScroll}
-          style={{ height: "calc(100% - 200px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}
+          style={{ height: "calc(100% - 260px)", overflowY: "scroll", overflowX: "hidden", display: "block", background: "white" }}
         >
           {filteredConversations.map((chat) => {
             const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);
@@ -969,7 +1049,7 @@ const ChatModule = () => {
                           {/* Image rendering if available */}
                           {msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link && (
                             <img 
-                              src={msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link} 
+                              src={getProxiedUrl(msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link, msg.whatsappAccountId)} 
                               alt="Template" 
                               style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }} 
                             />
@@ -1003,20 +1083,20 @@ const ChatModule = () => {
                             <div style={{ marginBottom: "5px" }}>
                               {msg.type === "image" ? (
                                 <img 
-                                  src={getProxiedUrl(msg.mediaUrl)} 
+                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} 
                                   alt="Received" 
                                   style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }} 
-                                  onDoubleClick={() => window.open(getProxiedUrl(msg.mediaUrl), "_blank")}
+                                  onDoubleClick={() => window.open(getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId), "_blank")}
                                 />
                               ) : msg.type === "video" ? (
                                 <video 
-                                  src={getProxiedUrl(msg.mediaUrl)} 
+                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} 
                                   controls 
                                   style={{ width: "100%", borderRadius: "8px", maxHeight: "250px" }} 
                                 />
                               ) : msg.type === "audio" ? (
                                 <audio 
-                                  src={getProxiedUrl(msg.mediaUrl)} 
+                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} 
                                   controls 
                                   style={{ width: "100%" }} 
                                 />
@@ -1025,7 +1105,7 @@ const ChatModule = () => {
                                   <FileText size={24} color="#8696a0" />
                                   <div style={{ flex: 1, overflow: "hidden" }}>
                                     <p style={{ margin: 0, fontSize: "0.85rem", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.body || "Document"}</p>
-                                    <a href={getProxiedUrl(msg.mediaUrl)} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download File</a>
+                                    <a href={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download File</a>
                                   </div>
                                 </div>
                               )}
@@ -1266,8 +1346,8 @@ const ChatModule = () => {
                 <div style={{ background: "#182229", padding: "16px", borderRadius: "8px", marginBottom: "24px" }}>
                   <p style={{ fontSize: "0.85rem", color: "#00a884", marginBottom: "15px", fontWeight: "600" }}>Customize Variables:</p>
                   {Object.keys(templateVars).map(key => {
-                    const isMedia = ["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type));
-                    const label = isMedia ? `${key.split("_")[1]} URL` : `${key.split("_")[0]} {{${key.split("_")[1]}}}`;
+                    const isMedia = ["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type)) || key.includes("HANDLE");
+                    const label = isMedia ? "HEADER MEDIA (IMAGE URL)" : `${key.split("_")[0]} {{${key.split("_")[1]}}}`;
 
                     return (
                       <div key={key} style={{ marginBottom: "15px" }}>
@@ -1282,7 +1362,7 @@ const ChatModule = () => {
                           />
                           {isMedia && (
                             <>
-                              <input type="file" id={`chat-upload-${key}`} style={{ display: "none" }} onChange={(e) => handleFileUpload(e, key)} />
+                              <input type="file" id={`chat-upload-${key}`} style={{ display: "none" }} onChange={(e) => handleTemplateImageUpload(e, key)} />
                               <button
                                 onClick={() => document.getElementById(`chat-upload-${key}`).click()}
                                 disabled={isUploading}

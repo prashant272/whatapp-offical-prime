@@ -1,9 +1,13 @@
+import { getTemplates as getTemplatesFromMeta, createTemplate as createMetaTemplate, deleteMetaTemplate } from "../services/whatsappService.js";
 import Template from "../models/Template.js";
-import { getTemplates, createTemplate, deleteMetaTemplate } from "../services/whatsappService.js";
 
-export const getAllTemplates = async (req, res) => {
+export const getTemplates = async (req, res) => {
   try {
-    const templates = await Template.find().sort({ createdAt: -1 });
+    const account = req.whatsappAccount;
+    // Strict Filtering: Only show templates for the active account
+    if (!account) return res.status(400).json({ error: "No active account selected" });
+
+    const templates = await Template.find({ whatsappAccountId: account._id }).sort({ createdAt: -1 });
     res.json(templates);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -12,68 +16,87 @@ export const getAllTemplates = async (req, res) => {
 
 export const syncTemplates = async (req, res) => {
   try {
-    const metaTemplates = await getTemplates();
-    const metaNames = (metaTemplates.data || []).map(mt => mt.name);
+    const account = req.whatsappAccount;
+    if (!account) return res.status(400).json({ error: "No active WhatsApp account selected for sync" });
+
+    console.log(`🔄 Syncing templates for account: ${account.name} (WABA: ${account.wabaId})`);
     
-    console.log(`✅ Manual Sync: Fetched ${metaTemplates.data?.length || 0} templates from Meta`);
-    
-    for (const mt of (metaTemplates.data || [])) {
-      console.log(`📌 Template Found: "${mt.name}" | Language: "${mt.language}" | Status: "${mt.status}"`);
-      await Template.findOneAndUpdate(
-        { name: mt.name },
-        { 
-          status: mt.status, 
-          metaId: mt.id,
-          components: mt.components,
-          language: mt.language,
-          category: mt.category,
-          rejectionReason: mt.rejected_reason || null 
-        },
-        { upsert: true }
-      );
+    const metaTemplates = await getTemplatesFromMeta(account);
+
+    if (!Array.isArray(metaTemplates)) {
+      console.error("❌ Meta response is not an array:", metaTemplates);
+      return res.status(500).json({ error: "Invalid response from Meta", details: metaTemplates });
     }
 
-    await Template.deleteMany({ name: { $nin: metaNames } });
-    
-    const templates = await Template.find().sort({ createdAt: -1 });
-    res.json(templates);
+    const syncedTemplates = [];
+    const metaTemplateNames = metaTemplates.map(t => t.name);
+
+    for (const tpl of metaTemplates) {
+      const updatedTemplate = await Template.findOneAndUpdate(
+        { name: tpl.name, whatsappAccountId: account._id },
+        {
+          category: tpl.category,
+          language: tpl.language,
+          components: tpl.components,
+          status: tpl.status,
+          metaId: tpl.id,
+          whatsappAccountId: account._id
+        },
+        { upsert: true, new: true }
+      );
+      syncedTemplates.push(updatedTemplate);
+    }
+
+    // DELETE templates that are no longer on Meta
+    const deleteResult = await Template.deleteMany({
+      whatsappAccountId: account._id,
+      name: { $nin: metaTemplateNames }
+    });
+
+    res.json({ 
+      message: `Successfully synced ${syncedTemplates.length} templates. Removed ${deleteResult.deletedCount} deleted templates.`, 
+      templates: syncedTemplates 
+    });
   } catch (error) {
-    const message = error.error?.message || error.message || "Sync failed";
-    console.error("❌ Sync Error:", message);
-    res.status(500).json({ error: message });
+    const errorData = error.response?.data || error;
+    console.error("❌ Sync Error Detail:", JSON.stringify(errorData, null, 2));
+    const errorDetail = error.response?.data?.error?.message || error.message || "Unknown error";
+    res.status(500).json({ error: "Sync failed", details: errorDetail });
   }
 };
 
 export const createNewTemplate = async (req, res) => {
   try {
-    const metaRes = await createTemplate(req.body);
+    const account = req.whatsappAccount;
+    if (!account) return res.status(400).json({ error: "No active account" });
+
+    const metaResponse = await createMetaTemplate(account, req.body);
+    
     const newTemplate = new Template({
       ...req.body,
-      metaId: metaRes.id,
-      status: "PENDING"
+      metaId: metaResponse.data.id,
+      status: "PENDING",
+      whatsappAccountId: account._id
     });
     await newTemplate.save();
+
     res.status(201).json(newTemplate);
   } catch (error) {
-    const message = error.error?.message || error.message || "Unknown error";
-    console.error("❌ API Error:", message);
-    res.status(400).json({ error: message });
+    res.status(500).json({ error: error.response?.data?.error?.message || error.message });
   }
 };
 
 export const deleteTemplate = async (req, res) => {
   try {
-    const { name } = req.params;
-    
-    try {
-      await deleteMetaTemplate(name);
-    } catch (metaErr) {
-      console.warn(`⚠️ Warning: Template '${name}' might already be deleted in Meta.`);
-    }
+    const account = req.whatsappAccount;
+    const template = await Template.findById(req.params.id);
+    if (!template) return res.status(404).json({ error: "Template not found" });
 
-    await Template.findOneAndDelete({ name });
-    res.json({ success: true, message: `Template '${name}' deleted successfully.` });
+    await deleteMetaTemplate(account, template.name);
+    await Template.findByIdAndDelete(req.params.id);
+
+    res.json({ message: "Template deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.response?.data?.error?.message || error.message });
   }
 };

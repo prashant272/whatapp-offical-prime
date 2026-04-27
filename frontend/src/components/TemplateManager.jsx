@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api, { API_BASE } from "../api";
 import { Plus, CheckCircle, Clock, XCircle, RefreshCw, Filter, Info, AlertTriangle, Trash2 } from "lucide-react";
-
-import { API_BASE } from "../api";
+import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const TemplateManager = () => {
+  const { activeAccount } = useWhatsAppAccount();
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -14,45 +14,24 @@ const TemplateManager = () => {
   const [presetName, setPresetName] = useState("");
   const [templateVars, setTemplateVars] = useState({});
   const [filter, setFilter] = useState("ALL");
-  const currentUser = JSON.parse(localStorage.getItem("userInfo"));
-  const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
+  const [localPreviews, setLocalPreviews] = useState({});
 
   const [formData, setFormData] = useState({
     name: "",
     category: "UTILITY",
     language: "en_US",
     body: "",
-    headerType: "NONE", // NONE, TEXT, IMAGE, VIDEO, DOCUMENT
+    headerType: "NONE",
     headerText: "",
     footerText: ""
   });
   const [buttons, setButtons] = useState([]);
 
-  const addButton = (type) => {
-    if (buttons.length >= 3) return alert("Maximum 3 buttons allowed.");
-    if (type === "QUICK_REPLY") {
-      setButtons([...buttons, { type: "QUICK_REPLY", text: "" }]);
-    } else if (type === "URL") {
-      setButtons([...buttons, { type: "URL", text: "", url: "" }]);
-    } else if (type === "PHONE_NUMBER") {
-      setButtons([...buttons, { type: "PHONE_NUMBER", text: "", phone_number: "" }]);
-    }
-  };
-
-  const removeButton = (index) => {
-    setButtons(buttons.filter((_, i) => i !== index));
-  };
-
-  const updateButton = (index, field, value) => {
-    const newButtons = [...buttons];
-    newButtons[index][field] = value;
-    setButtons(newButtons);
-  };
-
   const fetchTemplates = async () => {
+    if (!activeAccount) return;
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE}/templates`, config);
+      const res = await api.get("/templates");
       setTemplates(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Error fetching templates:", err);
@@ -61,37 +40,10 @@ const TemplateManager = () => {
     }
   };
 
-  const handleSync = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.post(`${API_BASE}/templates/sync`, {}, config);
-      setTemplates(Array.isArray(res.data) ? res.data : []);
-      alert("✅ Templates synced with Meta successfully!");
-    } catch (err) {
-      alert("❌ Sync failed: " + (err.response?.data?.error || err.message));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (name) => {
-    if (!window.confirm(`Are you sure you want to delete template "${name}"? This will remove it from both Meta and your dashboard.`)) return;
-    
-    setLoading(true);
-    try {
-      await axios.delete(`${API_BASE}/templates/${name}`, config);
-      alert("✅ Template deleted successfully!");
-      fetchTemplates();
-    } catch (err) {
-      alert("❌ Delete failed: " + (err.response?.data?.error || err.message));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchPresets = async () => {
+    if (!activeAccount) return;
     try {
-      const res = await axios.get(`${API_BASE}/presets`, config);
+      const res = await api.get("/presets");
       setPresets(res.data);
     } catch (err) {
       console.error("Error fetching presets:", err);
@@ -101,44 +53,57 @@ const TemplateManager = () => {
   useEffect(() => {
     fetchTemplates();
     fetchPresets();
-  }, []);
+  }, [activeAccount]);
+
+  const handleSync = async () => {
+    if (!activeAccount) return;
+    setLoading(true);
+    try {
+      const res = await api.post("/templates/sync");
+      setTemplates(Array.isArray(res.data.templates) ? res.data.templates : []);
+      alert(`✅ ${res.data.message}`);
+    } catch (err) {
+      const msg = err.response?.data?.details || err.response?.data?.error || err.message;
+      alert("❌ Sync failed: " + msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (tplId, name) => {
+    if (!window.confirm(`Are you sure you want to delete template "${name}"? This will remove it from both Meta and your dashboard.`)) return;
+    setLoading(true);
+    try {
+      await api.delete(`/templates/${tplId}`);
+      alert("✅ Template deleted successfully!");
+      fetchTemplates();
+    } catch (err) {
+      alert("❌ Delete failed: " + (err.response?.data?.error || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       const components = [];
-
-      // 1. Header
       if (formData.headerType !== "NONE") {
         const headerComp = { type: "HEADER", format: formData.headerType };
         if (formData.headerType === "TEXT") {
           headerComp.text = formData.headerText;
           const matches = formData.headerText.match(/{{(\d+)}}/g);
-          if (matches) {
-            headerComp.example = { header_text: [ "Example Header" ] };
-          }
+          if (matches) headerComp.example = { header_text: [ "Example Header" ] };
         } else {
-          // Media headers (IMAGE, VIDEO, DOCUMENT) need an example handle/file
-          // For simplicity, we just set the format, Meta often needs an example file but sometimes accepts without
           headerComp.example = { header_handle: [ "https://example.com/file.jpg" ] };
         }
         components.push(headerComp);
       }
-
-      // 2. Body
       const bodyComp = { type: "BODY", text: formData.body };
       const bodyMatches = formData.body.match(/\{\{\d+\}\}/g);
-      if (bodyMatches) {
-        bodyComp.example = { body_text: [ bodyMatches.map((_, i) => `Sample ${i + 1}`) ] };
-      }
+      if (bodyMatches) bodyComp.example = { body_text: [ bodyMatches.map((_, i) => `Sample ${i + 1}`) ] };
       components.push(bodyComp);
-
-      // 3. Footer
-      if (formData.footerText) {
-        components.push({ type: "FOOTER", text: formData.footerText });
-      }
-
-      // 4. Buttons
+      if (formData.footerText) components.push({ type: "FOOTER", text: formData.footerText });
       if (buttons.length > 0) {
         components.push({
           type: "BUTTONS",
@@ -151,14 +116,12 @@ const TemplateManager = () => {
         });
       }
 
-      const templateData = {
+      await api.post("/templates", {
         name: formData.name,
         category: formData.category,
         language: formData.language,
         components
-      };
-
-      await axios.post(`${API_BASE}/templates`, templateData, config);
+      });
       alert("✅ Template submitted for approval!");
       setShowForm(false);
       fetchTemplates();
@@ -167,53 +130,25 @@ const TemplateManager = () => {
     }
   };
 
-  const handleOpenPresetModal = (tpl, existingPreset = null) => {
-    setSelectedTemplateForPreset(tpl);
-    if (existingPreset) {
-      setPresetName(existingPreset.name);
-      setTemplateVars(existingPreset.config || {});
-      // Set _id for edit mode
-      setSelectedTemplateForPreset({ ...tpl, _id_preset: existingPreset._id });
-    } else {
-      setPresetName("");
-      const vars = {};
-      tpl.components.forEach(comp => {
-        if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
-          vars[`HEADER_${comp.format}`] = "";
-        }
-        const matches = (comp.text || "").match(/{{(\d+)}}/g);
-        if (matches) {
-          matches.forEach(m => {
-            const num = m.replace(/{{|}}/g, "");
-            vars[`${comp.type}_${num}`] = "";
-          });
-        }
-      });
-      setTemplateVars(vars);
-    }
-    setShowPresetModal(true);
-  };
-
   const handleSavePreset = async () => {
     if (!presetName) return alert("Please enter a preset name.");
     try {
       const isEdit = !!selectedTemplateForPreset._id_preset;
       if (isEdit) {
-        await axios.put(`${API_BASE}/presets/${selectedTemplateForPreset._id_preset}`, {
+        await api.put(`/presets/${selectedTemplateForPreset._id_preset}`, {
           name: presetName,
           config: templateVars
-        }, config);
+        });
         alert("✅ Preset updated successfully!");
       } else {
-        await axios.post(`${API_BASE}/presets`, {
+        await api.post("/presets", {
           name: presetName,
           template: selectedTemplateForPreset._id,
           config: templateVars
-        }, config);
+        });
         alert("✅ Preset saved successfully!");
       }
       setShowPresetModal(false);
-      setPresetName("");
       fetchPresets();
     } catch (err) {
       alert("❌ Failed to save preset: " + (err.response?.data?.error || err.message));
@@ -223,10 +158,32 @@ const TemplateManager = () => {
   const handleDeletePreset = async (id) => {
     if (!window.confirm("Are you sure you want to delete this preset?")) return;
     try {
-      await axios.delete(`${API_BASE}/presets/${id}`, config);
+      await api.delete(`/presets/${id}`);
       fetchPresets();
     } catch (err) {
       alert("Error deleting preset: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const handleFileUpload = async (e, targetKey, isFormData = false) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    setLocalPreviews(prev => ({ ...prev, [targetKey]: localUrl }));
+    const uploadData = new FormData();
+    uploadData.append("file", file);
+    try {
+      setLoading(true);
+      const res = await api.post("/upload", uploadData, { headers: { "Content-Type": "multipart/form-data" } });
+      if (isFormData) setFormData({ ...formData, [targetKey]: res.data.url });
+      else setTemplateVars(prev => ({ ...prev, [targetKey]: res.data.url }));
+    } catch (err) {
+      alert("❌ Upload failed: " + (err.response?.data?.error || err.message));
+      const newPreviews = { ...localPreviews };
+      delete newPreviews[targetKey];
+      setLocalPreviews(newPreviews);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -253,57 +210,14 @@ const TemplateManager = () => {
     return formatted;
   };
 
-  const [localPreviews, setLocalPreviews] = useState({});
-
-  const handleFileUpload = async (e, targetKey, isFormData = false) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    // Show instant local preview
-    const localUrl = URL.createObjectURL(file);
-    setLocalPreviews(prev => ({ ...prev, [targetKey]: localUrl }));
-
-    const uploadData = new FormData();
-    uploadData.append("file", file);
-
-    try {
-      setLoading(true);
-      const res = await axios.post(`${API_BASE}/upload`, uploadData, {
-        headers: { 
-          ...config.headers,
-          "Content-Type": "multipart/form-data" 
-        }
-      });
-      
-      if (isFormData) {
-        setFormData({ ...formData, [targetKey]: res.data.url });
-      } else {
-        setTemplateVars(prev => ({ ...prev, [targetKey]: res.data.url }));
-      }
-      // Clean up local preview after success if you want, or just let the new URL override it
-    } catch (err) {
-      console.error("❌ Upload error:", err);
-      alert("❌ Upload failed: " + (err.response?.data?.error || err.message));
-      // Remove local preview on failure
-      const newPreviews = { ...localPreviews };
-      delete newPreviews[targetKey];
-      setLocalPreviews(newPreviews);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredTemplates = templates.filter(t => {
-    if (filter === "ALL") return true;
-    return t.status === filter;
-  });
+  const filteredTemplates = templates.filter(t => filter === "ALL" || t.status === filter);
 
   return (
     <div className="template-manager">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
         <div>
           <h3 style={{ fontSize: "1.5rem", fontWeight: "700" }}>WhatsApp Templates</h3>
-          <p style={{ color: "var(--text-secondary)", fontSize: "0.85rem" }}>Manage and monitor your message templates.</p>
+          {activeAccount && <p style={{ color: "#00a884", fontSize: "0.85rem", fontWeight: "bold" }}>Managing: {activeAccount.name} ({activeAccount.phoneNumberId})</p>}
         </div>
         <div style={{ display: "flex", gap: "1rem" }}>
           <button className="btn-primary" onClick={handleSync} style={{ background: "transparent", border: "1px solid var(--accent-primary)", color: "var(--accent-primary)" }}>
@@ -315,429 +229,212 @@ const TemplateManager = () => {
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem", overflowX: "auto", paddingBottom: "10px" }}>
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem", overflowX: "auto" }}>
         {["ALL", "APPROVED", "PENDING", "REJECTED", "PRESETS"].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              padding: "8px 16px",
-              borderRadius: "20px",
-              border: "1px solid var(--glass-border)",
-              background: filter === f ? "var(--accent-primary)" : "var(--bg-secondary)",
-              color: filter === f ? "var(--bg-primary)" : "var(--text-primary)",
-              fontSize: "0.8rem",
-              fontWeight: "600",
-              cursor: "pointer",
-              transition: "all 0.2s"
-            }}
-          >
+          <button key={f} onClick={() => setFilter(f)} style={{ padding: "8px 16px", borderRadius: "20px", border: "1px solid var(--glass-border)", background: filter === f ? "var(--accent-primary)" : "var(--bg-secondary)", color: filter === f ? "var(--bg-primary)" : "var(--text-primary)", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer" }}>
             {f === "PRESETS" ? `My Presets (${presets.length})` : `${f} (${templates.filter(t => f === "ALL" || t.status === f).length})`}
           </button>
         ))}
       </div>
 
       {showForm && (
-        <form className="glass-card" style={{ marginBottom: "2rem", animation: "slideDown 0.3s ease-out" }} onSubmit={handleSubmit}>
+        <form className="glass-card" style={{ marginBottom: "2rem" }} onSubmit={handleSubmit}>
+          {/* ... Template creation form details ... */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
             <div>
-              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Template Name</label>
-              <input 
-                type="text" 
-                placeholder="e.g. promotional_offer" 
-                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")})}
-                required
-              />
-              <span style={{ fontSize: "0.7rem", color: "var(--text-secondary)", marginTop: "5px", display: "block" }}>Lowercase letters, numbers, and underscores only.</span>
+              <label>Template Name</label>
+              <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px" }} value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")})} required />
             </div>
             <div>
-              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Category</label>
-              <select 
-                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
-                value={formData.category}
-                onChange={(e) => setFormData({...formData, category: e.target.value})}
-              >
+              <label>Category</label>
+              <select style={{ width: "100%", padding: "12px", borderRadius: "10px" }} value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})}>
                 <option value="MARKETING">Marketing</option>
                 <option value="UTILITY">Utility</option>
-                <option value="AUTHENTICATION">Authentication</option>
               </select>
             </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Header Type</label>
-              <select 
-                style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
-                value={formData.headerType}
-                onChange={(e) => setFormData({...formData, headerType: e.target.value})}
-              >
-                <option value="NONE">None</option>
-                <option value="TEXT">Text</option>
-                <option value="IMAGE">Image</option>
-                <option value="VIDEO">Video</option>
-                <option value="DOCUMENT">Document</option>
-              </select>
-            </div>
-            {formData.headerType === "TEXT" && (
-              <div>
-                <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Header Text</label>
-                <input 
-                  type="text" 
-                  style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
-                  value={formData.headerText}
-                  onChange={(e) => setFormData({...formData, headerText: e.target.value})}
-                />
-              </div>
-            )}
-          </div>
-
           <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Message Body</label>
-            <textarea 
-              rows="4" 
-              style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px", fontFamily: "inherit" }}
-              placeholder="Hi {{1}}, here is your code {{2}}."
-              value={formData.body}
-              onChange={(e) => setFormData({...formData, body: e.target.value})}
-              required
-            ></textarea>
+            <label>Body Content</label>
+            <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px" }} value={formData.body} onChange={(e) => setFormData({...formData, body: e.target.value})} required />
           </div>
-
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ display: "block", marginBottom: "8px", fontSize: "0.9rem", color: "var(--text-secondary)" }}>Footer Text (Optional)</label>
-            <input 
-              type="text" 
-              style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
-              value={formData.footerText}
-              onChange={(e) => setFormData({...formData, footerText: e.target.value})}
-            />
-          </div>
-
-          <div style={{ marginBottom: "1.5rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-              <label style={{ fontSize: "0.9rem", color: "var(--text-secondary)" }}>Buttons (Max 3)</label>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button type="button" onClick={() => addButton("QUICK_REPLY")} style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(0,0,0,0.05)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "5px" }}>+ Quick Reply</button>
-                <button type="button" onClick={() => addButton("URL")} style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(0,0,0,0.05)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "5px" }}>+ Website Link</button>
-              </div>
-            </div>
-            
-            {buttons.map((btn, idx) => (
-              <div key={idx} style={{ display: "flex", gap: "10px", background: "rgba(0,0,0,0.2)", padding: "10px", borderRadius: "8px", marginBottom: "10px", alignItems: "center" }}>
-                <span style={{ fontSize: "0.7rem", color: "var(--accent-primary)", fontWeight: "bold", width: "80px" }}>{btn.type.replace("_", " ")}</span>
-                <input 
-                  type="text" 
-                  placeholder="Button Label"
-                  style={{ flex: 1, padding: "8px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "6px", fontSize: "0.85rem" }}
-                  value={btn.text}
-                  onChange={(e) => updateButton(idx, "text", e.target.value)}
-                />
-                {btn.type === "URL" && (
-                  <input 
-                    type="text" 
-                    placeholder="https://example.com"
-                    style={{ flex: 1.5, padding: "8px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "6px", fontSize: "0.85rem" }}
-                    value={btn.url}
-                    onChange={(e) => updateButton(idx, "url", e.target.value)}
-                  />
-                )}
-                <button type="button" onClick={() => removeButton(idx)} style={{ background: "transparent", border: "none", color: "#e74c3c" }}><Trash2 size={16} /></button>
-              </div>
-            ))}
-          </div>
-
-          <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px" }}>
-            Submit to Meta for Approval
-          </button>
+          <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px" }}>Submit for Approval from {activeAccount?.name}</button>
         </form>
       )}
 
       {loading ? (
-        <div style={{ textAlign: "center", padding: "4rem" }}>
-          <RefreshCw className="animate-spin" size={40} color="var(--accent-primary)" style={{ opacity: 0.5 }} />
-          <p style={{ marginTop: "1rem", color: "var(--text-secondary)" }}>Syncing with Meta Cloud...</p>
-        </div>
+        <div style={{ textAlign: "center", padding: "4rem" }}><RefreshCw className="animate-spin" size={40} color="var(--accent-primary)" /></div>
       ) : filter === "PRESETS" ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: "1.5rem" }}>
           {presets.map(p => (
-            <div key={p._id} className="glass-card" style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h4 style={{ color: "var(--accent-primary)", margin: 0 }}>{p.name}</h4>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <button 
-                    onClick={() => handleOpenPresetModal(p.template, p)} 
-                    style={{ background: "transparent", border: "none", color: "var(--accent-primary)", cursor: "pointer", fontSize: "0.75rem", fontWeight: "bold" }}
-                  >
-                    Edit
-                  </button>
-                  <button 
-                    onClick={() => handleDeletePreset(p._id)} 
-                    style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer" }}
-                    onMouseOver={e => e.currentTarget.style.color = "#ef4444"}
-                    onMouseOut={e => e.currentTarget.style.color = "#64748b"}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
+            <div key={p._id} className="glass-card">
+              <div style={{ display: "flex", justifyContent: "space-between" }}>
+                <h4>{p.name}</h4>
+                <button onClick={() => handleDeletePreset(p._id)} style={{ border: "none", background: "none" }}><Trash2 size={16} color="#ef4444" /></button>
               </div>
-              
-              <div style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                Base Template: <span style={{ color: "var(--text-primary)" }}>{p.template?.name}</span>
-              </div>
-
-              {/* Minimal Preview */}
-              <div style={{ 
-                background: "#e5ddd5", 
-                borderRadius: "10px", 
-                padding: "10px",
-                fontSize: "0.85rem",
-                color: "#303030",
-                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.1)",
-                minHeight: "150px"
-              }}>
-                {p.template?.components?.map((comp, idx) => {
-                  if (comp.type === "HEADER") {
-                    if (comp.format === "IMAGE") {
-                      const imgUrl = p.config?.[`HEADER_IMAGE`];
-                      return (
-                        <div key={idx} style={{ background: "#ddd", height: "100px", borderRadius: "5px", marginBottom: "8px", overflow: "hidden" }}>
-                          {imgUrl ? (
-                            <img src={imgUrl} alt="Header" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                          ) : (
-                            <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", color: "#888" }}>[IMAGE MISSING]</div>
-                          )}
-                        </div>
-                      );
-                    }
-                    return <div key={idx} style={{ fontWeight: "bold", fontSize: "0.9rem", marginBottom: "5px" }}>{formatPreviewText(comp.text, "HEADER", p.config)}</div>;
-                  }
-                  if (comp.type === "BODY") return <div key={idx} style={{ whiteSpace: "pre-wrap" }}>{formatPreviewText(comp.text, "BODY", p.config)}</div>;
-                  return null;
-                })}
-              </div>
-
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
-                {Object.entries(p.config || {}).map(([k, v]) => (
-                  <span key={k} style={{ fontSize: "0.65rem", background: "rgba(255,255,255,0.05)", padding: "2px 6px", borderRadius: "4px", color: "var(--text-secondary)" }}>
-                    {k}: {v?.length > 15 ? v.substring(0, 15) + "..." : v}
-                  </span>
-                ))}
-              </div>
+              <p style={{ fontSize: "0.8rem", color: "#667781" }}>Template: {p.template?.name}</p>
             </div>
           ))}
-          {presets.length === 0 && (
-            <div style={{ textAlign: "center", gridColumn: "1/-1", padding: "4rem", opacity: 0.5 }}>
-              <Info size={40} style={{ marginBottom: "1rem" }} />
-              <p>No presets saved. Create one from an Approved template!</p>
-            </div>
-          )}
         </div>
       ) : (
         <div style={{ display: "grid", gap: "1.2rem" }}>
           {filteredTemplates.map((tpl) => (
-            <div key={tpl._id} className="glass-card" style={{ transition: "transform 0.2s" }}>
-              {/* ... (rest of the code remains same) ... */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div key={tpl._id} className="glass-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "5px" }}>
-                    <h4 style={{ fontSize: "1.1rem", fontWeight: "700" }}>{tpl.name}</h4>
-                    <span style={{ fontSize: "0.7rem", background: "rgba(255,255,255,0.05)", padding: "2px 8px", borderRadius: "10px", color: "var(--text-secondary)" }}>{tpl.category}</span>
-                  </div>
-                  <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Language: {tpl.language}</p>
+                  <h4 style={{ margin: 0 }}>{tpl.name}</h4>
+                  <span style={{ fontSize: "0.75rem", color: "#667781" }}>{tpl.category} • {tpl.language}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px" }}>{getStatusIcon(tpl.status)} <strong>{tpl.status}</strong></div>
+                  
+                  {/* Preset Button Wapas Add Kiya */}
                   {tpl.status === "APPROVED" && (
                     <button 
-                      onClick={() => handleOpenPresetModal(tpl)}
-                      style={{ marginTop: "10px", fontSize: "0.7rem", padding: "5px 12px", background: "rgba(37, 211, 102, 0.1)", border: "1px solid var(--accent-primary)", color: "var(--accent-primary)", borderRadius: "5px", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
+                      onClick={() => {
+                        setSelectedTemplateForPreset(tpl);
+                        setPresetName(tpl.name + "_preset");
+                        const vars = {};
+                        tpl.components.forEach(comp => {
+                          if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
+                            vars[`HEADER_${comp.format}`] = "";
+                          }
+                          const matches = comp.text?.match(/{{(\d+)}}/g);
+                          if (matches) matches.forEach(m => vars[`${comp.type}_${m.replace(/{{|}}/g, "")}`] = "");
+                        });
+                        setTemplateVars(vars);
+                        setShowPresetModal(true);
+                      }}
+                      className="btn-icon" 
+                      title="Make Preset"
                     >
-                      <Plus size={12} /> Create Preset
+                      <Plus size={18} />
                     </button>
                   )}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "rgba(255,255,255,0.03)", padding: "6px 14px", borderRadius: "20px", border: "1px solid var(--glass-border)" }}>
-                    {getStatusIcon(tpl.status)}
-                    <span style={{ fontSize: "0.75rem", fontWeight: "800", letterSpacing: "0.5px" }}>{tpl.status}</span>
-                  </div>
-                  <button 
-                    onClick={() => handleDelete(tpl.name)} 
-                    style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer", padding: "5px", transition: "color 0.2s" }}
-                    onMouseOver={(e) => e.currentTarget.style.color = "#ef4444"}
-                    onMouseOut={(e) => e.currentTarget.style.color = "#64748b"}
-                  >
-                    <Trash2 size={18} />
-                  </button>
+
+                  <button onClick={() => handleDelete(tpl._id, tpl.name)} style={{ border: "none", background: "none", cursor: "pointer" }}><Trash2 size={18} color="#ef4444" /></button>
                 </div>
               </div>
-
-              {tpl.status === "REJECTED" && tpl.rejectionReason && (
-                <div style={{ marginTop: "1.2rem", padding: "12px", background: "rgba(231, 76, 60, 0.1)", borderLeft: "4px solid #e74c3c", borderRadius: "4px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#ff6b6b", fontWeight: "700", fontSize: "0.85rem", marginBottom: "5px" }}>
-                    <AlertTriangle size={16} /> REJECTION REASON
-                  </div>
-                  <p style={{ fontSize: "0.85rem", color: "#ffb8b8" }}>{tpl.rejectionReason}</p>
-                </div>
-              )}
             </div>
           ))}
-          
-          {filteredTemplates.length === 0 && (
-            <div style={{ textAlign: "center", padding: "4rem", background: "rgba(255,255,255,0.01)", borderRadius: "20px", border: "2px dashed var(--glass-border)" }}>
-              <Filter size={40} style={{ opacity: 0.2, marginBottom: "1rem" }} />
-              <p style={{ color: "var(--text-secondary)" }}>No {filter.toLowerCase()} templates found.</p>
-            </div>
-          )}
+          {filteredTemplates.length === 0 && <div style={{ textAlign: "center", padding: "3rem", color: "#667781" }}>No templates found for this account. Click "Sync" to fetch from Meta.</div>}
         </div>
       )}
-
-      {/* Preset Creation Modal */}
-      {showPresetModal && (
-        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div className="glass-card" style={{ 
-            width: "95%", 
-            maxWidth: "1000px", 
-            height: "85vh", 
-            padding: "1.5rem", 
-            display: "flex", 
-            gap: "1.5rem", 
-            overflow: "hidden",
-            position: "relative"
-          }}>
+      {showPresetModal && selectedTemplateForPreset && (
+        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(10px)" }}>
+          <div className="glass-card" style={{ width: "95%", maxWidth: "1150px", display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "1.5rem", padding: "3.5rem 1.5rem 1.5rem 1.5rem", height: "85vh", overflow: "hidden", position: "relative", border: "2px solid #00a884" }}>
+            
+            {/* Close Button */}
             <button 
-              onClick={() => setShowPresetModal(false)}
-              className="close-modal-btn"
-              style={{ 
-                position: "absolute", 
-                top: "15px", 
-                right: "15px", 
-                background: "rgba(0,0,0,0.05)", 
-                border: "none", 
-                color: "var(--text-primary)", 
-                cursor: "pointer", 
-                zIndex: 10,
-                width: "32px",
-                height: "32px",
-                borderRadius: "50%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s"
-              }}
+              onClick={() => setShowPresetModal(false)} 
+              style={{ position: "absolute", top: "15px", right: "15px", border: "2px solid #00a884", background: "white", borderRadius: "50%", padding: "5px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, color: "#00a884", boxShadow: "0 4px 15px rgba(0,0,0,0.2)" }}
             >
-              <Plus size={20} style={{ transform: "rotate(45deg)" }} />
+              <XCircle size={35} weight="bold" />
             </button>
-            <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden", flex: 1.2 }}>
-              <h3 style={{ marginBottom: "1rem", fontSize: "1.2rem", flexShrink: 0 }}>{selectedTemplateForPreset?._id_preset ? "Edit Template Preset" : "Save Template Preset"}</h3>
-              
-              <div style={{ overflowY: "auto", paddingRight: "10px", flex: 1, marginBottom: "1rem" }}>
-                <div style={{ marginBottom: "1rem" }}>
-                  <label style={{ display: "block", marginBottom: "5px", fontSize: "0.85rem", color: "var(--text-secondary)" }}>Preset Name</label>
-                  <input 
-                    type="text" 
-                    style={{ width: "100%", padding: "10px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "8px" }}
-                    value={presetName}
-                    onChange={(e) => setPresetName(e.target.value)}
-                    placeholder="e.g. Order_Confirmed_Offer"
-                  />
-                </div>
 
-                <div style={{ marginBottom: "1rem" }}>
-                  <p style={{ fontSize: "0.85rem", fontWeight: "700", color: "var(--text-primary)", marginBottom: "0.8rem", borderBottom: "1px solid var(--border-color)", paddingBottom: "5px" }}>Variables & Media</p>
-                  {Object.keys(templateVars).map(key => {
-                    const isMedia = ["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type));
-                    return (
-                      <div key={key} style={{ marginBottom: "12px" }}>
-                        <label style={{ fontSize: "0.75rem", color: "var(--accent-primary)", display: "block", marginBottom: "4px", fontWeight: "700" }}>{isMedia ? `${key.split("_")[1]} URL` : `BODY Var ${key.split("_")[1]}`}</label>
-                        <div style={{ display: "flex", gap: "8px", flexDirection: isMedia ? "row" : "column" }}>
-                          {isMedia ? (
-                            <input 
-                              type="text" 
-                              style={{ flex: 1, padding: "10px", background: "var(--bg-secondary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "8px", fontSize: "0.85rem" }}
-                              value={templateVars[key]}
-                              onChange={(e) => setTemplateVars({...templateVars, [key]: e.target.value})}
-                              placeholder="https://..."
-                            />
-                          ) : (
-                            <input 
-                              type="text" 
-                              style={{ flex: 1, padding: "10px", background: "var(--bg-secondary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "8px", fontSize: "0.85rem" }}
-                              value={templateVars[key]}
-                              onChange={(e) => setTemplateVars({...templateVars, [key]: e.target.value})}
-                              placeholder="Value (Single line only)"
-                            />
-                          )}
-                          {isMedia && (
-                            <>
-                              <input 
-                                type="file" 
-                                id={`upload-${key}`} 
-                                style={{ display: "none" }} 
-                                onChange={(e) => handleFileUpload(e, key)}
-                                accept="image/*,video/*,application/pdf"
-                              />
-                              <button 
-                                onClick={() => document.getElementById(`upload-${key}`).click()}
-                                style={{ padding: "0 15px", background: "var(--accent-primary)", border: "none", color: "white", borderRadius: "8px", fontSize: "0.75rem", cursor: "pointer", fontWeight: "600" }}
-                              >
-                                Upload
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+            {/* Left Side: Inputs */}
+            <div style={{ height: "calc(85vh - 100px)", overflowY: "scroll", paddingRight: "1rem", borderRight: "2px solid #e2e8f0" }}>
+              <h3 style={{ marginBottom: "1.5rem" }}>Save Template Preset</h3>
+              
+              <div style={{ marginBottom: "1.5rem" }}>
+                <label style={{ fontWeight: "600" }}>Preset Name</label>
+                <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} placeholder="e.g. Order_Confirmed_Offer" value={presetName} onChange={e => setPresetName(e.target.value)} />
               </div>
 
-              <div style={{ display: "flex", gap: "10px", marginTop: "auto", paddingTop: "1rem", borderTop: "1px solid var(--border-color)", flexShrink: 0 }}>
-                <button className="btn-secondary" style={{ flex: 1, padding: "12px" }} onClick={() => setShowPresetModal(false)}>Cancel</button>
-                <button className="btn-primary" style={{ flex: 2, padding: "12px" }} onClick={handleSavePreset}>
-                  {selectedTemplateForPreset?._id_preset ? "Update Preset" : "Save Preset"}
-                </button>
+              <h4 style={{ fontSize: "0.9rem", color: "#667781", marginBottom: "1rem", textTransform: "uppercase", letterSpacing: "1px" }}>Variables & Media</h4>
+
+              {selectedTemplateForPreset.components.map((comp, idx) => {
+                if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
+                  const key = `HEADER_${comp.format}`;
+                  return (
+                    <div key={idx} style={{ marginBottom: "1.5rem" }}>
+                      <label style={{ color: "#00a884", fontWeight: "700", fontSize: "0.75rem" }}>{comp.format} URL</label>
+                      <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                        <input type="text" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }} value={templateVars[key] || ""} onChange={e => setTemplateVars({ ...templateVars, [key]: e.target.value })} placeholder="https://..." />
+                        <label className="btn-primary" style={{ padding: "10px 20px", cursor: "pointer", fontSize: "0.8rem" }}>
+                          Upload
+                          <input type="file" hidden onChange={(e) => handleFileUpload(e, key)} />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const matches = comp.text?.match(/{{(\d+)}}/g);
+                if (!matches) return null;
+
+                return (
+                  <div key={idx}>
+                    {matches.map(m => {
+                      const num = m.replace(/{{|}}/g, "");
+                      const key = `${comp.type}_${num}`;
+                      return (
+                        <div key={key} style={{ marginBottom: "1rem" }}>
+                          <label style={{ color: "#00a884", fontWeight: "700", fontSize: "0.75rem" }}>{comp.type} Var {num}</label>
+                          <input 
+                            type="text" 
+                            style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} 
+                            value={templateVars[key] || ""} 
+                            onChange={e => setTemplateVars({ ...templateVars, [key]: e.target.value })}
+                            placeholder="Value (Single line only)"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+
+              <div style={{ display: "flex", gap: "1rem", marginTop: "2rem" }}>
+                <button onClick={() => setShowPresetModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+                <button onClick={handleSavePreset} className="btn-primary" style={{ flex: 2 }}>Save Preset</button>
               </div>
             </div>
 
-            {/* LIVE PREVIEW SIDE */}
-            <div style={{ background: "#e5ddd5", borderRadius: "15px", padding: "15px", display: "flex", flexDirection: "column", border: "1px solid rgba(0,0,0,0.1)", overflowY: "auto", flex: 0.8 }}>
-              <div style={{ fontSize: "0.75rem", color: "#667781", marginBottom: "10px", textAlign: "center", background: "#d1d7db", padding: "4px 10px", borderRadius: "5px", alignSelf: "center" }}>PREVIEW</div>
-              
-              <div style={{ background: "white", padding: "10px", borderRadius: "0 10px 10px 10px", maxWidth: "90%", alignSelf: "flex-start", boxShadow: "0 1px 2px rgba(0,0,0,0.2)", position: "relative" }}>
-                {selectedTemplateForPreset?.components.map((comp, idx) => {
-                  if (comp.type === "HEADER") {
-                    if (comp.format === "IMAGE") {
-                      const url = localPreviews[`HEADER_IMAGE`] || templateVars[`HEADER_IMAGE`];
-                      return (
-                        <div key={idx} style={{ background: "#f0f0f0", height: "150px", borderRadius: "5px", marginBottom: "8px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
-                          {url ? <img src={url} alt="Header" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => e.target.style.display = "none"} /> : <span style={{ color: "#aaa", fontSize: "0.8rem" }}>Image Preview</span>}
-                          {loading && <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}><RefreshCw className="animate-spin" size={24} color="white" /></div>}
-                        </div>
-                      );
-                    }
-                    return <div key={idx} style={{ fontWeight: "bold", fontSize: "1rem", marginBottom: "5px", color: "#111" }}>{formatPreviewText(comp.text, "HEADER", templateVars)}</div>;
-                  }
-                  if (comp.type === "BODY") {
-                    return <div key={idx} style={{ whiteSpace: "pre-wrap", color: "#303030", lineHeight: "1.4" }}>{formatPreviewText(comp.text, "BODY", templateVars)}</div>;
-                  }
-                  if (comp.type === "FOOTER") {
-                    return <div key={idx} style={{ fontSize: "0.75rem", color: "#667781", marginTop: "5px" }}>{comp.text}</div>;
-                  }
-                  if (comp.type === "BUTTONS") {
+            {/* Right Side: Preview */}
+            <div style={{ background: "#e5ddd5", borderRadius: "20px", padding: "20px", display: "flex", flexDirection: "column", height: "calc(85vh - 100px)", border: "1px solid #ddd", overflowY: "scroll" }}>
+              <div style={{ textAlign: "center", color: "#667781", fontSize: "0.7rem", marginBottom: "10px", textTransform: "uppercase" }}>Preview</div>
+              <div className="wa-bubble" style={{ background: "white", padding: "10px", borderRadius: "0 15px 15px 15px", boxShadow: "0 1px 0.5px rgba(0,0,0,0.13)", maxWidth: "100%" }}>
+                
+                {/* Header Preview */}
+                {(() => {
+                  const headerComp = selectedTemplateForPreset.components.find(c => c.type === "HEADER");
+                  if (headerComp && ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format)) {
+                    const key = `HEADER_${headerComp.format}`;
+                    const mediaUrl = localPreviews[key] || templateVars[key];
                     return (
-                      <div key={idx} style={{ marginTop: "10px", borderTop: "1px solid #f0f0f0", paddingTop: "5px" }}>
-                        {comp.buttons.map((btn, bIdx) => (
-                          <div key={bIdx} style={{ textAlign: "center", padding: "8px", color: "#00a884", fontWeight: "600", borderBottom: bIdx < comp.buttons.length - 1 ? "1px solid #f0f0f0" : "none" }}>{btn.text}</div>
-                        ))}
+                      <div style={{ width: "100%", aspectRatio: "16/9", background: "#f0f2f5", borderRadius: "10px", marginBottom: "10px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                        {mediaUrl ? (
+                          <img src={mediaUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{headerComp.format} Preview</span>
+                        )}
                       </div>
                     );
                   }
                   return null;
-                })}
-                <div style={{ fontSize: "0.65rem", color: "#667781", textAlign: "right", marginTop: "4px" }}>10:59 AM</div>
+                })()}
+
+                {/* Body Preview */}
+                <div style={{ fontSize: "0.9rem", color: "#111b21", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>
+                  {selectedTemplateForPreset.components.filter(c => c.type === "BODY").map(c => formatPreviewText(c.text, "BODY", templateVars))}
+                </div>
+
+                {/* Footer Preview */}
+                <div style={{ fontSize: "0.75rem", color: "#667781", marginTop: "5px" }}>
+                  {selectedTemplateForPreset.components.find(c => c.type === "FOOTER")?.text}
+                </div>
+
+                {/* Buttons Preview */}
+                <div style={{ marginTop: "10px", borderTop: "1px solid #f0f2f5" }}>
+                  {selectedTemplateForPreset.components.find(c => c.type === "BUTTONS")?.buttons.map((btn, i) => (
+                    <div key={i} style={{ padding: "8px", textAlign: "center", color: "#00a884", fontSize: "0.85rem", fontWeight: "600", borderBottom: i < selectedTemplateForPreset.components.find(c => c.type === "BUTTONS").buttons.length - 1 ? "1px solid #f0f2f5" : "none" }}>
+                      {btn.text}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
+
           </div>
         </div>
       )}

@@ -16,13 +16,20 @@ import activityRoutes from "./routes/activityRoutes.js";
 import presetRoutes from "./routes/presetRoutes.js";
 import autoReplyRoutes from "./routes/autoReplyRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
+import whatsAppAccountRoutes from "./routes/whatsAppAccountRoutes.js";
+import { protect, restrictTo } from "./middleware/authMiddleware.js";
+import { attachWhatsAppAccount } from "./middleware/accountMiddleware.js";
 import { errorHandler } from "./utils/errorHandler.js";
 
 import { createServer } from "http";
 import { initSocket } from "./utils/socket.js";
 
+import { syncEnvAccount } from "./utils/accountSyncer.js";
+
 dotenv.config();
-connectDB();
+connectDB().then(() => {
+  syncEnvAccount();
+});
 
 const app = express();
 const httpServer = createServer(app);
@@ -33,6 +40,7 @@ initSocket(httpServer);
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(attachWhatsAppAccount);
 
 // --- ROUTES ---
 // ... (omitted routes for brevity, assuming replace_file_content handles the whole block)
@@ -48,6 +56,7 @@ app.use("/api/activities", activityRoutes);
 app.use("/api/presets", presetRoutes);
 app.use("/api/auto-replies", autoReplyRoutes);
 app.use("/api/media", mediaRoutes);
+app.use("/api/whatsapp-accounts", whatsAppAccountRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({ 

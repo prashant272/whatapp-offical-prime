@@ -8,27 +8,41 @@ import { getIO, smartEmit } from "../utils/socket.js";
 
 export const getConversations = async (req, res) => {
   try {
-    const filter = {};
+    const account = req.whatsappAccount;
+    const accountId = account?._id;
+    
+    // SMART FILTER: If it's the default account, show its own chats + legacy (null) chats
+    let filter = { whatsappAccountId: accountId };
+    if (account?.isDefault) {
+      filter = {
+        $or: [
+          { whatsappAccountId: accountId },
+          { whatsappAccountId: { $exists: false } },
+          { whatsappAccountId: null }
+        ]
+      };
+    }
+
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
     if (req.user.role === "Executive") {
       filter.assignedTo = req.user._id;
     }
 
+    const total = await Conversation.countDocuments(filter);
     const conversations = await Conversation.find(filter)
       .populate("contact")
-      .populate("assignedTo", "name")
       .sort({ lastMessageTime: -1 })
       .skip(skip)
-      .limit(limit);
-
-    const total = await Conversation.countDocuments(filter);
+      .limit(Number(limit));
 
     res.json({
       conversations,
-      hasMore: total > skip + conversations.length
+      currentPage: Number(page),
+      totalPages: Math.ceil(total / limit),
+      totalConversations: total
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -38,28 +52,52 @@ export const getConversations = async (req, res) => {
 export const getMessages = async (req, res) => {
   try {
     const { phone } = req.params;
+    const account = req.whatsappAccount;
+    const accountId = account?._id;
+    
+    // SMART FILTER: Include legacy messages for default account
+    let filter = { 
+      $or: [{ from: phone }, { to: phone }] 
+    };
+    
+    if (account?.isDefault) {
+      filter = {
+        $and: [
+          { $or: [{ from: phone }, { to: phone }] },
+          { $or: [
+            { whatsappAccountId: accountId },
+            { whatsappAccountId: { $exists: false } },
+            { whatsappAccountId: null }
+          ]}
+        ]
+      };
+    } else {
+      filter.whatsappAccountId = accountId;
+    }
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
     const skip = (page - 1) * limit;
 
-    const messages = await Message.find({
-      $or: [{ from: phone }, { to: phone }]
-    })
-    .sort({ timestamp: -1 }) // Get latest first for pagination
-    .skip(skip)
-    .limit(limit);
+    const messages = await Message.find(filter)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit);
     
-    const total = await Message.countDocuments({
-      $or: [{ from: phone }, { to: phone }]
-    });
+    const total = await Message.countDocuments(filter);
 
-    await Conversation.findOneAndUpdate({ phone }, { unreadCount: 0 });
+    // Update unread count only for current account context
+    await Conversation.findOneAndUpdate(
+      { phone, whatsappAccountId: accountId }, 
+      { unreadCount: 0 }
+    );
     
     res.json({
-      messages: messages.reverse(), // Reverse back for chronological UI
+      messages: messages.reverse(),
       hasMore: total > skip + messages.length
     });
   } catch (err) {
+    console.error(`❌ Error in ${req.url}:`, err.response?.data || err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -68,9 +106,11 @@ export const sendMessage = async (req, res) => {
   try {
     const { body } = req.body;
     const to = normalizePhone(req.body.to);
-    const metaRes = await sendTextMessage(to, body);
-    console.log("📤 Meta Send Response:", metaRes);
+    const account = req.whatsappAccount;
 
+    if (!account) throw new Error("No active WhatsApp account found");
+
+    const metaRes = await sendTextMessage(account, to, body);
     const messageId = metaRes.messages?.[0]?.id;
 
     const newMessage = new Message({
@@ -78,21 +118,28 @@ export const sendMessage = async (req, res) => {
       from: "me",
       to,
       body,
-      direction: "outbound"
+      direction: "outbound",
+      whatsappAccountId: account._id
     });
     await newMessage.save();
 
+    // Update conversation (check for existing with accountId OR null if default)
+    let convFilter = { phone: to, whatsappAccountId: account._id };
+    if (account.isDefault) {
+      const existing = await Conversation.findOne({ phone: to, whatsappAccountId: account._id });
+      if (!existing) {
+        convFilter = { phone: to, $or: [{ whatsappAccountId: { $exists: false } }, { whatsappAccountId: null }] };
+      }
+    }
+
     const updatedConv = await Conversation.findOneAndUpdate(
-      { phone: to },
-      { lastMessage: body, lastMessageTime: new Date(), unreadCount: 0 },
+      convFilter,
+      { lastMessage: body, lastMessageTime: new Date(), unreadCount: 0, whatsappAccountId: account._id },
       { upsert: true, new: true }
     );
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
-
-    // Smart Socket Emit
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
-
     await logActivity(req.user._id, "SEND_MESSAGE", `Sent text message: ${body.substring(0, 50)}...`, to);
 
     res.json({ success: true, message: newMessage });
@@ -104,16 +151,18 @@ export const sendMessage = async (req, res) => {
 export const updateConversationStatus = async (req, res) => {
   try {
     const { phone, status } = req.body;
+    const account = req.whatsappAccount;
+    
     const conversation = await Conversation.findOneAndUpdate(
-      { phone },
+      { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
       { status },
       { new: true }
     );
 
     await logActivity(req.user._id, "UPDATE_STATUS", `Updated status to ${status}`, phone);
-
     res.json({ success: true, conversation });
   } catch (err) {
+    console.error(`❌ Error in ${req.url}:`, err.response?.data || err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -122,13 +171,14 @@ export const sendChatTemplateMessage = async (req, res) => {
   try {
     const { templateName, templateComponents } = req.body;
     const to = normalizePhone(req.body.to);
+    const account = req.whatsappAccount;
+
+    if (!account) throw new Error("No active WhatsApp account found");
     
-    // Find template in DB to get correct language
     const template = await Template.findOne({ name: templateName });
     const lang = template ? template.language : "en_US";
 
-    const metaRes = await sendTemplateMessage(to, templateName, lang, templateComponents);
-    
+    const metaRes = await sendTemplateMessage(account, to, templateName, lang, templateComponents);
     const messageId = metaRes.messages?.[0]?.id;
 
     const newMessage = new Message({
@@ -137,29 +187,25 @@ export const sendChatTemplateMessage = async (req, res) => {
       to,
       body: `[Template: ${templateName}]`,
       type: "template",
-      templateData: {
-        name: templateName,
-        components: templateComponents
-      },
-      direction: "outbound"
+      templateData: { name: templateName, components: templateComponents },
+      direction: "outbound",
+      whatsappAccountId: account._id
     });
     await newMessage.save();
 
     const updatedConv = await Conversation.findOneAndUpdate(
-      { phone: to },
-      { lastMessage: newMessage.body, lastMessageTime: new Date(), unreadCount: 0 },
+      { phone: to, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
+      { lastMessage: newMessage.body, lastMessageTime: new Date(), unreadCount: 0, whatsappAccountId: account._id },
       { upsert: true, new: true }
     );
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
-
-    // Smart Socket Emit
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
-
     await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
 
     res.json({ success: true, message: newMessage });
   } catch (err) {
+    console.error(`❌ Error in ${req.url}:`, err.response?.data || err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -168,8 +214,11 @@ export const sendChatImageMessage = async (req, res) => {
   try {
     const { imageUrl, caption } = req.body;
     const to = normalizePhone(req.body.to);
+    const account = req.whatsappAccount;
 
-    const metaRes = await sendImageMessage(to, imageUrl, caption);
+    if (!account) throw new Error("No active WhatsApp account found");
+
+    const metaRes = await sendImageMessage(account, to, imageUrl, caption);
     const messageId = metaRes.messages?.[0]?.id;
 
     const newMessage = new Message({
@@ -180,25 +229,24 @@ export const sendChatImageMessage = async (req, res) => {
       type: "image",
       mediaUrl: imageUrl,
       direction: "outbound",
-      status: "sent"
+      status: "sent",
+      whatsappAccountId: account._id
     });
     await newMessage.save();
 
     const updatedConv = await Conversation.findOneAndUpdate(
-      { phone: to },
-      { lastMessage: caption || "📷 Image", lastMessageTime: new Date(), unreadCount: 0 },
+      { phone: to, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
+      { lastMessage: caption || "📷 Image", lastMessageTime: new Date(), unreadCount: 0, whatsappAccountId: account._id },
       { upsert: true, new: true }
     );
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
-
-    // Smart Socket Emit
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
-
     await logActivity(req.user._id, "SEND_IMAGE", `Sent image: ${imageUrl}`, to);
 
     res.json({ success: true, message: newMessage });
   } catch (err) {
+    console.error(`❌ Error in ${req.url}:`, err.response?.data || err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -206,8 +254,10 @@ export const sendChatImageMessage = async (req, res) => {
 export const assignConversation = async (req, res) => {
   try {
     const { phone, userId } = req.body;
+    const account = req.whatsappAccount;
+
     const conversation = await Conversation.findOneAndUpdate(
-      { phone },
+      { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
       { assignedTo: userId || null },
       { new: true }
     ).populate("assignedTo", "name");
@@ -224,7 +274,11 @@ export const assignConversation = async (req, res) => {
 export const markAsRead = async (req, res) => {
   try {
     const { phone } = req.body;
-    await Conversation.findOneAndUpdate({ phone }, { unreadCount: 0 });
+    const account = req.whatsappAccount;
+    await Conversation.findOneAndUpdate(
+      { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] }, 
+      { unreadCount: 0 }
+    );
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

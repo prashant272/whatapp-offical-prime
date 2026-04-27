@@ -4,11 +4,13 @@ import { logActivity } from "../utils/activityLogger.js";
 export const createPreset = async (req, res) => {
   try {
     const { name, template, config } = req.body;
+    const account = req.whatsappAccount;
     
     const preset = await TemplatePreset.create({
       name,
       template,
       config,
+      whatsappAccountId: account?._id,
       createdBy: req.user._id
     });
 
@@ -22,7 +24,10 @@ export const createPreset = async (req, res) => {
 
 export const getPresets = async (req, res) => {
   try {
-    const presets = await TemplatePreset.find().populate("template");
+    const account = req.whatsappAccount;
+    if (!account) return res.status(400).json({ error: "No active account selected" });
+
+    const presets = await TemplatePreset.find({ whatsappAccountId: account._id }).populate("template");
     res.json(presets);
   } catch (error) {
     res.status(500).json({ error: error.message });

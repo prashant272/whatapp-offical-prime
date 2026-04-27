@@ -13,8 +13,9 @@ const messageSchema = new mongoose.Schema({
   },
   timestamp: { type: Date, default: Date.now },
   direction: { type: String, enum: ["inbound", "outbound"], required: true },
+  whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
   status: { type: String, default: "sent" }
-});
+}, { timestamps: true });
 
 const Message = mongoose.model("Message", messageSchema);
 export default Message;

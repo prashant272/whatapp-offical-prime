@@ -39,7 +39,7 @@ function getSimilarity(s1, s2) {
   return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
 }
 
-export const processAutoReply = async (phone, incomingText) => {
+export const processAutoReply = async (account, phone, incomingText) => {
   try {
     const text = incomingText.toLowerCase().trim();
     const autoReplies = await AutoReply.find({ isActive: true });
@@ -55,11 +55,9 @@ export const processAutoReply = async (phone, incomingText) => {
       if (text === keyword) {
         currentScore = 1.0;
       } else if (text.includes(keyword)) {
-        // Boost score if keyword is a major part of the message
         currentScore = Math.max(0.8, keyword.length / text.length);
       } else {
-        // 2. Fuzzy Match (Similarity score)
-        // We check similarity of the keyword against each word in the message
+        // 2. Fuzzy Match
         const words = text.split(/\s+/);
         const wordScores = words.map(word => getSimilarity(word, keyword));
         currentScore = Math.max(...wordScores);
@@ -71,19 +69,14 @@ export const processAutoReply = async (phone, incomingText) => {
       }
     }
 
-    // Only trigger if match is >= 50%
-    if (!bestMatch || highestScore < 0.5) {
-      console.log(`🤖 Automation: No strong match found (Best score: ${highestScore.toFixed(2)})`);
-      return false;
-    }
+    if (!bestMatch || highestScore < 0.5) return false;
 
-    console.log(`🤖 Automation Match Found! Keyword: "${bestMatch.keyword}", Score: ${highestScore.toFixed(2)}, Replying: "${bestMatch.response}"`);
+    console.log(`🤖 Automation: Match Found! Using Account: ${account?.name || "Default"}`);
 
-    // 2. Send the automated message via Meta
-    const metaRes = await sendTextMessage(phone, bestMatch.response);
+    // Send the automated message using the CORRECT account
+    const metaRes = await sendTextMessage(account, phone, bestMatch.response);
     const messageId = metaRes.messages?.[0]?.id;
 
-    // 3. Save as outbound message in DB
     const newMessage = new Message({
       messageId,
       from: "me",
@@ -91,22 +84,21 @@ export const processAutoReply = async (phone, incomingText) => {
       body: bestMatch.response,
       direction: "outbound",
       status: "sent",
-      isAutomated: true
+      isAutomated: true,
+      whatsappAccountId: account?._id
     });
     await newMessage.save();
 
-    // 4. Update Conversation
     const updatedConv = await Conversation.findOneAndUpdate(
-      { phone },
+      { phone, whatsappAccountId: account?._id },
       { 
         lastMessage: bestMatch.response, 
         lastMessageTime: new Date(),
         unreadCount: 0 
       },
-      { new: true }
+      { new: true, upsert: true }
     ).populate("contact");
 
-    // 5. Emit via socket
     smartEmit("new_message", { message: newMessage, conversation: updatedConv });
 
     // 6. Update usage count

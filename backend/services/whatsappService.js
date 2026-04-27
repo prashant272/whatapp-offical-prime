@@ -1,27 +1,24 @@
 import axios from "axios";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const API_VERSION = "v21.0";
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const WABA_ID = process.env.WABA_ID;
-
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
-const headers = {
-  Authorization: `Bearer ${ACCESS_TOKEN}`,
-  "Content-Type": "application/json",
+const getHeaders = (accessToken) => {
+  if (accessToken) {
+    console.log(`🔑 Using Token: ${accessToken.substring(0, 7)}...${accessToken.substring(accessToken.length - 5)}`);
+  } else {
+    console.log("⚠️ No Access Token provided for this request!");
+  }
+  return {
+    Authorization: `Bearer ${accessToken?.trim()}`,
+    "Content-Type": "application/json",
+  };
 };
 
-/**
- * Send a template message to a specific number
- */
-export const sendTemplateMessage = async (to, templateName, languageCode = "en_US", components = []) => {
+export const sendTemplateMessage = async (account, to, templateName, languageCode = "en_US", components = []) => {
   try {
     const res = await axios.post(
-      `${BASE_URL}/${PHONE_NUMBER_ID}/messages`,
+      `${BASE_URL}/${account.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         to,
@@ -29,125 +26,111 @@ export const sendTemplateMessage = async (to, templateName, languageCode = "en_U
         template: {
           name: templateName,
           language: { code: languageCode },
-          components: components,
+          components,
         },
       },
-      { headers }
+      { headers: getHeaders(account.accessToken) }
     );
     return res.data;
   } catch (error) {
-    throw error.response?.data || error;
+    throw error;
   }
 };
 
-/**
- * Create a new message template in Meta
- */
-export const createTemplate = async (templateData) => {
+export const sendTextMessage = async (account, to, text) => {
   try {
     const res = await axios.post(
-      `${BASE_URL}/${WABA_ID}/message_templates`,
-      templateData,
-      { headers }
-    );
-    return res.data;
-  } catch (error) {
-    throw error.response?.data || error;
-  }
-};
-
-/**
- * Fetch all templates or a specific one to check status
- */
-export const getTemplates = async () => {
-  try {
-    const res = await axios.get(`${BASE_URL}/${WABA_ID}/message_templates`, { headers });
-    return res.data;
-  } catch (error) {
-    throw error.response?.data || error;
-  }
-};export const sendTextMessage = async (to, text) => {
-  try {
-    const res = await axios.post(
-      `${BASE_URL}/${PHONE_NUMBER_ID}/messages`,
+      `${BASE_URL}/${account.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to: to,
+        to,
         type: "text",
         text: { body: text },
       },
-      { headers }
+      { headers: getHeaders(account.accessToken) }
     );
     return res.data;
   } catch (error) {
-    throw error.response?.data || error;
+    throw error;
   }
 };
 
-export const sendImageMessage = async (to, imageUrl, caption = "") => {
+export const sendImageMessage = async (account, to, imageUrl, caption = "") => {
   try {
     const res = await axios.post(
-      `${BASE_URL}/${PHONE_NUMBER_ID}/messages`,
+      `${BASE_URL}/${account.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         recipient_type: "individual",
         to,
         type: "image",
-        image: {
-          link: imageUrl,
-          caption: caption
-        },
+        image: { link: imageUrl, caption },
       },
-      { headers }
+      { headers: getHeaders(account.accessToken) }
     );
     return res.data;
   } catch (error) {
-    throw error.response?.data || error;
+    throw error;
   }
 };
 
-export const deleteMetaTemplate = async (templateName) => {
+export const getMediaUrl = async (account, mediaId) => {
   try {
-    const res = await axios.delete(
-      `${BASE_URL}/${WABA_ID}/message_templates?name=${templateName}`,
-      { headers }
-    );
-    return res.data;
-  } catch (error) {
-    throw error.response?.data || error;
-  }
-};
-
-/**
- * Get the download URL for a media file from WhatsApp
- */
-export const getMediaUrl = async (mediaId) => {
-  try {
-    const res = await axios.get(`${BASE_URL}/${mediaId}`, { headers });
+    const res = await axios.get(`${BASE_URL}/${mediaId}`, { headers: getHeaders(account.accessToken) });
     return res.data.url;
   } catch (error) {
-    throw error.response?.data || error;
+    throw error;
   }
 };
 
-/**
- * Verify if a list of numbers are on WhatsApp
- */
-export const verifyContacts = async (phones) => {
+export const getTemplates = async (account) => {
   try {
-    // Meta requires format: ["91980...", "+1650..."]
+    const res = await axios.get(`${BASE_URL}/${account.wabaId}/message_templates`, { headers: getHeaders(account.accessToken) });
+    return res.data.data || [];
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const createTemplate = async (account, templateData) => {
+  try {
     const res = await axios.post(
-      `${BASE_URL}/${PHONE_NUMBER_ID}/contacts`,
+      `${BASE_URL}/${account.wabaId}/message_templates`,
+      templateData,
+      { headers: getHeaders(account.accessToken) }
+    );
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const deleteMetaTemplate = async (account, templateName) => {
+  try {
+    const res = await axios.delete(
+      `${BASE_URL}/${account.wabaId}/message_templates?name=${templateName}`,
+      { headers: getHeaders(account.accessToken) }
+    );
+    return res.data;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const verifyContacts = async (account, phones) => {
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${account.phoneNumberId}/contacts`,
       {
         blocking: "wait",
         contacts: phones,
         force_check: false
       },
-      { headers }
+      { headers: getHeaders(account.accessToken) }
     );
     return res.data.contacts;
   } catch (error) {
-    throw error.response?.data || error;
+    throw error;
   }
 };

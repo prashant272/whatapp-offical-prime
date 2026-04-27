@@ -1,6 +1,7 @@
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import Contact from "../models/Contact.js";
+import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getMediaUrl } from "../services/whatsappService.js";
 import { getIO, smartEmit } from "../utils/socket.js";
@@ -31,8 +32,25 @@ export const handleWebhook = async (req, res) => {
   if (body.object === "whatsapp_business_account") {
     try {
       const value = body.entry?.[0]?.changes?.[0]?.value;
+      const metadata = value?.metadata;
       const message = value?.messages?.[0];
       const status = value?.statuses?.[0];
+
+      // Find which account this belongs to
+      const phoneNumberId = metadata?.phone_number_id;
+      console.log(`📩 Webhook received for Phone ID: ${phoneNumberId}`);
+      const account = await WhatsAppAccount.findOne({ phoneNumberId });
+      
+      if (!account) {
+        console.warn(`⚠️ No account found in DB for Phone ID: ${phoneNumberId}. Message ignored.`);
+        return res.sendStatus(200); 
+      }
+      console.log(`✅ Webhook matched to Account: ${account.name}`);
+      
+      if (!account && (message || status)) {
+        console.warn(`⚠️ Received message for unknown Phone Number ID: ${phoneNumberId}`);
+        // Optional: you could still process it, but let's stick to known accounts
+      }
 
       if (status) {
         console.log(`📈 Status Update: ${status.status} for ${status.id}`);
@@ -67,7 +85,7 @@ export const handleWebhook = async (req, res) => {
           bodyContent = media?.caption || `${type.charAt(0).toUpperCase() + type.slice(1)} received`;
           if (media?.id) {
             try {
-              mediaUrl = await getMediaUrl(media.id);
+              mediaUrl = await getMediaUrl(account, media.id);
             } catch (err) {
               console.error(`Error fetching ${type} URL:`, err);
             }
@@ -84,15 +102,16 @@ export const handleWebhook = async (req, res) => {
         const newMessage = new Message({
           messageId: message.id,
           from,
-          to: "me", // Changed from process.env.PHONE_NUMBER_ID for consistency
+          to: "me",
           body: bodyContent,
           type,
           mediaUrl,
-          direction: "inbound"
+          direction: "inbound",
+          whatsappAccountId: account?._id
         });
         await newMessage.save();
 
-        let conversation = await Conversation.findOne({ phone: from });
+        let conversation = await Conversation.findOne({ phone: from, whatsappAccountId: account?._id });
         let contact = await Contact.findOne({ phone: from });
         
         // Extract Profile Name from Meta Webhook
@@ -111,7 +130,11 @@ export const handleWebhook = async (req, res) => {
         }
 
         if (!conversation) {
-          conversation = new Conversation({ contact: contact._id, phone: from });
+          conversation = new Conversation({ 
+            contact: contact._id, 
+            phone: from,
+            whatsappAccountId: account?._id 
+          });
         }
         
         conversation.lastMessage = bodyContent;
@@ -128,7 +151,7 @@ export const handleWebhook = async (req, res) => {
 
         // 🤖 TRIGGER AUTOMATION (Chatbot)
         if (type === "text" || type === "interactive" || type === "button") {
-          processAutoReply(from, bodyContent);
+          processAutoReply(account, from, bodyContent);
         }
       }
       res.sendStatus(200);

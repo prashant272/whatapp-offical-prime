@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap } from "lucide-react";
-import axios from "axios";
-import { API_BASE } from "./api";
+import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap, Settings } from "lucide-react";
+import api from "./api";
 import TemplateManager from "./components/TemplateManager";
 import CampaignManager from "./components/CampaignManager";
 import ChatModule from "./components/ChatModule";
@@ -12,8 +11,10 @@ import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
 import DashboardHome from "./components/DashboardHome";
 import AutoReplyManager from "./components/AutoReplyManager";
+import WhatsAppAccountSettings from "./components/WhatsAppAccountSettings";
+import { WhatsAppAccountProvider } from "./WhatsAppAccountContext";
 
-function App() {
+function AppContent() {
   const [user, setUser] = useState(() => {
     const userInfo = localStorage.getItem("userInfo");
     return userInfo ? JSON.parse(userInfo) : null;
@@ -38,8 +39,7 @@ function App() {
     
     const fetchStats = async () => {
       try {
-        const config = { headers: { Authorization: `Bearer ${user.token}` } };
-        const res = await axios.get(`${API_BASE}/campaigns`, config);
+        const res = await api.get("/campaigns");
         const allCampaigns = Array.isArray(res.data) ? res.data : [];
         const sums = allCampaigns.reduce((acc, curr) => ({
           sent: acc.sent + (curr.sentCount || 0),
@@ -64,9 +64,9 @@ function App() {
     { id: "campaigns", label: "Campaigns", icon: Send, path: "/campaigns", roles: ["Admin", "Manager"] },
     { id: "chats", label: "Chats", icon: MessageCircle, path: "/chats", roles: ["Admin", "Manager", "Executive"] },
     { id: "automation", label: "Automation", icon: Zap, path: "/automation", roles: ["Admin", "Manager"] },
+    { id: "settings", label: "WhatsApp Setup", icon: Settings, path: "/settings", roles: ["Admin"] },
     { id: "activity", label: "Activity", icon: History, path: "/activity", roles: ["Admin", "Manager"] },
     { id: "users", label: "Team", icon: UserPlus, path: "/users", roles: ["Admin"] },
-    { id: "analytics", label: "Analytics", icon: BarChart3, path: "/analytics", roles: ["Admin", "Manager"] },
   ];
 
   const isChatTab = location.pathname.startsWith("/chats");
@@ -82,7 +82,6 @@ function App() {
             handleLogout={handleLogout} 
           />
 
-          {/* Main Content Area */}
           <main className="main-content" style={{ marginLeft: isChatTab ? "70px" : "260px", padding: isChatTab ? "0" : "2rem", height: "100vh", overflow: isChatTab ? "hidden" : "auto", transition: "margin-left 0.3s ease" }}>
             <Routes>
               <Route path="/" element={<DashboardHome stats={stats} user={user} />} />
@@ -93,6 +92,7 @@ function App() {
               <Route path="/users" element={<UserManager />} />
               <Route path="/activity" element={<ActivityLog />} />
               <Route path="/automation" element={<AutoReplyManager />} />
+              <Route path="/settings" element={<WhatsAppAccountSettings />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </main>
@@ -102,5 +102,12 @@ function App() {
   );
 }
 
-export default App;
+function App() {
+  return (
+    <WhatsAppAccountProvider>
+      <AppContent />
+    </WhatsAppAccountProvider>
+  );
+}
 
+export default App;

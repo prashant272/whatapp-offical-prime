@@ -3,6 +3,7 @@ import Template from "../models/Template.js";
 import Contact from "../models/Contact.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
+import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import { throttleCampaign } from "../utils/messageThrottler.js";
 import { sendTemplateMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
@@ -11,45 +12,58 @@ import { getIO, smartEmit } from "../utils/socket.js";
 
 export const startCampaign = async (req, res) => {
   try {
-    let { name, templateName, contacts, templateComponents } = req.body;
+    let { name, templateName, contacts, templateComponents, whatsappAccountId } = req.body;
     
-    // 1. Normalize and De-duplicate contacts (Handle both string and object formats)
+    // 1. Identify Account
+    let account = null;
+    if (whatsappAccountId) {
+      account = await WhatsAppAccount.findById(whatsappAccountId);
+    }
+    
+    // Fallback to active account from middleware or default
+    if (!account) {
+      account = req.whatsappAccount;
+    }
+
+    if (!account) return res.status(400).json({ error: "No valid WhatsApp account found for this campaign" });
+
+    // 2. Normalize and De-duplicate contacts
     const rawPhones = contacts.map(c => typeof c === 'object' ? c.phone : c);
     const uniquePhones = [...new Set(rawPhones.map(phone => normalizePhone(phone)))];
     
-    console.log(`🚀 Campaign "${name}": Cleaned duplicates. ${contacts.length} -> ${uniquePhones.length} unique contacts.`);
+    console.log(`🚀 Campaign "${name}": Cleaning duplicates. ${contacts.length} -> ${uniquePhones.length} contacts. Using Account: ${account.name}`);
     
-    // Convert back to object format expected by throttleCampaign
     contacts = uniquePhones.map(phone => ({ phone }));
 
-    const template = await Template.findOne({ name: templateName });
-    if (!template) return res.status(404).json({ error: "Template not found" });
+    const template = await Template.findOne({ name: templateName, whatsappAccountId: account._id });
+    if (!template) return res.status(404).json({ error: "Template not found for this account" });
 
     const campaign = new Campaign({
       name,
       template: template._id,
+      whatsappAccountId: account._id,
       totalContacts: contacts.length,
       status: "RUNNING"
     });
     await campaign.save();
 
-    await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${contacts.length} contacts`, name);
+    await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${contacts.length} contacts from ${account.name}`, name);
 
+    // Run Throttler (Async)
     throttleCampaign(
+      account,
       contacts,
       templateName,
       sendTemplateMessage,
       async (success, failure, logs, latestLog) => {
         if (latestLog && latestLog.status === "sent") {
           const log = latestLog;
-          // Reconstruct a preview of the message for the chat history
           let messageBody = `Campaign [${name}]: ${templateName}`;
           
           if (template) {
             const bodyComp = template.components.find(c => c.type === "BODY");
             if (bodyComp && bodyComp.text) {
               let text = bodyComp.text;
-              // Simple replacement for logs (using values from templateComponents if available)
               if (templateComponents) {
                 const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
                 bodyParams.forEach((p, idx) => {
@@ -66,7 +80,6 @@ export const startCampaign = async (req, res) => {
             await contact.save();
           }
 
-          // Extract Header Image if any
           let mediaUrl = null;
           if (templateComponents) {
             const headerComp = templateComponents.find(c => c.type === "header");
@@ -77,15 +90,13 @@ export const startCampaign = async (req, res) => {
           }
 
           const newMessage = new Message({
-            messageId: log.messageId, // WAMID for status tracking
+            messageId: log.messageId,
             from: "me",
             to: log.phone,
             body: messageBody,
             type: "template",
-            templateData: {
-              name: templateName,
-              components: templateComponents
-            },
+            whatsappAccountId: account._id, // Multi-account support for messages
+            templateData: { name: templateName, components: templateComponents },
             mediaUrl: mediaUrl,
             direction: "outbound",
             status: "sent"
@@ -93,9 +104,10 @@ export const startCampaign = async (req, res) => {
           await newMessage.save();
 
           const updatedConv = await Conversation.findOneAndUpdate(
-            { phone: log.phone },
+            { phone: log.phone, whatsappAccountId: account._id },
             { 
               contact: contact._id,
+              whatsappAccountId: account._id,
               lastMessage: newMessage.body, 
               lastMessageTime: new Date(),
               unreadCount: 0
@@ -103,8 +115,7 @@ export const startCampaign = async (req, res) => {
             { upsert: true, new: true }
           ).populate("contact");
 
-          // Smart Notify UI about NEW MESSAGE from campaign
-          smartEmit("new_message", { message: newMessage, conversation: updatedConv });
+          smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
         }
         
         const currentStatus = (success + failure === contacts.length) ? "COMPLETED" : "RUNNING";
@@ -116,14 +127,14 @@ export const startCampaign = async (req, res) => {
           status: currentStatus
         });
 
-        // Emit Campaign Progress to UI
         const io = getIO();
         io.emit("campaign_progress", {
           campaignId: campaign._id,
           sentCount: success,
           failedCount: failure,
           status: currentStatus,
-          logs: logs
+          logs: logs,
+          whatsappAccountId: account._id
         });
       },
       templateComponents || [],
@@ -138,7 +149,10 @@ export const startCampaign = async (req, res) => {
 
 export const getAllCampaigns = async (req, res) => {
   try {
-    const campaigns = await Campaign.find().populate("template").sort({ createdAt: -1 });
+    const account = req.whatsappAccount;
+    const filter = account ? { whatsappAccountId: account._id } : {};
+    
+    const campaigns = await Campaign.find(filter).populate("template").sort({ createdAt: -1 });
     res.json(campaigns);
   } catch (error) {
     res.status(500).json({ error: error.message });

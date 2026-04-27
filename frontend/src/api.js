@@ -1,9 +1,29 @@
-// Centralized API configuration
-// In development, Vite proxies /api to the backend URL defined in .env
-// In production, we can use the VITE_API_URL if defined, otherwise fallback to /api (relative)
+import axios from "axios";
+
 export const API_BASE = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : "/api";
 
-// If you prefer to ALWAYS use the proxy in dev and ONLY use full URL in prod:
-// export const API_BASE = import.meta.env.PROD ? (import.meta.env.VITE_API_URL + "/api") : "/api";
+const api = axios.create({
+  baseURL: API_BASE
+});
 
-export default API_BASE;
+// Interceptor to add Auth and Account headers
+api.interceptors.request.use((config) => {
+  // Get token from userInfo object in localStorage
+  const userInfo = localStorage.getItem("userInfo");
+  if (userInfo) {
+    const parsed = JSON.parse(userInfo);
+    if (parsed.token) {
+      config.headers.Authorization = `Bearer ${parsed.token}`;
+    }
+  }
+  
+  const accountId = localStorage.getItem("whatsappAccountId");
+  // Only set if not already present to allow overrides in specific components
+  if (accountId && !config.headers["x-whatsapp-account-id"]) {
+    config.headers["x-whatsapp-account-id"] = accountId;
+  }
+  
+  return config;
+});
+
+export default api;
