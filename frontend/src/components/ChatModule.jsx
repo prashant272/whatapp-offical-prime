@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
-import { Send, User, Search, MoreVertical, MessageSquare, Clock, Calendar, Tag, ChevronDown, Check, AlertCircle, FileText, Plus, Paperclip, Loader2 } from "lucide-react";
+import { 
+  Send, User, Search, MoreVertical, MessageSquare, Clock, 
+  Calendar, Tag, ChevronDown, Check, AlertCircle, FileText, 
+  Plus, Paperclip, Loader2, Trash2 
+} from "lucide-react";
 import { io } from "socket.io-client";
 
 import { useParams, useNavigate } from "react-router-dom";
@@ -55,6 +59,24 @@ const ChatModule = () => {
 
   const currentUser = JSON.parse(localStorage.getItem("userInfo"));
   const config = { headers: { Authorization: `Bearer ${currentUser?.token}` } };
+
+  const [customStatuses, setCustomStatuses] = useState([]);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [newStatusName, setNewStatusName] = useState("");
+
+  const [sectors, setSectors] = useState([]);
+  const [showSectorModal, setShowSectorModal] = useState(false);
+  const [newSectorName, setNewSectorName] = useState("");
+
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [manageType, setManageType] = useState("status"); // 'status' or 'sector'
+
+  // Filters State
+  const [filter, setFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sectorFilter, setSectorFilter] = useState("all");
+  const [userFilter, setUserFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (scrollRef.current && messages.length > prevMsgCount) {
@@ -112,7 +134,7 @@ const ChatModule = () => {
   const fetchConversations = async (page = 1) => {
     try {
       setIsFetchingConvs(true);
-      const res = await api.get(`/conversations?page=${page}&limit=100`);
+      const res = await api.get(`/conversations?page=${page}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`);
       const newData = res.data.conversations || [];
       
       if (page === 1) {
@@ -142,9 +164,24 @@ const ChatModule = () => {
     
     // Set fetching flag IMMEDIATELY to prevent double-triggers
     setIsFetchingConvs(true);
-    setConvPage(nextPage);
     
-    await fetchConversations(nextPage);
+    try {
+      const res = await api.get(`/conversations?page=${nextPage}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`);
+      const newData = res.data.conversations || [];
+      
+      setConversations(prev => {
+        const existingIds = new Set(prev.map(c => c._id));
+        const uniqueNew = newData.filter(c => !existingIds.has(c._id));
+        return [...prev, ...uniqueNew];
+      });
+      
+      setConvPage(nextPage);
+      setHasMoreConvs(res.data.hasMore);
+    } catch (err) {
+      console.error("Error fetching more conversations:", err);
+    } finally {
+      setIsFetchingConvs(false);
+    }
   };
 
   const handleSidebarScroll = (e) => {
@@ -209,24 +246,89 @@ const ChatModule = () => {
     }
   };
 
+  const fetchStatuses = async () => {
+    try {
+      const res = await api.get("/statuses");
+      setCustomStatuses(res.data);
+    } catch (err) {
+      console.error("Error fetching statuses:", err);
+    }
+  };
+
+  const handleAddStatus = async () => {
+    if (!newStatusName.trim()) return;
+    try {
+      await api.post("/statuses", { name: newStatusName });
+      setNewStatusName("");
+      setShowStatusModal(false);
+      fetchStatuses();
+    } catch (err) {
+      alert("Error adding status: " + err.message);
+    }
+  };
+
+  const handleDeleteStatus = async (id) => {
+    if (!window.confirm("Delete this status?")) return;
+    try {
+      await api.delete(`/statuses/${id}`);
+      fetchStatuses();
+    } catch (err) {
+      alert("Error deleting status: " + err.message);
+    }
+  };
+
+  const fetchSectors = async () => {
+    try {
+      const res = await api.get("/sectors");
+      setSectors(res.data);
+    } catch (err) {
+      console.error("Error fetching sectors:", err);
+    }
+  };
+
+  const handleAddSector = async () => {
+    if (!newSectorName.trim()) return;
+    try {
+      await api.post("/sectors", { name: newSectorName });
+      setNewSectorName("");
+      setShowSectorModal(false);
+      fetchSectors();
+    } catch (err) {
+      alert("Error adding sector: " + err.message);
+    }
+  };
+
+  const handleDeleteSector = async (id) => {
+    if (!window.confirm("Delete this sector?")) return;
+    try {
+      await api.delete(`/sectors/${id}`);
+      fetchSectors();
+    } catch (err) {
+      alert("Error deleting sector: " + err.message);
+    }
+  };
+
+  // Trigger fresh fetch when filters or account change
+  useEffect(() => {
+    setConversations([]); // Clear list for fresh start
+    setConvPage(1);
+    fetchConversations(1);
+  }, [statusFilter, userFilter, sectorFilter, activeAccount]);
+
   // Socket.io Real-time connection
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [convs, temps, pres, execs] = await Promise.all([
-          api.get(`/conversations?page=1&limit=100`),
+        const [temps, pres, execs, stats, sects] = await Promise.all([
           api.get(`/templates`),
           api.get(`/presets`),
-          api.get(`/users`).catch(() => ({ data: [] }))
+          api.get(`/users`).catch(() => ({ data: [] })),
+          api.get(`/statuses`).catch(() => ({ data: [] })),
+          api.get(`/sectors`).catch(() => ({ data: [] }))
         ]);
         
-        const initialConvs = Array.isArray(convs.data.conversations) ? convs.data.conversations : [];
-        console.log("📊 Received Conversations:", initialConvs.length);
-        console.log("🆔 Active Account:", activeAccount?.name, activeAccount?._id);
-        
-        setConversations(initialConvs);
-        setHasMoreConvs(convs.data.hasMore);
-        setConvPage(1);
+        setCustomStatuses(stats.data);
+        setSectors(sects.data);
         
         setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
         setPresets(Array.isArray(pres.data) ? pres.data : []);
@@ -346,18 +448,20 @@ const ChatModule = () => {
 
   // Socket.io selectedChat tracking is now handled by derived state
 
-
-
-  const handleAssign = async (userId) => {
+  const handleAssign = async (userId, sector) => {
     if (!selectedChat) return;
     try {
-      await axios.post(`${API_BASE}/conversations/assign`, {
+      const res = await api.post(`/conversations/assign`, {
         phone: selectedChat.phone,
-        userId: userId || null
-      }, config);
-      fetchConversations();
+        userId: userId !== undefined ? userId : selectedChat.assignedTo?._id,
+        sector: sector !== undefined ? sector : selectedChat.sector
+      });
+      // Update local state
+      setConversations(prev => prev.map(c => 
+        c.phone === selectedChat.phone ? { ...c, assignedTo: res.data.conversation.assignedTo, sector: res.data.conversation.sector } : c
+      ));
     } catch (err) {
-      alert("Error assigning conversation");
+      alert("Error assigning: " + err.message);
     }
   };
 
@@ -474,7 +578,10 @@ const ChatModule = () => {
       }, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
-      fetchConversations();
+      // Update local state instead of full fetch
+      setConversations(prev => prev.map(c => 
+        c.phone === selectedChat.phone ? { ...c, status } : c
+      ));
     } catch (err) {
       alert("Error updating status: " + err.message);
     }
@@ -610,6 +717,8 @@ const ChatModule = () => {
   };
 
   const getStatusColor = (status) => {
+    const custom = customStatuses.find(s => s.name === status);
+    if (custom && custom.color) return custom.color;
     switch (status) {
       case "Interested": return "#25d366";
       case "Not Interested": return "#ff4757";
@@ -620,10 +729,6 @@ const ChatModule = () => {
   };
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [userFilter, setUserFilter] = useState("All");
-  const [searchQuery, setSearchQuery] = useState("");
 
   const unreadCountTotal = useMemo(() => conversations.filter(c => c.unreadCount > 0).length, [conversations]);
 
@@ -650,12 +755,12 @@ const ChatModule = () => {
     }
 
     // 2. Status Filter
-    if (statusFilter !== "All") {
+    if (statusFilter && statusFilter.toLowerCase() !== "all") {
       result = result.filter(c => c.status === statusFilter);
     }
 
     // 3. User Filter
-    if (userFilter !== "All") {
+    if (userFilter && userFilter.toLowerCase() !== "all") {
       if (userFilter === "Unassigned") {
         result = result.filter(c => !c.assignedTo);
       } else {
@@ -663,6 +768,11 @@ const ChatModule = () => {
           (typeof c.assignedTo === 'object' ? c.assignedTo?._id : c.assignedTo) === userFilter
         );
       }
+    }
+    
+    // Sector Filter
+    if (sectorFilter !== "all") {
+      result = result.filter(c => c.sector === sectorFilter);
     }
 
     // 4. Search Query
@@ -679,7 +789,7 @@ const ChatModule = () => {
     // result = result.filter(c => ...);
 
     return result;
-  }, [conversations, filter, statusFilter, userFilter, searchQuery]);
+  }, [conversations, filter, statusFilter, sectorFilter, userFilter, searchQuery]);
 
   return (
     <div className="chat-container" style={{
@@ -842,53 +952,66 @@ const ChatModule = () => {
             </button>
           </div>
 
-          {/* Restored Status and User Filters */}
-          <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-            <select 
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+          {/* Filter Section - Compact One-Line Slider */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", padding: "0 4px" }}>
+            <div 
+              id="sidebar-filter-slider"
               style={{ 
-                flex: 1, 
-                padding: "8px 10px", 
-                background: "#ffffff", 
-                border: "1px solid #e9edef", 
-                borderRadius: "8px", 
-                fontSize: "0.75rem", 
-                color: "#54656f",
-                outline: "none",
-                cursor: "pointer",
-                fontWeight: "500"
+                display: "flex", 
+                gap: "8px", 
+                overflowX: "auto", 
+                scrollbarWidth: "none", 
+                msOverflowStyle: "none",
+                flex: 1,
+                padding: "4px 0"
               }}
             >
-              <option value="All">Status: All</option>
-              {STATUS_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
-              ))}
-            </select>
-
-            {currentUser.role !== "Executive" && (
               <select 
-                value={userFilter}
-                onChange={(e) => setUserFilter(e.target.value)}
-                style={{ 
-                  flex: 1, 
-                  padding: "8px 10px", 
-                  background: "#ffffff", 
-                  border: "1px solid #e9edef", 
-                  borderRadius: "8px", 
-                  fontSize: "0.75rem", 
-                  color: "#54656f",
-                  outline: "none",
-                  cursor: "pointer",
-                  fontWeight: "500"
-                }}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
               >
-                <option value="all">User: All</option>
-                {executives.map(ex => (
-                  <option key={ex._id} value={ex._id}>{ex.name}</option>
+                <option value="all">Status: All</option>
+                {customStatuses.map(s => (
+                  <option key={s.name} value={s.name}>{s.name}</option>
                 ))}
               </select>
-            )}
+
+              {currentUser.role !== "Executive" && (
+                <>
+                  <select 
+                    value={userFilter}
+                    onChange={(e) => setUserFilter(e.target.value)}
+                    style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
+                  >
+                    <option value="all">User: All</option>
+                    {executives.map(ex => (
+                      <option key={ex._id} value={ex._id}>{ex.name}</option>
+                    ))}
+                  </select>
+
+                  <select 
+                    value={sectorFilter}
+                    onChange={(e) => setSectorFilter(e.target.value)}
+                    style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
+                  >
+                    <option value="all">Sector: All</option>
+                    {sectors.map(s => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </div>
+
+            {/* Unified Manage Button */}
+            <button 
+              onClick={() => setShowManageModal(true)}
+              style={{ background: "#00a884", color: "white", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+              title="Add Status or Sector"
+            >
+              <Plus size={18} />
+            </button>
           </div>
         </div>
 
@@ -1001,9 +1124,9 @@ const ChatModule = () => {
                 {/* Assignment Dropdown */}
                 {currentUser.role !== "Executive" && (
                   <select 
-                    style={{ background: "#ffffff", color: "var(--text-primary)", border: "1px solid #e9edef", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", outline: "none" }}
-                    value={selectedChat.assignedTo?._id || selectedChat.assignedTo || ""}
-                    onChange={(e) => handleAssign(e.target.value)}
+                    style={{ border: "1px solid #e9edef", borderRadius: "10px", padding: "6px 10px", fontSize: "0.8rem", outline: "none", cursor: "pointer", background: "white", color: "#54656f", fontWeight: "600" }}
+                    value={selectedChat.assignedTo?._id || ""}
+                    onChange={(e) => handleAssign(e.target.value, undefined)}
                   >
                     <option value="">Assign To...</option>
                     {executives.map(ex => (
@@ -1011,15 +1134,39 @@ const ChatModule = () => {
                     ))}
                   </select>
                 )}
+                
+                {/* Sector Dropdown */}
+                <select 
+                  style={{ border: "1px solid #e9edef", borderRadius: "10px", padding: "6px 10px", fontSize: "0.8rem", outline: "none", cursor: "pointer", background: "white", color: "#00a884", fontWeight: "600" }}
+                  value={selectedChat.sector || "Unassigned"}
+                  onChange={(e) => handleAssign(undefined, e.target.value)}
+                >
+                  <option value="Unassigned">Sector...</option>
+                  {sectors.map(s => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
 
                 {/* Status Dropdown */}
                 <select 
-                  style={{ background: getStatusColor(selectedChat.status), color: "#ffffff", border: "none", padding: "6px 10px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", outline: "none" }}
+                  className="status-select"
                   value={selectedChat.status || "New"}
                   onChange={(e) => handleUpdateStatus(e.target.value)}
+                  style={{
+                    padding: "6px 14px",
+                    borderRadius: "20px",
+                    fontSize: "0.85rem",
+                    fontWeight: "600",
+                    border: "none",
+                    background: getStatusColor(selectedChat.status),
+                    color: "white",
+                    cursor: "pointer",
+                    outline: "none",
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                  }}
                 >
-                  {STATUS_OPTIONS.map(opt => (
-                    <option key={opt} value={opt}>{opt}</option>
+                  {customStatuses.map(s => (
+                    <option key={s.name} value={s.name} style={{ background: "white", color: "#333" }}>{s.name}</option>
                   ))}
                 </select>
 
@@ -1444,6 +1591,113 @@ const ChatModule = () => {
                 Start Chatting
               </button>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Status Management Modal */}
+      {showStatusModal && (
+        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, backdropFilter: "blur(5px)" }}>
+          <div className="glass-card" style={{ width: "400px", padding: "2rem", position: "relative" }}>
+            <h3 style={{ marginBottom: "1.5rem" }}>Manage Statuses</h3>
+            
+            <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
+              <input 
+                type="text" 
+                placeholder="New Status Name..." 
+                value={newStatusName}
+                onChange={(e) => setNewStatusName(e.target.value)}
+                style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
+              />
+              <button onClick={handleAddStatus} className="btn-primary" style={{ padding: "10px 20px" }}>Add</button>
+            </div>
+
+            <div style={{ maxHeight: "250px", overflowY: "auto" }}>
+              {customStatuses.map(s => (
+                <div key={s._id || s.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#f8fafc", borderRadius: "8px", marginBottom: "8px", border: "1px solid #e2e8f0" }}>
+                  <span style={{ fontSize: "0.9rem", fontWeight: "600" }}>{s.name} {s.isDefault && <small style={{ color: "#94a3b8" }}>(Default)</small>}</span>
+                  {!s.isDefault && (
+                    <button onClick={() => handleDeleteStatus(s._id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#ef4444" }}>
+                      <Trash2 size={16} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <button onClick={() => setShowStatusModal(false)} className="btn-secondary" style={{ width: "100%", marginTop: "1.5rem" }}>Close</button>
+          </div>
+        </div>
+      )}
+      {/* Unified Management Modal (Status & Sector) */}
+      {showManageModal && (
+        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, backdropFilter: "blur(5px)" }}>
+          <div className="glass-card" style={{ width: "450px", padding: "2rem", position: "relative" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <h3 style={{ margin: 0 }}>Global Management</h3>
+              <select 
+                value={manageType}
+                onChange={(e) => setManageType(e.target.value)}
+                style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "0.9rem", fontWeight: "600", background: "#f0f2f5" }}
+              >
+                <option value="status">Manage Statuses</option>
+                <option value="sector">Manage Sectors</option>
+              </select>
+            </div>
+            
+            {manageType === "status" ? (
+              <>
+                <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
+                  <input 
+                    type="text" 
+                    placeholder="New Status Name..." 
+                    value={newStatusName}
+                    onChange={(e) => setNewStatusName(e.target.value)}
+                    style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
+                  />
+                  <button onClick={handleAddStatus} className="btn-primary" style={{ padding: "10px 20px" }}>Add</button>
+                </div>
+                <div style={{ maxHeight: "250px", overflowY: "auto", border: "1px solid #eee", borderRadius: "10px", padding: "10px" }}>
+                  {customStatuses.map(s => (
+                    <div key={s._id || s.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", background: "#f8fafc", borderRadius: "8px", marginBottom: "8px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: s.color || "#3498db" }}></div>
+                        <span style={{ fontSize: "0.9rem", fontWeight: "600" }}>{s.name}</span>
+                      </div>
+                      {!s.isDefault && (
+                        <button onClick={() => handleDeleteStatus(s._id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#ef4444" }}>
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
+                  <input 
+                    type="text" 
+                    placeholder="New Sector Name..." 
+                    value={newSectorName}
+                    onChange={(e) => setNewSectorName(e.target.value)}
+                    style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
+                  />
+                  <button onClick={handleAddSector} className="btn-primary" style={{ padding: "10px 20px" }}>Add</button>
+                </div>
+                <div style={{ maxHeight: "250px", overflowY: "auto", border: "1px solid #eee", borderRadius: "10px", padding: "10px" }}>
+                  {sectors.map(s => (
+                    <div key={s._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", background: "#f8fafc", borderRadius: "8px", marginBottom: "8px" }}>
+                      <span style={{ fontSize: "0.9rem", fontWeight: "600" }}>{s.name}</span>
+                      <button onClick={() => handleDeleteSector(s._id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#ef4444" }}>
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <button onClick={() => setShowManageModal(false)} className="btn-secondary" style={{ width: "100%", marginTop: "1.5rem" }}>Close</button>
           </div>
         </div>
       )}

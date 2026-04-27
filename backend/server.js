@@ -17,6 +17,8 @@ import presetRoutes from "./routes/presetRoutes.js";
 import autoReplyRoutes from "./routes/autoReplyRoutes.js";
 import mediaRoutes from "./routes/mediaRoutes.js";
 import whatsAppAccountRoutes from "./routes/whatsAppAccountRoutes.js";
+import statusRoutes from "./routes/statusRoutes.js";
+import sectorRoutes from "./routes/sectorRoutes.js";
 import { protect, restrictTo } from "./middleware/authMiddleware.js";
 import { attachWhatsAppAccount } from "./middleware/accountMiddleware.js";
 import { errorHandler } from "./utils/errorHandler.js";
@@ -57,6 +59,8 @@ app.use("/api/presets", presetRoutes);
 app.use("/api/auto-replies", autoReplyRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/whatsapp-accounts", whatsAppAccountRoutes);
+app.use("/api/statuses", statusRoutes);
+app.use("/api/sectors", sectorRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({ 

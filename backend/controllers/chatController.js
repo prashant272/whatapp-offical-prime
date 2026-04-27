@@ -25,9 +25,12 @@ export const getConversations = async (req, res) => {
       };
     }
 
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const skip = (page - 1) * limit;
+    const { page = 1, limit = 20, status, assignedTo, sector } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    if (status && status.toLowerCase() !== "all") filter.status = status;
+    if (assignedTo && assignedTo.toLowerCase() !== "all") filter.assignedTo = assignedTo;
+    if (sector && sector.toLowerCase() !== "all") filter.sector = sector;
 
     if (req.user.role === "Executive") {
       filter.assignedTo = req.user._id;
@@ -258,17 +261,22 @@ export const sendChatImageMessage = async (req, res) => {
 
 export const assignConversation = async (req, res) => {
   try {
-    const { phone, userId } = req.body;
+    const { phone, userId, sector } = req.body;
     const account = req.whatsappAccount;
+
+    const updateData = {};
+    if (userId !== undefined) updateData.assignedTo = userId || null;
+    if (sector !== undefined) updateData.sector = sector || "Unassigned";
 
     const conversation = await Conversation.findOneAndUpdate(
       { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
-      { assignedTo: userId || null },
+      updateData,
       { new: true }
     ).populate("assignedTo", "name");
     
     const assignedName = conversation.assignedTo ? conversation.assignedTo.name : "Unassigned";
-    await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName}`, phone);
+    const sectorName = conversation.sector || "Unassigned";
+    await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName})`, phone);
 
     res.json({ message: "Conversation assigned", conversation });
   } catch (error) {

@@ -9,11 +9,8 @@ const conversationSchema = new mongoose.Schema({
   unreadCount: { type: Number, default: 0 },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
-  status: { 
-    type: String, 
-    enum: ["New", "Interested", "Not Interested", "Follow-up", "Closed"], 
-    default: "New" 
-  }
+  status: { type: String, default: "New" },
+  sector: { type: String, default: "Unassigned" }
 }, { timestamps: true });
 
 conversationSchema.index({ phone: 1, whatsappAccountId: 1 }, { unique: true });
