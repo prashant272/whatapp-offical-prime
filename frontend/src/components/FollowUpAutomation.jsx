@@ -4,7 +4,6 @@ import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 import { Plus, Trash2, Clock, MessageSquare, PlayCircle, PauseCircle } from "lucide-react";
 
 const FollowUpAutomation = () => {
-  const { activeAccount } = useWhatsAppAccount();
   const [rules, setRules] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -20,7 +19,6 @@ const FollowUpAutomation = () => {
   });
 
   const fetchRulesAndStatuses = async () => {
-    if (!activeAccount) return;
     setLoading(true);
     try {
       const [rulesRes, statusesRes] = await Promise.all([
@@ -38,7 +36,7 @@ const FollowUpAutomation = () => {
 
   useEffect(() => {
     fetchRulesAndStatuses();
-  }, [activeAccount]);
+  }, []);
 
   const handleCreateRule = async (e) => {
     e.preventDefault();
@@ -72,10 +70,6 @@ const FollowUpAutomation = () => {
       alert("Error deleting rule: " + err.message);
     }
   };
-
-  if (!activeAccount) {
-    return <div style={{ padding: "2rem" }}>Please select a WhatsApp account first.</div>;
-  }
 
   return (
     <div className="follow-up-automation">

@@ -2,8 +2,7 @@ import FollowUpRule from "../models/FollowUpRule.js";
 
 export const getFollowUpRules = async (req, res) => {
   try {
-    const filter = req.whatsappAccount ? { whatsappAccountId: req.whatsappAccount._id } : {};
-    const rules = await FollowUpRule.find(filter).sort({ createdAt: -1 });
+    const rules = await FollowUpRule.find({}).sort({ createdAt: -1 });
     res.json(rules);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -13,10 +12,6 @@ export const getFollowUpRules = async (req, res) => {
 export const createFollowUpRule = async (req, res) => {
   try {
     const { name, status, messageText, delayDays, delayHours, delayMinutes, active } = req.body;
-    
-    if (!req.whatsappAccount) {
-      return res.status(400).json({ error: "WhatsApp Account context required" });
-    }
 
     const newRule = new FollowUpRule({
       name,
@@ -25,7 +20,6 @@ export const createFollowUpRule = async (req, res) => {
       delayDays: Number(delayDays) || 0,
       delayHours: Number(delayHours) || 0,
       delayMinutes: Number(delayMinutes) || 0,
-      whatsappAccountId: req.whatsappAccount._id,
       active: active !== undefined ? active : true
     });
 
@@ -39,8 +33,8 @@ export const createFollowUpRule = async (req, res) => {
 export const updateFollowUpRule = async (req, res) => {
   try {
     const { id } = req.params;
-    const rule = await FollowUpRule.findOneAndUpdate(
-      { _id: id, whatsappAccountId: req.whatsappAccount._id },
+    const rule = await FollowUpRule.findByIdAndUpdate(
+      id,
       req.body,
       { new: true }
     );
@@ -54,7 +48,7 @@ export const updateFollowUpRule = async (req, res) => {
 export const deleteFollowUpRule = async (req, res) => {
   try {
     const { id } = req.params;
-    const rule = await FollowUpRule.findOneAndDelete({ _id: id, whatsappAccountId: req.whatsappAccount._id });
+    const rule = await FollowUpRule.findByIdAndDelete(id);
     if (!rule) return res.status(404).json({ error: "Rule not found" });
     res.json({ message: "Rule deleted successfully" });
   } catch (error) {

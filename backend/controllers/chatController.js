@@ -147,6 +147,12 @@ export const sendMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    if (updatedConv && updatedConv.contact) {
+      await Contact.findByIdAndUpdate(updatedConv.contact, {
+        whatsappAccountId: account._id
+      });
+    }
+
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
     await logActivity(req.user._id, "SEND_MESSAGE", `Sent text message: ${body.substring(0, 50)}...`, to);
@@ -164,14 +170,18 @@ export const updateConversationStatus = async (req, res) => {
     
     const conversation = await Conversation.findOneAndUpdate(
       { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
-      { status },
+      { 
+        status,
+        whatsappAccountId: account?._id 
+      },
       { new: true }
     );
 
     if (conversation && conversation.contact) {
       await Contact.findByIdAndUpdate(conversation.contact, {
         status: status,
-        statusUpdatedAt: new Date()
+        statusUpdatedAt: new Date(),
+        whatsappAccountId: account?._id
       });
     }
 

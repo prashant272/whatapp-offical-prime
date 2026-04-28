@@ -7,7 +7,7 @@ const followUpRuleSchema = new mongoose.Schema({
   delayDays: { type: Number, default: 0 },
   delayHours: { type: Number, default: 0 },
   delayMinutes: { type: Number, default: 0 },
-  whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount", required: true },
+  whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
   active: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now },
 });
