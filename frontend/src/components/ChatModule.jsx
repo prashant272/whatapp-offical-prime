@@ -35,8 +35,10 @@ const ChatModule = () => {
       return { phone, status: "New", isNew: true, whatsappAccountId: activeAccount?._id };
     }
     const chat = conversations.find(c => c._id === chatId);
+    
+    // Fallback: If a customer is from the old system and doesn't have an account ID yet,
+    // we temporarily assign them the currently viewed account ID so messages can be sent.
     if (chat && !chat.whatsappAccountId) {
-      // Fallback for legacy chats
       chat.whatsappAccountId = activeAccount?._id;
     }
     return chat;
@@ -349,8 +351,8 @@ const ChatModule = () => {
 
     socket.on("new_message", ({ message, conversation }) => {
       // 1. Update Conversations List (STRICT MATCH: Phone AND Account ID)
+      // This ensures we only show the new message in the sidebar if it belongs to the exact account we are viewing.
       setConversations(prev => {
-        // We find the exact match for this message
         const index = prev.findIndex(c => 
           c.phone === conversation.phone && 
           String(c.whatsappAccountId) === String(conversation.whatsappAccountId)

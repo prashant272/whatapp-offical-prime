@@ -132,21 +132,21 @@ export const sendMessage = async (req, res) => {
     });
     await newMessage.save();
 
-    // Update conversation (check for existing with accountId OR null if default)
-    let convFilter = { phone: to, whatsappAccountId: account._id };
-    if (account.isDefault) {
-      const existing = await Conversation.findOne({ phone: to, whatsappAccountId: account._id });
-      if (!existing) {
-        convFilter = { phone: to, $or: [{ whatsappAccountId: { $exists: false } }, { whatsappAccountId: null }] };
-      }
-    }
-
+    // Step 4: Update the Conversation in the Database
+    // We look for an existing conversation for this phone that either belongs to this account or is unassigned (null).
     const updatedConv = await Conversation.findOneAndUpdate(
-      convFilter,
-      { lastMessage: body, lastMessageTime: new Date(), unreadCount: 0, whatsappAccountId: account._id },
+      { phone: to, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
+      { 
+        lastMessage: body, 
+        lastMessageTime: new Date(), 
+        unreadCount: 0, 
+        whatsappAccountId: account._id // Claim it
+      },
       { upsert: true, new: true }
     );
 
+    // Step 5: Claim the Customer! 
+    // This ensures future automated follow-ups will strictly use this specific account to send messages.
     if (updatedConv && updatedConv.contact) {
       await Contact.findByIdAndUpdate(updatedConv.contact, {
         whatsappAccountId: account._id
@@ -166,22 +166,26 @@ export const sendMessage = async (req, res) => {
 export const updateConversationStatus = async (req, res) => {
   try {
     const { phone, status } = req.body;
-    const account = req.whatsappAccount;
+    const account = req.whatsappAccount; // The account currently selected in the UI
     
+    // Step 1: Update the Status in the Conversation (so it shows in the Chat List).
+    // If the conversation is unassigned (legacy/null), this claims ownership of it for the currently active account.
     const conversation = await Conversation.findOneAndUpdate(
       { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
       { 
-        status,
-        whatsappAccountId: account?._id 
+        status, // Set the new status (e.g. "Interested")
+        whatsappAccountId: account?._id // Claim it for this account
       },
       { new: true }
     );
 
+    // Step 2: Update the Status in the Contact record too.
+    // This is vital because the Follow-up Cron Job looks at the Contact's status and account!
     if (conversation && conversation.contact) {
       await Contact.findByIdAndUpdate(conversation.contact, {
         status: status,
-        statusUpdatedAt: new Date(),
-        whatsappAccountId: account?._id
+        statusUpdatedAt: new Date(), // Record the exact time we changed the status (used by Cron to calculate delay)
+        whatsappAccountId: account?._id // Claim the contact for this account
       });
     }
 

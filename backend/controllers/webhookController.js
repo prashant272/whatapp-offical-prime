@@ -111,8 +111,14 @@ export const handleWebhook = async (req, res) => {
         });
         await newMessage.save();
 
-        let conversation = await Conversation.findOne({ phone: from, whatsappAccountId: account?._id });
+        // Step 1: Find or Create Contact (Always normalize phone)
         let contact = await Contact.findOne({ phone: from });
+        
+        // Step 2: Find existing Conversation (Checking both current account and unassigned/legacy)
+        let conversation = await Conversation.findOne({ 
+          phone: from, 
+          $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] 
+        });
         
         // Extract Profile Name from Meta Webhook
         const profileName = value?.contacts?.[0]?.profile?.name;
@@ -127,19 +133,20 @@ export const handleWebhook = async (req, res) => {
           contact.name = profileName;
         }
 
-        // Process keywords for status and blocking
+        // Step 3: Check if the user typed "yes", "no", or "stop".
+        // This is a built-in hardcoded automation to automatically update customer status.
         const textContent = bodyContent.trim().toLowerCase();
         let statusUpdated = false;
         if (textContent === "yes") {
           contact.status = "Interested";
-          contact.statusUpdatedAt = new Date();
+          contact.statusUpdatedAt = new Date(); // Record time so the Follow-up Cron knows when to start counting
           statusUpdated = true;
         } else if (textContent === "no") {
           contact.status = "Not Interested";
           contact.statusUpdatedAt = new Date();
           statusUpdated = true;
         } else if (textContent === "stop") {
-          contact.isBlocked = true;
+          contact.isBlocked = true; // Prevents the Cron Job and Campaigns from messaging this number
         }
 
         await contact.save();
@@ -148,16 +155,19 @@ export const handleWebhook = async (req, res) => {
           conversation = new Conversation({ 
             contact: contact._id, 
             phone: from,
-            whatsappAccountId: account?._id 
+            whatsappAccountId: account?._id,
+            status: contact.status || "New" // Sync status from contact if it's a fresh conversation record
           });
         }
         
+        // Step 4: Update the Conversation and CLAIM it for this account
+        conversation.whatsappAccountId = account?._id;
         conversation.lastMessage = bodyContent;
         conversation.lastMessageTime = new Date();
         conversation.lastCustomerMessageAt = new Date();
         conversation.unreadCount += 1;
         
-        // Sync status if it was updated via keyword
+        // Step 5: If the status changed because they typed "yes" or "no", update the Conversation status too!
         if (statusUpdated) {
           conversation.status = contact.status;
         }
@@ -167,10 +177,11 @@ export const handleWebhook = async (req, res) => {
         // Populate contact before emitting
         const populatedConv = await Conversation.findById(conversation._id).populate("contact");
 
-        // Notify UI about NEW MESSAGE (Smart Route)
+        // Step 6: Notify the frontend UI instantly via WebSockets to show the new message without refreshing
         smartEmit("new_message", { message: newMessage, conversation: populatedConv });
 
-        // 🤖 TRIGGER AUTOMATION (Chatbot)
+        // Step 7: TRIGGER AUTOMATION (Chatbot AutoReplies)
+        // Checks if the user's message matches any keyword rules created in the AutoReply UI.
         if (type === "text" || type === "interactive" || type === "button") {
           processAutoReply(account, from, bodyContent);
         }

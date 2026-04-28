@@ -31,7 +31,10 @@ import { syncEnvAccount } from "./utils/accountSyncer.js";
 import { initAutomationCron } from "./utils/automationCron.js";
 
 dotenv.config();
+
+// Step 1: Connect to MongoDB Database
 connectDB().then(() => {
+  // Step 2: Sync settings and start the Background Follow-up Cron Job
   syncEnvAccount();
   initAutomationCron();
 });
@@ -39,12 +42,13 @@ connectDB().then(() => {
 const app = express();
 const httpServer = createServer(app);
 
-// Initialize Socket.io
+// Step 3: Initialize Socket.io for real-time messaging
 initSocket(httpServer);
 
-// Middleware
+// Step 4: Register Global Middlewares
 app.use(cors());
 app.use(express.json());
+// This middleware is crucial: it identifies which WhatsApp account is being used for each request.
 app.use(attachWhatsAppAccount);
 
 // --- ROUTES ---

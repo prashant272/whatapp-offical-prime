@@ -21,6 +21,8 @@ const FollowUpAutomation = () => {
   const fetchRulesAndStatuses = async () => {
     setLoading(true);
     try {
+      // Fetch both the Follow-up Rules and the available Customer Statuses at the same time.
+      // We don't send any "activeAccount" here because rules are Global for all accounts.
       const [rulesRes, statusesRes] = await Promise.all([
         api.get("/follow-ups"),
         api.get("/statuses")
@@ -43,6 +45,7 @@ const FollowUpAutomation = () => {
     if (!newRule.name || !newRule.messageText) return alert("Name and Message are required!");
     
     try {
+      // Send the new rule to the Node.js backend to be saved in the database
       await api.post("/follow-ups", newRule);
       setShowForm(false);
       setNewRule({ name: "", status: "Interested", messageText: "", delayDays: 0, delayHours: 0, delayMinutes: 30 });

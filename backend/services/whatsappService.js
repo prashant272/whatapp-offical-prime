@@ -9,6 +9,7 @@ const getHeaders = (accessToken) => {
   } else {
     console.log("⚠️ No Access Token provided for this request!");
   }
+  // This header proves to Meta that we are authorized to send messages on behalf of the selected account.
   return {
     Authorization: `Bearer ${accessToken?.trim()}`,
     "Content-Type": "application/json",
@@ -39,6 +40,8 @@ export const sendTemplateMessage = async (account, to, templateName, languageCod
 
 export const sendTextMessage = async (account, to, text) => {
   try {
+    // Sends a simple Text message (like what humans type) to the customer using Meta's Cloud API.
+    // The "account.phoneNumberId" ensures the message comes from the correct specific WhatsApp number.
     const res = await axios.post(
       `${BASE_URL}/${account.phoneNumberId}/messages`,
       {

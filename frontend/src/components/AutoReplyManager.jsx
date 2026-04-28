@@ -42,6 +42,8 @@ const AutoReplyManager = () => {
 
   const fetchReplies = async () => {
     try {
+      // Fetch all Auto-reply Keyword rules from the Node.js backend.
+      // These rules decide what the bot says when a user types a specific word like "Price".
       const { data } = await axios.get(`${API_BASE}/api/auto-replies`, config);
       setReplies(data);
     } catch (err) {
@@ -55,8 +57,10 @@ const AutoReplyManager = () => {
     e.preventDefault();
     try {
       if (editingId) {
+        // Update an existing rule
         await axios.put(`${API_BASE}/api/auto-replies/${editingId}`, formData, config);
       } else {
+        // Create a brand new auto-reply rule
         await axios.post(`${API_BASE}/api/auto-replies`, formData, config);
       }
       setShowModal(false);

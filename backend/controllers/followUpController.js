@@ -2,6 +2,8 @@ import FollowUpRule from "../models/FollowUpRule.js";
 
 export const getFollowUpRules = async (req, res) => {
   try {
+    // Fetch all follow-up rules from the database. 
+    // This is "global", meaning it gets all rules without filtering by any specific WhatsApp account.
     const rules = await FollowUpRule.find({}).sort({ createdAt: -1 });
     res.json(rules);
   } catch (error) {
@@ -13,6 +15,8 @@ export const createFollowUpRule = async (req, res) => {
   try {
     const { name, status, messageText, delayDays, delayHours, delayMinutes, active } = req.body;
 
+    // Create a new rule. Notice we do NOT save the `whatsappAccountId` here.
+    // This keeps the rule global so it works for all connected phone numbers.
     const newRule = new FollowUpRule({
       name,
       status,

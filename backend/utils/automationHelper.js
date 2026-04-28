@@ -89,9 +89,12 @@ export const processAutoReply = async (account, phone, incomingText) => {
     });
     await newMessage.save();
 
+    const normalizedPhone = phone.toString().replace(/\D/g, "");
+
     const updatedConv = await Conversation.findOneAndUpdate(
-      { phone, whatsappAccountId: account?._id },
+      { phone: normalizedPhone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
       { 
+        whatsappAccountId: account?._id, // Claim it
         lastMessage: bestMatch.response, 
         lastMessageTime: new Date(),
         unreadCount: 0 

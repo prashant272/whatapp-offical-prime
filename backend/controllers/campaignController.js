@@ -112,8 +112,10 @@ export const startCampaign = async (req, res) => {
           });
           await newMessage.save();
 
+          const normalizedPhone = log.phone.toString().replace(/\D/g, "");
+
           const updatedConv = await Conversation.findOneAndUpdate(
-            { phone: log.phone, whatsappAccountId: account._id },
+            { phone: normalizedPhone, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
             { 
               contact: contact._id,
               whatsappAccountId: account._id,

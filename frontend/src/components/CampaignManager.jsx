@@ -67,6 +67,8 @@ const CampaignManager = () => {
   }, [activeAccount]);
 
   const handleImageUpload = async (e, key) => {
+    // This function runs when the user selects an image from their computer for a campaign.
+    // It uploads the image directly to Cloudinary (our cloud storage) and saves the secure URL.
     const file = e.target.files[0];
     if (!file) return;
     const uploadData = new FormData();
@@ -120,6 +122,8 @@ const CampaignManager = () => {
   };
 
   const verifyNumbers = async () => {
+    // This feature connects directly to WhatsApp to check if the uploaded phone numbers actually have WhatsApp accounts.
+    // It automatically filters out invalid numbers so your campaign doesn't fail.
     const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
     if (phones.length === 0) return alert("No numbers to verify.");
     
