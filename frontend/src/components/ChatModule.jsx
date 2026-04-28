@@ -79,6 +79,13 @@ const ChatModule = () => {
   const [sectorFilter, setSectorFilter] = useState("all");
   const [userFilter, setUserFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const [timelineEntries, setTimelineEntries] = useState([]);
+  const [newTimelineContent, setNewTimelineContent] = useState("");
+  const [isTimelineLoading, setIsTimelineLoading] = useState(false);
+  const [editingTimelineId, setEditingTimelineId] = useState(null);
+  const [editingTimelineContent, setEditingTimelineContent] = useState("");
 
   useEffect(() => {
     if (scrollRef.current && messages.length > prevMsgCount) {
@@ -586,6 +593,62 @@ const ChatModule = () => {
       ));
     } catch (err) {
       alert("Error updating status: " + err.message);
+    }
+  };
+
+  const fetchTimelineEntries = async (contactId) => {
+    if (!contactId) return;
+    try {
+      setIsTimelineLoading(true);
+      const res = await api.get(`/timeline/${contactId}`, {
+        headers: { "x-whatsapp-account-id": selectedChat?.whatsappAccountId }
+      });
+      setTimelineEntries(res.data);
+    } catch (err) {
+      console.error("Error fetching timeline:", err);
+    } finally {
+      setIsTimelineLoading(false);
+    }
+  };
+
+  const handleAddTimeline = async (e) => {
+    e.preventDefault();
+    if (!newTimelineContent.trim() || !selectedChat?.contact?._id) {
+      if (!selectedChat?.contact?._id) alert("Wait for contact to be initialized or first message to be sent.");
+      return;
+    }
+    try {
+      const res = await api.post("/timeline", {
+        contactId: selectedChat?.contact?._id,
+        whatsappAccountId: selectedChat?.whatsappAccountId,
+        content: newTimelineContent
+      });
+      setTimelineEntries([res.data, ...timelineEntries]);
+      setNewTimelineContent("");
+    } catch (err) {
+      alert("Error adding timeline: " + err.message);
+    }
+  };
+
+  const handleEditTimeline = async (id) => {
+    if (!editingTimelineContent.trim()) return;
+    try {
+      const res = await api.put(`/timeline/${id}`, { content: editingTimelineContent });
+      setTimelineEntries(timelineEntries.map(entry => entry._id === id ? res.data : entry));
+      setEditingTimelineId(null);
+      setEditingTimelineContent("");
+    } catch (err) {
+      alert("Error editing timeline: " + err.message);
+    }
+  };
+
+  const handleDeleteTimeline = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this entry?")) return;
+    try {
+      await api.delete(`/timeline/${id}`);
+      setTimelineEntries(timelineEntries.filter(entry => entry._id !== id));
+    } catch (err) {
+      alert("Error deleting timeline: " + err.message);
     }
   };
   
@@ -1116,7 +1179,40 @@ const ChatModule = () => {
                   {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <h4 style={{ margin: 0, fontSize: "0.95rem", color: "var(--text-primary)" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: "700", color: "#111b21" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowTimelineModal(true);
+                        fetchTimelineEntries(selectedChat.contact?._id);
+                      }}
+                      style={{ 
+                        background: "rgba(0, 168, 132, 0.1)", 
+                        color: "#00a884", 
+                        border: "1px solid rgba(0, 168, 132, 0.2)", 
+                        borderRadius: "20px", 
+                        padding: "4px 12px", 
+                        fontSize: "0.75rem", 
+                        fontWeight: "700", 
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        transition: "all 0.2s ease"
+                      }}
+                      onMouseOver={(e) => {
+                        e.currentTarget.style.background = "#00a884";
+                        e.currentTarget.style.color = "white";
+                      }}
+                      onMouseOut={(e) => {
+                        e.currentTarget.style.background = "rgba(0, 168, 132, 0.1)";
+                        e.currentTarget.style.color = "#00a884";
+                      }}
+                    >
+                      <Clock size={14} /> Timeline
+                    </button>
+                  </div>
                   <span style={{ fontSize: "0.7rem", color: "#667781" }}>
                     {selectedChat.contact?.name ? selectedChat.phone : "Online"}
                   </span>
@@ -1465,6 +1561,129 @@ const ChatModule = () => {
               >
                 Block Contact
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showTimelineModal && (
+        <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(11, 20, 26, 0.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, animation: "fadeIn 0.2s ease" }}>
+          <div style={{ 
+            background: "#ffffff", 
+            width: "550px", 
+            maxHeight: "85vh", 
+            display: "flex", 
+            flexDirection: "column", 
+            borderRadius: "28px", 
+            boxShadow: "0 25px 60px rgba(0,0,0,0.2)", 
+            overflow: "hidden"
+          }}>
+            {/* Header */}
+            <div style={{ padding: "24px 32px", background: "#00a884", color: "white", position: "relative" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <div style={{ background: "rgba(255,255,255,0.25)", padding: "10px", borderRadius: "14px" }}>
+                  <Clock size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: "700", letterSpacing: "-0.02em" }}>Interaction Timeline</h3>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "0.75rem", opacity: 0.85, fontWeight: "500" }}>Logging updates for {selectedChat?.contact?.name || selectedChat?.phone}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowTimelineModal(false)} 
+                style={{ position: "absolute", top: "24px", right: "24px", background: "rgba(0,0,0,0.1)", border: "none", width: "32px", height: "32px", borderRadius: "50%", color: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >✕</button>
+            </div>
+
+            <div style={{ flex: 1, padding: "32px", overflowY: "auto", background: "#fcfdfe" }}>
+              {/* Add New Entry Section */}
+              <div style={{ background: "#ffffff", borderRadius: "20px", border: "1px solid #edf2f7", padding: "20px", boxShadow: "0 4px 12px rgba(0,0,0,0.03)", marginBottom: "32px" }}>
+                <textarea
+                  placeholder="What happened? (e.g. Client asked for price list, Visited site...)"
+                  style={{ width: "100%", padding: "12px", borderRadius: "12px", border: "1px solid #e2e8f0", outline: "none", resize: "none", fontSize: "0.9rem", background: "#f8fafc", fontFamily: "inherit" }}
+                  rows="2"
+                  value={newTimelineContent}
+                  onChange={(e) => setNewTimelineContent(e.target.value)}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
+                  <button 
+                    onClick={handleAddTimeline}
+                    disabled={!newTimelineContent.trim()}
+                    style={{ 
+                      padding: "8px 24px", 
+                      background: "#00a884", 
+                      color: "white", 
+                      border: "none", 
+                      borderRadius: "10px", 
+                      fontWeight: "700", 
+                      fontSize: "0.85rem",
+                      cursor: newTimelineContent.trim() ? "pointer" : "not-allowed",
+                      boxShadow: "0 4px 10px rgba(0, 168, 132, 0.2)"
+                    }}
+                  >
+                    Post Update
+                  </button>
+                </div>
+              </div>
+
+              {/* Timeline List */}
+              <div style={{ position: "relative", paddingLeft: "30px" }}>
+                {/* Vertical Line */}
+                {timelineEntries.length > 0 && (
+                  <div style={{ position: "absolute", left: "7px", top: "0", bottom: "0", width: "2px", background: "linear-gradient(to bottom, #00a884, #e2e8f0)" }}></div>
+                )}
+
+                {isTimelineLoading ? (
+                  <div style={{ textAlign: "center", padding: "20px" }}><Loader2 className="animate-spin" color="#00a884" /></div>
+                ) : timelineEntries.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
+                    <MessageSquare size={32} style={{ opacity: 0.2, marginBottom: "12px" }} />
+                    <p style={{ fontSize: "0.9rem" }}>No activity logs yet.</p>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+                    {timelineEntries.map((entry) => (
+                      <div key={entry._id} style={{ position: "relative" }}>
+                        {/* Dot */}
+                        <div style={{ position: "absolute", left: "-30px", top: "4px", width: "16px", height: "16px", borderRadius: "50%", background: "#ffffff", border: "3px solid #00a884", zIndex: 1 }}></div>
+                        
+                        <div style={{ background: "#ffffff", padding: "16px", borderRadius: "18px", border: "1px solid #f1f5f9", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                            <div>
+                              <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#1e293b" }}>{entry.createdBy?.name}</span>
+                              <p style={{ margin: 0, fontSize: "0.7rem", color: "#64748b", fontWeight: "500" }}>
+                                {new Date(entry.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} at {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            {currentUser.role === "Admin" && (
+                              <div style={{ display: "flex", gap: "8px" }}>
+                                <button onClick={() => { setEditingTimelineId(entry._id); setEditingTimelineContent(entry.content); }} style={{ background: "#f1f5f9", border: "none", padding: "4px 8px", borderRadius: "6px", fontSize: "0.7rem", color: "#475569", cursor: "pointer" }}>Edit</button>
+                                <button onClick={() => handleDeleteTimeline(entry._id)} style={{ background: "#fff1f2", border: "none", padding: "4px 8px", borderRadius: "6px", fontSize: "0.7rem", color: "#e11d48", cursor: "pointer" }}>Delete</button>
+                              </div>
+                            )}
+                          </div>
+
+                          {editingTimelineId === entry._id ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                              <textarea
+                                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #00a884", fontSize: "0.9rem" }}
+                                value={editingTimelineContent}
+                                onChange={(e) => setEditingTimelineContent(e.target.value)}
+                              />
+                              <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                                <button onClick={() => setEditingTimelineId(null)} style={{ padding: "4px 12px", background: "transparent", fontSize: "0.75rem", border: "1px solid #e2e8f0", borderRadius: "6px" }}>Cancel</button>
+                                <button onClick={() => handleEditTimeline(entry._id)} style={{ padding: "4px 12px", background: "#00a884", color: "white", fontSize: "0.75rem", border: "none", borderRadius: "6px" }}>Save</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p style={{ margin: 0, fontSize: "0.9rem", color: "#334155", lineHeight: "1.5", whiteSpace: "pre-wrap" }}>{entry.content}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
