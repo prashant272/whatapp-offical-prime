@@ -12,7 +12,8 @@ import Sidebar from "./components/Sidebar";
 import DashboardHome from "./components/DashboardHome";
 import AutoReplyManager from "./components/AutoReplyManager";
 import WhatsAppAccountSettings from "./components/WhatsAppAccountSettings";
-import { WhatsAppAccountProvider } from "./WhatsAppAccountContext";
+import FlowManager from "./components/FlowManager";
+import { WhatsAppAccountProvider, useWhatsAppAccount } from "./WhatsAppAccountContext";
 
 function AppContent() {
   const [user, setUser] = useState(() => {
@@ -63,7 +64,8 @@ function AppContent() {
     { id: "templates", label: "Templates", icon: FileText, path: "/templates", roles: ["Admin", "Manager"] },
     { id: "campaigns", label: "Campaigns", icon: Send, path: "/campaigns", roles: ["Admin", "Manager"] },
     { id: "chats", label: "Chats", icon: MessageCircle, path: "/chats", roles: ["Admin", "Manager", "Executive"] },
-    { id: "automation", label: "Automation", icon: Zap, path: "/automation", roles: ["Admin", "Manager"] },
+    { id: "automation", label: "Auto Replies", icon: Zap, path: "/automation", roles: ["Admin", "Manager"] },
+    { id: "flows", label: "Smart Flows", icon: Zap, path: "/flows", roles: ["Admin", "Manager"] },
     { id: "settings", label: "WhatsApp Setup", icon: Settings, path: "/settings", roles: ["Admin"] },
     { id: "activity", label: "Activity", icon: History, path: "/activity", roles: ["Admin", "Manager"] },
     { id: "users", label: "Team", icon: UserPlus, path: "/users", roles: ["Admin"] },
@@ -92,6 +94,7 @@ function AppContent() {
               <Route path="/users" element={<UserManager />} />
               <Route path="/activity" element={<ActivityLog />} />
               <Route path="/automation" element={<AutoReplyManager />} />
+              <Route path="/flows" element={<FlowManagerWrapper />} />
               <Route path="/settings" element={<WhatsAppAccountSettings />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
@@ -100,6 +103,11 @@ function AppContent() {
       } />
     </Routes>
   );
+}
+
+function FlowManagerWrapper() {
+  const { activeAccount } = useWhatsAppAccount();
+  return <FlowManager activeAccount={activeAccount} />;
 }
 
 function App() {

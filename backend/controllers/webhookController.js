@@ -183,7 +183,7 @@ export const handleWebhook = async (req, res) => {
         // Step 7: TRIGGER AUTOMATION (Chatbot AutoReplies)
         // Checks if the user's message matches any keyword rules created in the AutoReply UI.
         if (type === "text" || type === "interactive" || type === "button") {
-          processAutoReply(account, from, bodyContent);
+          processAutoReply(account, from, bodyContent, contact);
         }
       }
       res.sendStatus(200);

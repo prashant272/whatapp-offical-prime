@@ -5,6 +5,7 @@ import connectDB from "./config/db.js";
 
 // Route Imports
 import templateRoutes from "./routes/templateRoutes.js";
+import flowRoutes from "./routes/flowRoutes.js";
 import campaignRoutes from "./routes/campaignRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import webhookRoutes from "./routes/webhookRoutes.js";
@@ -52,7 +53,6 @@ app.use(express.json());
 app.use(attachWhatsAppAccount);
 
 // --- ROUTES ---
-// ... (omitted routes for brevity, assuming replace_file_content handles the whole block)
 app.use("/api/templates", templateRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/webhook", webhookRoutes);
@@ -69,6 +69,7 @@ app.use("/api/whatsapp-accounts", whatsAppAccountRoutes);
 app.use("/api/statuses", statusRoutes);
 app.use("/api/sectors", sectorRoutes);
 app.use("/api/follow-ups", followUpRoutes);
+app.use("/api/flows", flowRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({ 

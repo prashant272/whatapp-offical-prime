@@ -2,6 +2,7 @@ import AutoReply from "../models/AutoReply.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import { sendTextMessage } from "../services/whatsappService.js";
+import Flow from "../models/Flow.js";
 import { smartEmit } from "./socket.js";
 
 // --- STRING SIMILARITY ALGORITHM (Levenshtein Distance) ---
@@ -39,9 +40,10 @@ function getSimilarity(s1, s2) {
   return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
 }
 
-export const processAutoReply = async (account, phone, incomingText) => {
+export const processAutoReply = async (account, phone, incomingText, contact) => {
   try {
     const text = incomingText.toLowerCase().trim();
+    console.log(`🔍 Automation Check: incomingText="${text}" | phone="${phone}"`);
     const autoReplies = await AutoReply.find({ isActive: true });
     
     let bestMatch = null;
@@ -69,48 +71,120 @@ export const processAutoReply = async (account, phone, incomingText) => {
       }
     }
 
-    if (!bestMatch || highestScore < 0.5) return false;
+    const activeFlow = await Flow.findOne({ triggerKeyword: text, isActive: true });
+    console.log(`🧪 Flow Lookup: triggerKeyword="${text}" | Found=${!!activeFlow}`);
+    if (activeFlow) {
+      console.log(`🚀 Starting Flow: ${activeFlow.name} for ${phone}`);
+      contact.activeFlowId = activeFlow._id;
+      contact.currentStepIndex = 0;
+      await contact.save();
+      
+      const firstQuestion = activeFlow.steps[0].question;
+      const firstDelay = (activeFlow.steps[0].delay || 2) * 1000;
+      return await sendDelayedMessage(account, phone, firstQuestion, contact, firstDelay);
+    }
 
-    console.log(`🤖 Automation: Match Found! Using Account: ${account?.name || "Default"}`);
+    if (!bestMatch || highestScore < 0.5) {
+      // --- DYNAMIC FLOW LOGIC (Process current step) ---
+      if (contact && contact.activeFlowId) {
+        return await processDynamicFlow(account, phone, text, contact);
+      }
+      return false;
+    }
 
-    // Send the automated message using the CORRECT account
-    const metaRes = await sendTextMessage(account, phone, bestMatch.response);
-    const messageId = metaRes.messages?.[0]?.id;
+    console.log(`🤖 Automation: Keyword Match! [${bestMatch.keyword}]`);
 
-    const newMessage = new Message({
-      messageId,
-      from: "me",
-      to: phone,
-      body: bestMatch.response,
-      direction: "outbound",
-      status: "sent",
-      isAutomated: true,
-      whatsappAccountId: account?._id
-    });
-    await newMessage.save();
+    // --- TRIGGER STAGE FLOW VIA KEYWORD ---
+    // If the keyword matched is "register" or "start", we trigger the stage-based flow.
+    if (bestMatch.keyword.toLowerCase() === "register" || bestMatch.keyword.toLowerCase() === "start") {
+      contact.chatStage = "AWAITING_NAME";
+      await contact.save();
+    }
 
-    const normalizedPhone = phone.toString().replace(/\D/g, "");
-
-    const updatedConv = await Conversation.findOneAndUpdate(
-      { phone: normalizedPhone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
-      { 
-        whatsappAccountId: account?._id, // Claim it
-        lastMessage: bestMatch.response, 
-        lastMessageTime: new Date(),
-        unreadCount: 0 
-      },
-      { new: true, upsert: true }
-    ).populate("contact");
-
-    smartEmit("new_message", { message: newMessage, conversation: updatedConv });
-
-    // 6. Update usage count
-    bestMatch.useCount += 1;
-    await bestMatch.save();
-
-    return true;
+    // --- DELAY LOGIC ---
+    const delayMs = (bestMatch.delay || 0) * 1000;
+    return await sendDelayedMessage(account, phone, bestMatch.response, contact, delayMs);
   } catch (error) {
     console.error("❌ Automation processing error:", error);
     return false;
   }
 };
+
+/**
+ * Helper to send messages with a delay and handle DB updates
+ */
+async function sendDelayedMessage(account, phone, text, contact, delayMs) {
+  setTimeout(async () => {
+    try {
+      const metaRes = await sendTextMessage(account, phone, text);
+      const messageId = metaRes.messages?.[0]?.id;
+
+      const newMessage = new Message({
+        messageId,
+        from: "me",
+        to: phone,
+        body: text,
+        direction: "outbound",
+        status: "sent",
+        isAutomated: true,
+        whatsappAccountId: account?._id
+      });
+      await newMessage.save();
+
+      const normalizedPhone = phone.toString().replace(/\D/g, "");
+      const updatedConv = await Conversation.findOneAndUpdate(
+        { phone: normalizedPhone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
+        { 
+          whatsappAccountId: account?._id,
+          lastMessage: text, 
+          lastMessageTime: new Date(),
+          unreadCount: 0 
+        },
+        { new: true, upsert: true }
+      ).populate("contact");
+
+      smartEmit("new_message", { message: newMessage, conversation: updatedConv });
+    } catch (err) {
+      console.error("Automation delay error:", err);
+    }
+  }, delayMs);
+  return true;
+}
+
+/**
+ * Logic for Dynamic Flows
+ */
+async function processDynamicFlow(account, phone, text, contact) {
+  const flow = await Flow.findById(contact.activeFlowId);
+  if (!flow) {
+    contact.activeFlowId = null;
+    await contact.save();
+    return false;
+  }
+
+  const currentIndex = contact.currentStepIndex;
+  const currentStep = flow.steps[currentIndex];
+
+  // 1. Save the answer to the specified field
+  if (currentStep.saveToField === "name") {
+    contact.name = text;
+  } else {
+    contact.chatData.set(currentStep.saveToField, text);
+  }
+
+  // 2. Move to next step
+  const nextIndex = currentIndex + 1;
+  if (nextIndex < flow.steps.length) {
+    const nextQuestion = flow.steps[nextIndex].question;
+    const nextDelay = (flow.steps[nextIndex].delay || 2) * 1000;
+    contact.currentStepIndex = nextIndex;
+    await contact.save();
+    return await sendDelayedMessage(account, phone, nextQuestion, contact, nextDelay);
+  } else {
+    // Flow complete
+    contact.activeFlowId = null;
+    contact.currentStepIndex = 0;
+    await contact.save();
+    return await sendDelayedMessage(account, phone, "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", contact, 2000);
+  }
+}

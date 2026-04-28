@@ -29,7 +29,8 @@ const AutoReplyManager = () => {
     keyword: "",
     response: "",
     matchType: "CONTAINS",
-    isActive: true
+    isActive: true,
+    delay: 0
   });
   const [editingId, setEditingId] = useState(null);
 
@@ -77,7 +78,8 @@ const AutoReplyManager = () => {
       keyword: reply.keyword,
       response: reply.response,
       matchType: reply.matchType,
-      isActive: reply.isActive
+      isActive: reply.isActive,
+      delay: reply.delay || 0
     });
     setShowModal(true);
   };
@@ -102,7 +104,7 @@ const AutoReplyManager = () => {
   };
 
   const resetForm = () => {
-    setFormData({ keyword: "", response: "", matchType: "CONTAINS", isActive: true });
+    setFormData({ keyword: "", response: "", matchType: "CONTAINS", isActive: true, delay: 0 });
     setEditingId(null);
   };
 
@@ -236,6 +238,7 @@ const AutoReplyManager = () => {
                 <th style={{ padding: "15px 20px", fontSize: "13px", color: "#667781", fontWeight: "600" }}>KEYWORD</th>
                 <th style={{ padding: "15px 20px", fontSize: "13px", color: "#667781", fontWeight: "600" }}>MATCH</th>
                 <th style={{ padding: "15px 20px", fontSize: "13px", color: "#667781", fontWeight: "600" }}>AUTOMATED RESPONSE</th>
+                <th style={{ padding: "15px 20px", fontSize: "13px", color: "#667781", fontWeight: "600", textAlign: "center" }}>DELAY</th>
                 <th style={{ padding: "15px 20px", fontSize: "13px", color: "#667781", fontWeight: "600", textAlign: "center" }}>STATUS</th>
                 <th style={{ padding: "15px 20px", fontSize: "13px", color: "#667781", fontWeight: "600", textAlign: "right" }}>ACTIONS</th>
               </tr>
@@ -272,6 +275,9 @@ const AutoReplyManager = () => {
                       }}>
                         {reply.response}
                       </div>
+                    </td>
+                    <td style={{ padding: "15px 20px", textAlign: "center" }}>
+                      <span style={{ fontSize: "13px", color: "#667781" }}>{reply.delay || 0}s</span>
                     </td>
                     <td style={{ padding: "15px 20px", textAlign: "center" }}>
                       <div 
@@ -331,15 +337,27 @@ const AutoReplyManager = () => {
             <form onSubmit={handleSubmit} style={{ padding: "24px" }}>
               <div style={{ marginBottom: "20px" }}>
                 <label style={{ display: "block", fontSize: "13px", color: "#667781", marginBottom: "8px", fontWeight: "600" }}>TRIGGER KEYWORD</label>
-                <input 
-                  required
-                  type="text"
-                  value={formData.keyword}
-                  onChange={(e) => setFormData({...formData, keyword: e.target.value})}
-                  placeholder="e.g. price, menu, address"
-                  style={{ width: "100%", padding: "12px", border: "1px solid #d1d7db", borderRadius: "8px", outline: "none", fontSize: "15px" }}
-                />
-              </div>
+                  <input 
+                    required
+                    type="text"
+                    value={formData.keyword}
+                    onChange={(e) => setFormData({...formData, keyword: e.target.value})}
+                    placeholder="e.g. price, menu, address"
+                    style={{ width: "100%", padding: "12px", border: "1px solid #d1d7db", borderRadius: "8px", outline: "none", fontSize: "15px" }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: "20px" }}>
+                  <label style={{ display: "block", fontSize: "13px", color: "#667781", marginBottom: "8px", fontWeight: "600" }}>DELAY (SECONDS)</label>
+                  <input 
+                    type="number"
+                    value={formData.delay}
+                    onChange={(e) => setFormData({...formData, delay: parseInt(e.target.value) || 0})}
+                    placeholder="0"
+                    min="0"
+                    style={{ width: "100%", padding: "12px", border: "1px solid #d1d7db", borderRadius: "8px", outline: "none", fontSize: "15px" }}
+                  />
+                </div>
 
               <div style={{ marginBottom: "20px" }}>
                 <label style={{ display: "block", fontSize: "13px", color: "#667781", marginBottom: "12px", fontWeight: "600" }}>MATCHING LOGIC</label>

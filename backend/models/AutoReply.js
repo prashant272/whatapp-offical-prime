@@ -24,6 +24,10 @@ const autoReplySchema = new mongoose.Schema({
   useCount: { 
     type: Number, 
     default: 0 
+  },
+  delay: { 
+    type: Number, 
+    default: 0 // Delay in seconds
   }
 }, { timestamps: true });
 
