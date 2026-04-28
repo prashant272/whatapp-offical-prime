@@ -54,6 +54,7 @@ app.use(attachWhatsAppAccount);
 
 // --- ROUTES ---
 app.use("/api/templates", templateRoutes);
+app.use("/api/smart-flows", flowRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/webhook", webhookRoutes);
 app.use("/api", chatRoutes);
@@ -69,7 +70,6 @@ app.use("/api/whatsapp-accounts", whatsAppAccountRoutes);
 app.use("/api/statuses", statusRoutes);
 app.use("/api/sectors", sectorRoutes);
 app.use("/api/follow-ups", followUpRoutes);
-app.use("/api/flows", flowRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({ 

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import { Plus, Trash2, Save, Play, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 
-const API_BASE = "/api";
+const API_ENDPOINT = "/smart-flows";
 
 const FlowManager = ({ activeAccount }) => {
   const [flows, setFlows] = useState([]);
@@ -22,9 +22,7 @@ const FlowManager = ({ activeAccount }) => {
   const fetchFlows = async () => {
     try {
       setLoading(true);
-      const res = await axios.get(`${API_BASE}/flows`, {
-        headers: { "whatsapp-account-id": activeAccount?._id }
-      });
+      const res = await api.get(API_ENDPOINT);
       setFlows(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Error fetching flows:", err);
@@ -59,11 +57,9 @@ const FlowManager = ({ activeAccount }) => {
     }
 
     try {
-      await axios.post(`${API_BASE}/flows`, newFlow, {
-        headers: { "whatsapp-account-id": activeAccount?._id }
-      });
+      await api.post(API_ENDPOINT, newFlow);
       setShowAddForm(false);
-      setNewFlow({ name: "", triggerKeyword: "", steps: [{ question: "", saveToField: "" }] });
+      setNewFlow({ name: "", triggerKeyword: "", steps: [{ question: "", saveToField: "", delay: 2 }] });
       fetchFlows();
     } catch (err) {
       console.error("Error saving flow:", err);
@@ -73,9 +69,7 @@ const FlowManager = ({ activeAccount }) => {
   const deleteFlow = async (id) => {
     if (!window.confirm("Are you sure you want to delete this flow?")) return;
     try {
-      await axios.delete(`${API_BASE}/flows/${id}`, {
-        headers: { "whatsapp-account-id": activeAccount?._id }
-      });
+      await api.delete(`${API_ENDPOINT}/${id}`);
       fetchFlows();
     } catch (err) {
       console.error("Error deleting flow:", err);
