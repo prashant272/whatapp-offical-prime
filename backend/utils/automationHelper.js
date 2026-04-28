@@ -176,12 +176,20 @@ async function processDynamicFlow(account, phone, text, contact) {
   const currentIndex = contact.currentStepIndex;
   const currentStep = flow.steps[currentIndex];
 
-  // 1. Save the answer to the specified field
+  // 1. Save the user's response to the current step's field
+  if (!contact.chatData) contact.chatData = new Map();
+  
+  // Save to specialized field if it's name
   if (currentStep.saveToField === "name") {
     contact.name = text;
-  } else {
-    contact.chatData.set(currentStep.saveToField, text);
   }
+  
+  // Always save to chatData for variable interpolation {{field}}
+  contact.chatData.set(currentStep.saveToField, text);
+  
+  // CRITICAL: Mongoose doesn't auto-detect Map changes, we must mark it as modified!
+  contact.markModified("chatData");
+  await contact.save();
 
   // 2. Move to next step
   const nextIndex = currentIndex + 1;
@@ -191,11 +199,11 @@ async function processDynamicFlow(account, phone, text, contact) {
 
     // --- DYNAMIC VARIABLE REPLACEMENT ---
     // Replace {{field}} with actual data from contact.chatData
-    if (contact.chatData) {
-      for (const [key, value] of contact.chatData.entries()) {
-        const placeholder = new RegExp(`{{${key}}}`, "g");
+    if (contact.chatData && contact.chatData.size > 0) {
+      contact.chatData.forEach((value, key) => {
+        const placeholder = new RegExp(`{{${key}}}`, "gi"); // 'i' for case-insensitive
         nextQuestion = nextQuestion.replace(placeholder, value);
-      }
+      });
     }
 
     contact.currentStepIndex = nextIndex;
@@ -206,11 +214,11 @@ async function processDynamicFlow(account, phone, text, contact) {
     let msg = flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏";
     
     // Also replace variables in success message
-    if (contact.chatData) {
-      for (const [key, value] of contact.chatData.entries()) {
-        const placeholder = new RegExp(`{{${key}}}`, "g");
+    if (contact.chatData && contact.chatData.size > 0) {
+      contact.chatData.forEach((value, key) => {
+        const placeholder = new RegExp(`{{${key}}}`, "gi");
         msg = msg.replace(placeholder, value);
-      }
+      });
     }
 
     contact.activeFlowId = null;
