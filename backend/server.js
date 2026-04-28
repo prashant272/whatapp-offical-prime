@@ -19,6 +19,7 @@ import mediaRoutes from "./routes/mediaRoutes.js";
 import whatsAppAccountRoutes from "./routes/whatsAppAccountRoutes.js";
 import statusRoutes from "./routes/statusRoutes.js";
 import sectorRoutes from "./routes/sectorRoutes.js";
+import followUpRoutes from "./routes/followUpRoutes.js";
 import { protect, restrictTo } from "./middleware/authMiddleware.js";
 import { attachWhatsAppAccount } from "./middleware/accountMiddleware.js";
 import { errorHandler } from "./utils/errorHandler.js";
@@ -27,10 +28,12 @@ import { createServer } from "http";
 import { initSocket } from "./utils/socket.js";
 
 import { syncEnvAccount } from "./utils/accountSyncer.js";
+import { initAutomationCron } from "./utils/automationCron.js";
 
 dotenv.config();
 connectDB().then(() => {
   syncEnvAccount();
+  initAutomationCron();
 });
 
 const app = express();
@@ -61,6 +64,7 @@ app.use("/api/media", mediaRoutes);
 app.use("/api/whatsapp-accounts", whatsAppAccountRoutes);
 app.use("/api/statuses", statusRoutes);
 app.use("/api/sectors", sectorRoutes);
+app.use("/api/follow-ups", followUpRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({ 

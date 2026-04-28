@@ -31,9 +31,18 @@ export const startCampaign = async (req, res) => {
     const rawPhones = contacts.map(c => typeof c === 'object' ? c.phone : c);
     const uniquePhones = [...new Set(rawPhones.map(phone => normalizePhone(phone)))];
     
-    console.log(`🚀 Campaign "${name}": Cleaning duplicates. ${contacts.length} -> ${uniquePhones.length} contacts. Using Account: ${account.name}`);
+    // 3. Filter out blocked contacts
+    const blockedContacts = await Contact.find({ phone: { $in: uniquePhones }, isBlocked: true }, 'phone');
+    const blockedPhones = new Set(blockedContacts.map(c => c.phone));
+    const allowedPhones = uniquePhones.filter(phone => !blockedPhones.has(phone));
     
-    contacts = uniquePhones.map(phone => ({ phone }));
+    console.log(`🚀 Campaign "${name}": Cleaning duplicates and blocked. Original: ${contacts.length} -> Unique: ${uniquePhones.length} -> Allowed: ${allowedPhones.length}. Using Account: ${account.name}`);
+    
+    contacts = allowedPhones.map(phone => ({ phone }));
+
+    if (contacts.length === 0) {
+      return res.status(400).json({ error: "All provided contacts are either blocked or invalid." });
+    }
 
     const template = await Template.findOne({ name: templateName, whatsappAccountId: account._id });
     if (!template) return res.status(404).json({ error: "Template not found for this account" });

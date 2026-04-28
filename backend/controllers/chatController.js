@@ -1,6 +1,7 @@
 import Conversation from "../models/Conversation.js";
 import Template from "../models/Template.js";
 import Message from "../models/Message.js";
+import Contact from "../models/Contact.js";
 import { sendTextMessage, sendTemplateMessage, sendImageMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
@@ -166,6 +167,13 @@ export const updateConversationStatus = async (req, res) => {
       { status },
       { new: true }
     );
+
+    if (conversation && conversation.contact) {
+      await Contact.findByIdAndUpdate(conversation.contact, {
+        status: status,
+        statusUpdatedAt: new Date()
+      });
+    }
 
     await logActivity(req.user._id, "UPDATE_STATUS", `Updated status to ${status}`, phone);
     res.json({ success: true, conversation });

@@ -122,12 +122,27 @@ export const handleWebhook = async (req, res) => {
             name: profileName || `User ${from}`, 
             phone: from 
           });
-          await contact.save();
         } else if (profileName && contact.name.startsWith("User ")) {
           // Update generic name with real profile name if found
           contact.name = profileName;
-          await contact.save();
         }
+
+        // Process keywords for status and blocking
+        const textContent = bodyContent.trim().toLowerCase();
+        let statusUpdated = false;
+        if (textContent === "yes") {
+          contact.status = "Interested";
+          contact.statusUpdatedAt = new Date();
+          statusUpdated = true;
+        } else if (textContent === "no") {
+          contact.status = "Not Interested";
+          contact.statusUpdatedAt = new Date();
+          statusUpdated = true;
+        } else if (textContent === "stop") {
+          contact.isBlocked = true;
+        }
+
+        await contact.save();
 
         if (!conversation) {
           conversation = new Conversation({ 
@@ -141,6 +156,12 @@ export const handleWebhook = async (req, res) => {
         conversation.lastMessageTime = new Date();
         conversation.lastCustomerMessageAt = new Date();
         conversation.unreadCount += 1;
+        
+        // Sync status if it was updated via keyword
+        if (statusUpdated) {
+          conversation.status = contact.status;
+        }
+
         await conversation.save();
 
         // Populate contact before emitting

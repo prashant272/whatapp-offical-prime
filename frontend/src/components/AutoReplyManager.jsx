@@ -11,8 +11,10 @@ import {
   XCircle,
   MessageSquare,
   AlertCircle,
-  Hash
+  Hash,
+  Clock
 } from "lucide-react";
+import FollowUpAutomation from "./FollowUpAutomation";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -21,6 +23,7 @@ const AutoReplyManager = () => {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("keywords");
   
   const [formData, setFormData] = useState({
     keyword: "",
@@ -120,7 +123,7 @@ const AutoReplyManager = () => {
           <button 
             onClick={() => { resetForm(); setShowModal(true); }}
             style={{ 
-              display: "flex", 
+              display: activeTab === "keywords" ? "flex" : "none", 
               alignItems: "center", 
               gap: "10px", 
               background: "#00a884", 
@@ -141,7 +144,49 @@ const AutoReplyManager = () => {
           </button>
         </div>
 
-        {/* Stats Row */}
+        {/* Tabs */}
+        <div style={{ display: "flex", gap: "10px", marginBottom: "30px", borderBottom: "1px solid #e9edef", paddingBottom: "10px" }}>
+          <button 
+            onClick={() => setActiveTab("keywords")}
+            style={{ 
+              background: activeTab === "keywords" ? "#00a884" : "transparent", 
+              color: activeTab === "keywords" ? "white" : "#54656f", 
+              border: "none", 
+              padding: "10px 20px", 
+              borderRadius: "20px", 
+              fontWeight: "600", 
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            <MessageSquare size={18} />
+            Keyword Replies
+          </button>
+          <button 
+            onClick={() => setActiveTab("followups")}
+            style={{ 
+              background: activeTab === "followups" ? "#00a884" : "transparent", 
+              color: activeTab === "followups" ? "white" : "#54656f", 
+              border: "none", 
+              padding: "10px 20px", 
+              borderRadius: "20px", 
+              fontWeight: "600", 
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            <Clock size={18} />
+            Follow-ups
+          </button>
+        </div>
+
+        {activeTab === "keywords" ? (
+          <>
+            {/* Stats Row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "20px", marginBottom: "30px" }}>
           {[
             { label: "Active Rules", val: replies.filter(r => r.isActive).length, icon: <Zap size={22}/>, color: "#e7fce3", text: "#008069" },
@@ -248,6 +293,10 @@ const AutoReplyManager = () => {
             </tbody>
           </table>
         </div>
+        </>
+        ) : (
+          <FollowUpAutomation />
+        )}
       </div>
 
       {/* Modal */}
