@@ -46,9 +46,10 @@ const AutoReplyManager = () => {
       // Fetch all Auto-reply Keyword rules from the Node.js backend.
       // These rules decide what the bot says when a user types a specific word like "Price".
       const { data } = await axios.get(`${API_BASE}/api/auto-replies`, config);
-      setReplies(data);
+      setReplies(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
+      setReplies([]);
     } finally {
       setLoading(false);
     }

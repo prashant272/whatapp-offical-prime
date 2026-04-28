@@ -25,9 +25,10 @@ const FlowManager = ({ activeAccount }) => {
       const res = await axios.get(`${API_BASE}/flows`, {
         headers: { "whatsapp-account-id": activeAccount?._id }
       });
-      setFlows(res.data);
+      setFlows(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Error fetching flows:", err);
+      setFlows([]);
     } finally {
       setLoading(false);
     }
