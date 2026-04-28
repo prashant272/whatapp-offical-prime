@@ -23,7 +23,8 @@ const CampaignManager = () => {
   const [newCampaign, setNewCampaign] = useState({
     name: "",
     templateName: "",
-    contactsRaw: ""
+    contactsRaw: "",
+    delay: 2
   });
   const fileInputRef = useRef(null);
 
@@ -214,7 +215,8 @@ const CampaignManager = () => {
         templateName: newCampaign.templateName,
         contacts: phones.map(p => ({ phone: p })),
         templateComponents,
-        whatsappAccountId: activeAccount?._id // Link campaign to account
+        whatsappAccountId: activeAccount?._id, // Link campaign to account
+        delay: Number(newCampaign.delay)
       });
       setShowCreate(false);
       fetchData();
@@ -363,6 +365,10 @@ const CampaignManager = () => {
                 <option value="">-- Choose Template --</option>
                 {templates.map(t => <option key={t._id} value={t.name}>{t.name}</option>)}
               </select>
+            </div>
+            <div>
+              <label>Delay Per Message (Sec)</label>
+              <input type="number" min="0" step="1" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.delay} onChange={e => setNewCampaign({...newCampaign, delay: e.target.value})} required />
             </div>
           </div>
 

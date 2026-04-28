@@ -1,16 +1,21 @@
 /**
  * Sequential throttler for WhatsApp Campaigns
  */
-export const throttleCampaign = async (account, contacts, templateName, sendFunction, onProgress, templateComponents = [], language = "en_US") => {
+export const throttleCampaign = async (account, contacts, templateName, sendFunction, onProgress, templateComponents = [], language = "en_US", delayInSeconds) => {
   let successCount = 0;
   let failureCount = 0;
   const logs = [];
 
   for (const contact of contacts) {
     try {
-      // Add a small random delay (1-3s) to mimic human behavior
-      const delay = Math.floor(Math.random() * 2000) + 1000;
-      await new Promise(resolve => setTimeout(resolve, delay));
+      // Use user-defined delay or add a small random delay (1-3s) to mimic human behavior
+      const delayMs = delayInSeconds !== undefined && delayInSeconds !== null && delayInSeconds !== "" 
+        ? Number(delayInSeconds) * 1000 
+        : Math.floor(Math.random() * 2000) + 1000;
+        
+      if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
 
       // Pass the account object as the first argument
       const res = await sendFunction(account, contact.phone, templateName, language, templateComponents);

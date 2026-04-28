@@ -12,7 +12,7 @@ import { getIO, smartEmit } from "../utils/socket.js";
 
 export const startCampaign = async (req, res) => {
   try {
-    let { name, templateName, contacts, templateComponents, whatsappAccountId } = req.body;
+    let { name, templateName, contacts, templateComponents, whatsappAccountId, delay } = req.body;
     
     // 1. Identify Account
     let account = null;
@@ -138,7 +138,8 @@ export const startCampaign = async (req, res) => {
         });
       },
       templateComponents || [],
-      template.language || "en_US"
+      template.language || "en_US",
+      delay
     );
 
     res.status(202).json({ message: "Campaign started", campaignId: campaign._id });
