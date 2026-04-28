@@ -186,14 +186,33 @@ async function processDynamicFlow(account, phone, text, contact) {
   // 2. Move to next step
   const nextIndex = currentIndex + 1;
   if (nextIndex < flow.steps.length) {
-    const nextQuestion = flow.steps[nextIndex].question;
+    let nextQuestion = flow.steps[nextIndex].question;
     const nextDelay = (flow.steps[nextIndex].delay || 2) * 1000;
+
+    // --- DYNAMIC VARIABLE REPLACEMENT ---
+    // Replace {{field}} with actual data from contact.chatData
+    if (contact.chatData) {
+      for (const [key, value] of contact.chatData.entries()) {
+        const placeholder = new RegExp(`{{${key}}}`, "g");
+        nextQuestion = nextQuestion.replace(placeholder, value);
+      }
+    }
+
     contact.currentStepIndex = nextIndex;
     await contact.save();
     return await sendDelayedMessage(account, phone, nextQuestion, contact, nextDelay);
   } else {
     // Flow complete
-    const msg = flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏";
+    let msg = flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏";
+    
+    // Also replace variables in success message
+    if (contact.chatData) {
+      for (const [key, value] of contact.chatData.entries()) {
+        const placeholder = new RegExp(`{{${key}}}`, "g");
+        msg = msg.replace(placeholder, value);
+      }
+    }
+
     contact.activeFlowId = null;
     contact.currentStepIndex = 0;
     await contact.save();
