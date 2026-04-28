@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "../api";
-import { Plus, Trash2, Save, Play, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Save, Play, MessageSquare, ChevronDown, ChevronUp, Edit2 } from "lucide-react";
 
 const API_ENDPOINT = "/smart-flows";
 
@@ -8,6 +8,7 @@ const FlowManager = ({ activeAccount }) => {
   const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingFlowId, setEditingFlowId] = useState(null);
   
   const [newFlow, setNewFlow] = useState({
     name: "",
@@ -58,13 +59,29 @@ const FlowManager = ({ activeAccount }) => {
     }
 
     try {
-      await api.post(API_ENDPOINT, newFlow);
+      if (editingFlowId) {
+        await api.put(`${API_ENDPOINT}/${editingFlowId}`, newFlow);
+      } else {
+        await api.post(API_ENDPOINT, newFlow);
+      }
       setShowAddForm(false);
+      setEditingFlowId(null);
       setNewFlow({ name: "", triggerKeyword: "", successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", steps: [{ question: "", saveToField: "", delay: 2 }] });
       fetchFlows();
     } catch (err) {
       console.error("Error saving flow:", err);
     }
+  };
+
+  const handleEdit = (flow) => {
+    setEditingFlowId(flow._id);
+    setNewFlow({
+      name: flow.name,
+      triggerKeyword: flow.triggerKeyword,
+      successMessage: flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏",
+      steps: flow.steps.map(s => ({ question: s.question, saveToField: s.saveToField, delay: s.delay || 2 }))
+    });
+    setShowAddForm(true);
   };
 
   const deleteFlow = async (id) => {
@@ -106,7 +123,7 @@ const FlowManager = ({ activeAccount }) => {
 
       {showAddForm && (
         <div style={{ background: "white", padding: "24px", borderRadius: "16px", marginBottom: "24px", boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)", border: "1px solid #e2e8f0" }}>
-          <h3 style={{ marginTop: 0, marginBottom: "20px", fontSize: "1.1rem", color: "#1e293b" }}>Design Your Flow</h3>
+          <h3 style={{ marginTop: 0, marginBottom: "20px", fontSize: "1.1rem", color: "#1e293b" }}>{editingFlowId ? "Edit Your Flow" : "Design Your Flow"}</h3>
           
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px" }}>
             <div>
@@ -191,12 +208,12 @@ const FlowManager = ({ activeAccount }) => {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
-            <button onClick={() => setShowAddForm(false)} style={{ background: "none", border: "none", color: "#64748b", fontWeight: "600", cursor: "pointer" }}>Discard</button>
+            <button onClick={() => { setShowAddForm(false); setEditingFlowId(null); setNewFlow({ name: "", triggerKeyword: "", successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", steps: [{ question: "", saveToField: "", delay: 2 }] }); }} style={{ background: "none", border: "none", color: "#64748b", fontWeight: "600", cursor: "pointer" }}>Discard</button>
             <button 
               onClick={saveFlow}
               style={{ background: "#00a884", color: "white", border: "none", padding: "10px 30px", borderRadius: "10px", fontWeight: "600", cursor: "pointer" }}
             >
-              Save Flow
+              {editingFlowId ? "Update Flow" : "Save Flow"}
             </button>
           </div>
         </div>
@@ -222,9 +239,14 @@ const FlowManager = ({ activeAccount }) => {
                     <span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: "600" }}>Trigger: <code>{flow.triggerKeyword}</code></span>
                   </div>
                 </div>
-                <button onClick={() => deleteFlow(flow._id)} style={{ background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: "8px", padding: "6px", cursor: "pointer" }}>
-                  <Trash2 size={18} />
-                </button>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button onClick={() => handleEdit(flow)} style={{ background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "8px", padding: "6px", cursor: "pointer" }}>
+                    <Edit2 size={18} />
+                  </button>
+                  <button onClick={() => deleteFlow(flow._id)} style={{ background: "#fee2e2", color: "#ef4444", border: "none", borderRadius: "8px", padding: "6px", cursor: "pointer" }}>
+                    <Trash2 size={18} />
+                  </button>
+                </div>
               </div>
 
               <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: "12px" }}>

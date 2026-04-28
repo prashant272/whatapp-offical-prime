@@ -71,7 +71,14 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       }
     }
 
-    // --- CHECK DYNAMIC FLOW TRIGGERS (Fuzzy Match 60%) ---
+    // --- 1. IF ALREADY IN A FLOW, PROCESS THE STEP FIRST ---
+    if (contact && contact.activeFlowId) {
+      console.log(`🔄 Processing active flow step for ${phone}`);
+      const flowResult = await processDynamicFlow(account, phone, text, contact);
+      if (flowResult) return true;
+    }
+
+    // --- 2. CHECK DYNAMIC FLOW TRIGGERS (Fuzzy Match 60%) ---
     const allFlows = await Flow.find({ isActive: true });
     let bestFlowMatch = null;
     let highestFlowScore = 0;
@@ -88,6 +95,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       console.log(`🚀 Starting Flow: ${bestFlowMatch.name} (Score: ${highestFlowScore}) for ${phone}`);
       contact.activeFlowId = bestFlowMatch._id;
       contact.currentStepIndex = 0;
+      contact.chatData = new Map(); // Reset data for new flow
       await contact.save();
       
       const firstQuestion = bestFlowMatch.steps[0].question;
@@ -96,10 +104,6 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     if (!bestMatch || highestScore < 0.5) {
-      // --- DYNAMIC FLOW LOGIC (Process current step) ---
-      if (contact && contact.activeFlowId) {
-        return await processDynamicFlow(account, phone, text, contact);
-      }
       return false;
     }
 
