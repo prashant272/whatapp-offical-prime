@@ -12,7 +12,8 @@ const FlowManager = ({ activeAccount }) => {
   const [newFlow, setNewFlow] = useState({
     name: "",
     triggerKeyword: "",
-    steps: [{ question: "", saveToField: "" }]
+    successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏",
+    steps: [{ question: "", saveToField: "", delay: 2 }]
   });
 
   useEffect(() => {
@@ -59,7 +60,7 @@ const FlowManager = ({ activeAccount }) => {
     try {
       await api.post(API_ENDPOINT, newFlow);
       setShowAddForm(false);
-      setNewFlow({ name: "", triggerKeyword: "", steps: [{ question: "", saveToField: "", delay: 2 }] });
+      setNewFlow({ name: "", triggerKeyword: "", successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", steps: [{ question: "", saveToField: "", delay: 2 }] });
       fetchFlows();
     } catch (err) {
       console.error("Error saving flow:", err);
@@ -130,6 +131,16 @@ const FlowManager = ({ activeAccount }) => {
             </div>
           </div>
 
+          <div style={{ marginBottom: "24px" }}>
+            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "600", color: "#64748b", marginBottom: "8px" }}>Success Message (End of Flow)</label>
+            <textarea 
+              placeholder="Message to send when flow is complete..."
+              value={newFlow.successMessage}
+              onChange={(e) => setNewFlow({ ...newFlow, successMessage: e.target.value })}
+              style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", outline: "none", resize: "none", height: "80px" }}
+            />
+          </div>
+
           <div style={{ marginBottom: "20px" }}>
             <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "600", color: "#64748b", marginBottom: "12px" }}>Conversation Steps</label>
             {newFlow.steps.map((step, index) => (
@@ -138,12 +149,11 @@ const FlowManager = ({ activeAccount }) => {
                   {index + 1}
                 </div>
                 <div style={{ flex: 2 }}>
-                  <input 
-                    type="text" 
+                  <textarea 
                     placeholder="Ask a question..."
                     value={step.question}
                     onChange={(e) => handleStepChange(index, "question", e.target.value)}
-                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
+                    style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none", resize: "none", height: "60px", fontSize: "0.9rem" }}
                   />
                 </div>
                 <div style={{ flex: 1 }}>

@@ -10,6 +10,7 @@ const flowSchema = new mongoose.Schema({
   name: { type: String, required: true },
   triggerKeyword: { type: String, required: true, lowercase: true, trim: true },
   steps: [flowStepSchema],
+  successMessage: { type: String, default: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏" },
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 

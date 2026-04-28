@@ -71,16 +71,27 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       }
     }
 
-    const activeFlow = await Flow.findOne({ triggerKeyword: text, isActive: true });
-    console.log(`🧪 Flow Lookup: triggerKeyword="${text}" | Found=${!!activeFlow}`);
-    if (activeFlow) {
-      console.log(`🚀 Starting Flow: ${activeFlow.name} for ${phone}`);
-      contact.activeFlowId = activeFlow._id;
+    // --- CHECK DYNAMIC FLOW TRIGGERS (Fuzzy Match 60%) ---
+    const allFlows = await Flow.find({ isActive: true });
+    let bestFlowMatch = null;
+    let highestFlowScore = 0;
+
+    for (const flow of allFlows) {
+      const score = getSimilarity(text, flow.triggerKeyword);
+      if (score > highestFlowScore) {
+        highestFlowScore = score;
+        bestFlowMatch = flow;
+      }
+    }
+
+    if (bestFlowMatch && highestFlowScore >= 0.6) {
+      console.log(`🚀 Starting Flow: ${bestFlowMatch.name} (Score: ${highestFlowScore}) for ${phone}`);
+      contact.activeFlowId = bestFlowMatch._id;
       contact.currentStepIndex = 0;
       await contact.save();
       
-      const firstQuestion = activeFlow.steps[0].question;
-      const firstDelay = (activeFlow.steps[0].delay || 2) * 1000;
+      const firstQuestion = bestFlowMatch.steps[0].question;
+      const firstDelay = (bestFlowMatch.steps[0].delay || 2) * 1000;
       return await sendDelayedMessage(account, phone, firstQuestion, contact, firstDelay);
     }
 
@@ -182,9 +193,10 @@ async function processDynamicFlow(account, phone, text, contact) {
     return await sendDelayedMessage(account, phone, nextQuestion, contact, nextDelay);
   } else {
     // Flow complete
+    const msg = flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏";
     contact.activeFlowId = null;
     contact.currentStepIndex = 0;
     await contact.save();
-    return await sendDelayedMessage(account, phone, "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", contact, 2000);
+    return await sendDelayedMessage(account, phone, msg, contact, 2000);
   }
 }
