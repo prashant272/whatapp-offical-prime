@@ -1127,7 +1127,7 @@ const ChatModule = () => {
                 {currentUser.role !== "Executive" && (
                   <select 
                     style={{ border: "1px solid #e9edef", borderRadius: "10px", padding: "6px 10px", fontSize: "0.8rem", outline: "none", cursor: "pointer", background: "white", color: "#54656f", fontWeight: "600" }}
-                    value={selectedChat.assignedTo?._id || ""}
+                    value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
                     onChange={(e) => handleAssign(e.target.value, undefined)}
                   >
                     <option value="">Assign To...</option>
