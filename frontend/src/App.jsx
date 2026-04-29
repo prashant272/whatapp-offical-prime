@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap, Settings } from "lucide-react";
+import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap, Settings, Bot, GitBranch, Layers } from "lucide-react";
 import api from "./api";
 import TemplateManager from "./components/TemplateManager";
 import CampaignManager from "./components/CampaignManager";
@@ -66,11 +66,11 @@ function AppContent() {
     { id: "templates", label: "Templates", icon: FileText, path: "/templates", roles: ["Admin", "Manager"] },
     { id: "campaigns", label: "Campaigns", icon: Send, path: "/campaigns", roles: ["Admin", "Manager"] },
     { id: "chats", label: "Chats", icon: MessageCircle, path: "/chats", roles: ["Admin", "Manager", "Executive"] },
-    { id: "automation", label: "Auto Replies", icon: Zap, path: "/automation", roles: ["Admin", "Manager"] },
-    { id: "flows", label: "Smart Flows", icon: Zap, path: "/flows", roles: ["Admin", "Manager"] },
+    { id: "automation", label: "Auto Replies", icon: Bot, path: "/automation", roles: ["Admin", "Manager"] },
+    { id: "flows", label: "Smart Flows", icon: GitBranch, path: "/flows", roles: ["Admin", "Manager"] },
     { id: "settings", label: "WhatsApp Setup", icon: Settings, path: "/settings", roles: ["Admin"] },
     { id: "contacts", label: "Contacts", icon: UserPlus, path: "/contacts", roles: ["Admin", "Manager", "Executive"] },
-    { id: "custom-fields", label: "Custom Fields", icon: Settings, path: "/custom-fields", roles: ["Admin", "Manager"] },
+    { id: "custom-fields", label: "Custom Fields", icon: Layers, path: "/custom-fields", roles: ["Admin", "Manager"] },
     { id: "activity", label: "Activity", icon: History, path: "/activity", roles: ["Admin", "Manager"] },
     { id: "users", label: "Team", icon: UserPlus, path: "/users", roles: ["Admin"] },
   ];
@@ -88,7 +88,7 @@ function AppContent() {
             handleLogout={handleLogout} 
           />
 
-          <main className="main-content" style={{ marginLeft: isChatTab ? "70px" : "260px", padding: isChatTab ? "0" : "2rem", height: "100vh", overflow: isChatTab ? "hidden" : "auto", transition: "margin-left 0.3s ease" }}>
+          <main className="main-content" style={{ marginLeft: isChatTab ? "70px" : "240px", padding: isChatTab ? "0" : "1rem", height: "100vh", overflow: isChatTab ? "hidden" : "auto", transition: "margin-left 0.3s ease" }}>
             <Routes>
               <Route path="/" element={<DashboardHome stats={stats} user={user} />} />
               <Route path="/templates" element={<TemplateManager />} />

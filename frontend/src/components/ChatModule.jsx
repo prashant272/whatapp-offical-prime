@@ -1626,120 +1626,163 @@ const ChatModule = () => {
           </div>
           
           <div className="chat-scroll" style={{ flex: 1, overflowY: "scroll", overflowX: "hidden", padding: "24px", display: "flex", flexDirection: "column" }}>
-            <div style={{ alignSelf: "center", width: "120px", height: "120px", borderRadius: "30px", background: "linear-gradient(135deg, #00a884, #00c399)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: "3rem", fontWeight: "800", marginBottom: "15px", boxShadow: "0 10px 25px rgba(0,168,132,0.2)" }}>
-              {(activeContact?.name || selectedChat.phone).charAt(0).toUpperCase()}
-            </div>
-            <h3 style={{ textAlign: "center", color: "#1e293b", margin: "0 0 5px 0", fontSize: "1.2rem", fontWeight: "800" }}>{activeContact?.name || "Unknown"}</h3>
-            <p style={{ textAlign: "center", color: "#64748b", margin: "0 0 15px 0", fontSize: "0.9rem", fontWeight: "600" }}>{selectedChat.phone}</p>
-            
-            <button 
-              onClick={() => {
-                setShowTimelineModal(true);
-                fetchTimelineEntries(activeContact?._id);
-              }}
-              style={{ 
-                margin: "0 auto 30px auto",
-                background: "rgba(0, 168, 132, 0.1)", 
-                color: "#00a884", 
-                border: "1px solid rgba(0, 168, 132, 0.2)", 
-                borderRadius: "20px", 
-                padding: "8px 20px", 
-                fontSize: "0.85rem", 
-                fontWeight: "700", 
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                width: "fit-content"
-              }}
-            >
-              <Clock size={16} /> View Timeline
-            </button>
-            
-            <div style={{ marginBottom: "25px" }}>
-              <p style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "12px" }}>Basic Info</p>
-              
-              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "12px", marginBottom: "10px", border: "1px solid #f1f5f9" }}>
-                <label style={{ color: "#00a884", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>Status</label>
-                <select 
-                  style={{ width: "100%", background: "transparent", border: "none", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer" }}
-                  value={selectedChat.status || "New"}
-                  onChange={(e) => handleUpdateStatus(e.target.value)}
-                >
-                  {customStatuses.map(s => (
-                    <option key={s.name} value={s.name}>{s.name}</option>
-                  ))}
-                </select>
+            {/* Profile Header */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "30px" }}>
+              <div style={{ 
+                width: "110px", 
+                height: "110px", 
+                borderRadius: "35px", 
+                background: "linear-gradient(135deg, #00a884, #05cd99)", 
+                display: "flex", 
+                alignItems: "center", 
+                justify: "center", 
+                color: "white", 
+                fontSize: "3rem", 
+                fontWeight: "800", 
+                marginBottom: "15px", 
+                boxShadow: "0 10px 30px rgba(0,168,132,0.25)",
+                textShadow: "0 2px 4px rgba(0,0,0,0.1)"
+              }}>
+                {(activeContact?.name || selectedChat.phone).charAt(0).toUpperCase()}
               </div>
+              <h3 style={{ textAlign: "center", color: "#1e293b", margin: "0", fontSize: "1.25rem", fontWeight: "800", letterSpacing: "-0.5px" }}>
+                {activeContact?.name || "New Contact"}
+              </h3>
+              <p style={{ textAlign: "center", color: "#64748b", margin: "4px 0 15px 0", fontSize: "0.95rem", fontWeight: "600" }}>
+                {selectedChat.phone}
+              </p>
+              
+              <button 
+                onClick={() => {
+                  setShowTimelineModal(true);
+                  fetchTimelineEntries(activeContact?._id);
+                }}
+                style={{ 
+                  background: "rgba(0, 168, 132, 0.08)", 
+                  color: "#00a884", 
+                  border: "1.5px solid rgba(0, 168, 132, 0.2)", 
+                  borderRadius: "25px", 
+                  padding: "10px 24px", 
+                  fontSize: "0.85rem", 
+                  fontWeight: "700", 
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  transition: "all 0.2s"
+                }}
+                onMouseOver={e => e.currentTarget.style.background = "rgba(0, 168, 132, 0.15)"}
+                onMouseOut={e => e.currentTarget.style.background = "rgba(0, 168, 132, 0.08)"}
+              >
+                <Clock size={16} /> Activity History
+              </button>
+            </div>
 
-              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "12px", border: "1px solid #f1f5f9" }}>
-                <label style={{ color: "#00a884", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>Assigned To</label>
-                {currentUser.role !== "Executive" ? (
+            {/* Basic Info Section */}
+            <div style={{ marginBottom: "30px", background: "#f8fafc", borderRadius: "20px", padding: "20px", border: "1px solid #f1f5f9" }}>
+              <p style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "16px", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>Status & Team</p>
+              
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Lead Status</label>
+                <div style={{ position: "relative" }}>
                   <select 
-                    style={{ width: "100%", background: "transparent", border: "none", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer" }}
-                    value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
-                    onChange={(e) => handleAssign(e.target.value, undefined)}
+                    style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
+                    value={selectedChat.status || "New"}
+                    onChange={(e) => handleUpdateStatus(e.target.value)}
                   >
-                    <option value="">Unassigned</option>
-                    {executives.map(ex => (
-                      <option key={ex._id} value={ex._id}>{ex.name}</option>
+                    {customStatuses.map(s => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
                     ))}
                   </select>
-                ) : (
-                  <div style={{ color: "#1e293b", fontSize: "0.9rem", fontWeight: "600" }}>{selectedChat.assignedTo?.name || "Unassigned"}</div>
-                )}
+                  <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Assigned Specialist</label>
+                <div style={{ position: "relative" }}>
+                  {currentUser.role !== "Executive" ? (
+                    <>
+                      <select 
+                        style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
+                        value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
+                        onChange={(e) => handleAssign(e.target.value, undefined)}
+                      >
+                        <option value="">Choose Executive</option>
+                        {executives.map(ex => (
+                          <option key={ex._id} value={ex._id}>{ex.name}</option>
+                        ))}
+                      </select>
+                      <User size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                    </>
+                  ) : (
+                    <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "12px", border: "1.5px solid #e2e8f0", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <User size={14} color="#00a884" /> {selectedChat.assignedTo?.name || "Unassigned"}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* CRM Attributes Section */}
             <div style={{ marginBottom: "25px" }}>
-              <p style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "12px" }}>CRM Attributes (Custom Fields)</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <p style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>Lead Intelligence</p>
+                <div style={{ height: "1px", flex: 1, background: "#e2e8f0", marginLeft: "12px" }}></div>
+              </div>
               
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 {customFieldsDef.length === 0 ? (
-                  <p style={{ fontSize: "0.8rem", color: "#94a3b8", textAlign: "center", fontStyle: "italic" }}>No custom fields defined. Go to "Custom Fields" settings to add some.</p>
+                  <p style={{ fontSize: "0.8rem", color: "#94a3b8", textAlign: "center", fontStyle: "italic", background: "#f8fafc", padding: "20px", borderRadius: "15px" }}>No custom attributes found.</p>
                 ) : (
                   customFieldsDef.map(field => (
-                    <div key={field._id} style={{ background: "#ffffff", borderRadius: "12px", padding: "12px", border: "1px solid #e2e8f0", position: "relative", transition: "all 0.2s" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <div key={field._id} style={{ 
+                      background: "#ffffff", 
+                      borderRadius: "16px", 
+                      padding: "16px", 
+                      border: "1.5px solid #e2e8f0", 
+                      position: "relative", 
+                      transition: "all 0.3s ease",
+                      boxShadow: isUpdatingField === field.name ? "0 4px 12px rgba(0,0,0,0.05)" : "none",
+                      borderColor: isUpdatingField === field.name ? "#00a884" : "#e2e8f0"
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                         <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>{field.label}</label>
                         {isUpdatingField === field.name ? (
                           <Loader2 size={12} className="animate-spin" color="#00a884" />
                         ) : (
-                          <Pencil size={10} color="#cbd5e1" />
+                          <Pencil size={11} color="#cbd5e1" />
                         )}
                       </div>
                       
                       {field.type === "SELECT" ? (
-                        <select 
-                          style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.9rem", color: "#1e293b", fontWeight: "600", outline: "none", cursor: "pointer" }}
-                          value={activeContact?.customFields?.[field.name] || ""}
-                          onChange={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
-                          disabled={isUpdatingField === field.name || !activeContact}
-                        >
-                          <option value="">Select Option</option>
-                          {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
+                        <div style={{ position: "relative" }}>
+                          <select 
+                            style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none", cursor: "pointer", appearance: "none" }}
+                            value={activeContact?.customFields?.[field.name] || ""}
+                            onChange={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
+                            disabled={isUpdatingField === field.name || !activeContact}
+                          >
+                            <option value="">Select Option</option>
+                            {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          </select>
+                          <ChevronDown size={14} style={{ position: "absolute", right: "0", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                        </div>
                       ) : (
                         <input 
                           type="text"
-                          style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.9rem", color: "#1e293b", fontWeight: "600", outline: "none" }}
-                          placeholder={field.type === "DATE" ? "DD/MM/YYYY" : `Enter ${field.label}...`}
+                          style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none" }}
+                          placeholder={field.type === "DATE" ? "DD/MM/YYYY" : `Enter ${field.label.toLowerCase()}...`}
                           value={activeContact?.customFields?.[field.name] || ""}
                           onChange={(e) => {
-                            // Local state update for immediate feel
                             const val = e.target.value;
                             setActiveContact(prev => ({
                               ...prev,
                               customFields: { ...prev.customFields, [field.name]: val }
                             }));
                           }}
-                          onBlur={(e) => {
-                            // Persistence on blur or enter
-                            handleUpdateCustomField(activeContact?._id, field.name, e.target.value);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleUpdateCustomField(activeContact?._id, field.name, e.target.value);
-                          }}
+                          onBlur={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
                           disabled={isUpdatingField === field.name || !activeContact}
                         />
                       )}

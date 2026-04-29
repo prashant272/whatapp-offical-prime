@@ -8,35 +8,145 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
   const isChatTab = location.pathname.startsWith("/chats");
   const { accounts, activeAccount, switchAccount } = useWhatsAppAccount();
   const [showAccountSwitcher, setShowAccountSwitcher] = React.useState(false);
-  
+
   const visibleMenu = user ? menuItems.filter(item => item.roles.includes(user.role)) : [];
 
   return (
     <aside className={`sidebar ${isChatTab ? "mini-sidebar" : ""}`} style={{ 
-      width: isChatTab ? "70px" : "260px", 
+      width: isChatTab ? "70px" : "240px", 
       transition: "all 0.3s ease",
-      padding: isChatTab ? "1.5rem 0" : "2rem 1rem",
+      padding: isChatTab ? "0.5rem 0" : "0.5rem 0.5rem",
       display: "flex",
       flexDirection: "column",
-      zIndex: 100
+      zIndex: 100,
+      background: "#ffffff",
+      borderRight: "1px solid rgba(0,0,0,0.05)"
     }}>
-      <div style={{ marginBottom: "2rem", textAlign: "center" }}>
-        <h2 style={{ display: "flex", flexDirection: "column", gap: "2px", color: "var(--accent-primary)", alignItems: "center" }}>
-          {isChatTab ? (
-            <span style={{ fontSize: "1.5rem", fontWeight: "900" }}>W</span>
-          ) : (
-            <div style={{ textAlign: "left", width: "100%" }}>
-              <span style={{ fontSize: "1.2rem", fontWeight: "900" }}>WHATSAPP</span>
-              <span style={{ fontSize: "0.6rem", color: "var(--text-secondary)", letterSpacing: "1px", display: "block" }}>PROFESSIONAL PANEL</span>
+      {/* Premium Header Area */}
+      <div style={{ 
+        padding: isChatTab ? "0" : "12px 10px",
+        marginBottom: "0.5rem",
+        background: isChatTab ? "transparent" : "linear-gradient(145deg, #f8fafc, #ffffff)",
+        borderRadius: "16px",
+        border: isChatTab ? "none" : "1px solid rgba(0,0,0,0.03)",
+        boxShadow: isChatTab ? "none" : "0 4px 12px rgba(0,0,0,0.02)"
+      }}>
+        <div style={{ marginBottom: isChatTab ? "0.8rem" : "12px", textAlign: isChatTab ? "center" : "left" }}>
+          <h2 style={{ display: "flex", flexDirection: "column", gap: "0px", margin: 0 }}>
+            {isChatTab ? (
+              <div style={{ width: "35px", height: "35px", background: "var(--accent-primary)", borderRadius: "10px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "900", fontSize: "1.2rem" }}>W</div>
+            ) : (
+              <>
+                <span style={{ 
+                  fontSize: "1.1rem", 
+                  fontWeight: "900", 
+                  letterSpacing: "0.5px", 
+                  lineHeight: 1, 
+                  background: "linear-gradient(90deg, var(--accent-primary), #00d2ff)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                }}>WHATSAPP</span>
+                <span style={{ fontSize: "0.55rem", color: "#94a3b8", letterSpacing: "1.5px", fontWeight: "800", textTransform: "uppercase", marginTop: "2px" }}>PRO DASHBOARD</span>
+              </>
+            )}
+          </h2>
+        </div>
+
+        <div style={{ position: "relative" }}>
+          {activeAccount && !isChatTab && (
+            <div 
+              onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
+              style={{ 
+                display: "flex", 
+                alignItems: "center", 
+                gap: "8px", 
+                padding: "8px 12px", 
+                borderRadius: "12px", 
+                background: "rgba(0, 168, 132, 0.04)", 
+                cursor: "pointer", 
+                border: "1px solid rgba(0, 168, 132, 0.1)",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+              }}
+              onMouseOver={e => {
+                e.currentTarget.style.background = "rgba(0, 168, 132, 0.08)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+              }}
+              onMouseOut={e => {
+                e.currentTarget.style.background = "rgba(0, 168, 132, 0.04)";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
+              <div style={{ width: "24px", height: "24px", borderRadius: "8px", background: "white", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 5px rgba(0,0,0,0.05)" }}>
+                <Smartphone size={14} color="#00a884" />
+              </div>
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <p style={{ fontSize: "0.8rem", fontWeight: "700", margin: 0, color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{activeAccount.name}</p>
+              </div>
+              <ChevronUp size={14} color="#94a3b8" style={{ transform: showAccountSwitcher ? "rotate(180deg)" : "none", transition: "0.3s" }} />
             </div>
           )}
-        </h2>
+
+          {isChatTab && activeAccount && (
+            <div 
+              onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
+              style={{ width: "45px", height: "45px", background: "rgba(0, 168, 132, 0.1)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", margin: "0 auto" }}
+              title={activeAccount.name}
+            >
+              <Smartphone size={18} color="#00a884" />
+            </div>
+          )}
+
+          {showAccountSwitcher && (
+            <div style={{ 
+              position: "absolute", 
+              top: "calc(100% + 8px)", 
+              left: isChatTab ? "50%" : "0", 
+              transform: isChatTab ? "translateX(-50%)" : "none",
+              width: isChatTab ? "200px" : "260px",
+              background: "rgba(255, 255, 255, 0.98)", 
+              borderRadius: "16px", 
+              boxShadow: "0 10px 40px rgba(0,0,0,0.2)", 
+              padding: "8px", 
+              zIndex: 9999, 
+              border: "1px solid rgba(0,0,0,0.05)",
+              backdropFilter: "blur(20px)",
+              animation: "slideIn 0.2s ease-out"
+            }}>
+              <p style={{ fontSize: "0.65rem", color: "#94a3b8", padding: "8px 12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px" }}>Switch Instance</p>
+              <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                {accounts.map(acc => (
+                  <div 
+                    key={acc._id} 
+                    onClick={() => { switchAccount(acc); setShowAccountSwitcher(false); }}
+                    style={{ 
+                      padding: "10px 12px", 
+                      borderRadius: "10px", 
+                      cursor: "pointer", 
+                      display: "flex", 
+                      alignItems: "center", 
+                      gap: "12px", 
+                      marginBottom: "4px",
+                      background: activeAccount?._id === acc._id ? "rgba(0, 168, 132, 0.08)" : "transparent",
+                      transition: "all 0.2s"
+                    }}
+                    onMouseOver={e => e.currentTarget.style.background = activeAccount?._id === acc._id ? "rgba(0, 168, 132, 0.1)" : "#f8fafc"}
+                    onMouseOut={e => e.currentTarget.style.background = activeAccount?._id === acc._id ? "rgba(0, 168, 132, 0.08)" : "transparent"}
+                  >
+                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: activeAccount?._id === acc._id ? "#00a884" : "#cbd5e1" }} />
+                    <span style={{ fontSize: "0.85rem", fontWeight: activeAccount?._id === acc._id ? "700" : "600", color: activeAccount?._id === acc._id ? "#00a884" : "#475569" }}>{acc.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-      
-      <nav style={{ 
-        display: "flex", 
-        flexDirection: "column", 
-        gap: "0.8rem", 
+
+
+      <nav style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "0.8rem",
         alignItems: isChatTab ? "center" : "stretch",
         overflowY: "auto",
         overflowX: "hidden",
@@ -46,21 +156,21 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
         {(() => {
           const contactItems = visibleMenu.filter(item => ["contacts", "custom-fields"].includes(item.id));
           const otherItems = visibleMenu.filter(item => !["contacts", "custom-fields"].includes(item.id));
-          
+
           return (
             <>
               {otherItems.map(item => (
-                <Link 
+                <Link
                   key={item.id}
-                  to={item.path} 
+                  to={item.path}
                   className={`nav-link ${location.pathname === item.path ? "active" : ""}`}
-                  style={{ 
-                    textDecoration: "none", 
+                  style={{
+                    textDecoration: "none",
                     justifyContent: isChatTab ? "center" : "flex-start",
-                    padding: isChatTab ? "0.8rem" : "0.8rem 1rem",
+                    padding: isChatTab ? "0.8rem" : "0.7rem 12px",
                     width: isChatTab ? "45px" : "100%",
                     height: isChatTab ? "45px" : "auto",
-                    borderRadius: "12px",
+                    borderRadius: "10px",
                     display: "flex",
                     alignItems: "center",
                     flexShrink: 0
@@ -76,12 +186,12 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
                 <div style={{ marginTop: "1rem" }}>
                   <p style={{ fontSize: "0.7rem", color: "#667781", padding: "0 1rem", marginBottom: "0.5rem", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>Lead Management</p>
                   {contactItems.map(item => (
-                    <Link 
+                    <Link
                       key={item.id}
-                      to={item.path} 
+                      to={item.path}
                       className={`nav-link ${location.pathname === item.path ? "active" : ""}`}
-                      style={{ 
-                        textDecoration: "none", 
+                      style={{
+                        textDecoration: "none",
                         padding: "0.7rem 1rem",
                         borderRadius: "10px",
                         display: "flex",
@@ -101,101 +211,37 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
       </nav>
 
       <div style={{ marginTop: "auto", borderTop: "1px solid var(--border-color)", paddingTop: "1.5rem", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, position: "relative" }}>
-        
-        {/* Account Switcher Popup */}
-        {showAccountSwitcher && (
-          <div style={{ 
-            position: "absolute", 
-            bottom: "100%", 
-            left: isChatTab ? "10px" : "0", 
-            right: isChatTab ? "auto" : "0", 
-            width: isChatTab ? "200px" : "100%",
-            background: "white", 
-            borderRadius: "16px", 
-            boxShadow: "0 -10px 25px rgba(0,0,0,0.1)", 
-            padding: "10px", 
-            marginBottom: "10px", 
-            zIndex: 1000, 
-            border: "1px solid #e1e1e1" 
-          }}>
-            <p style={{ fontSize: "0.75rem", color: "#667781", padding: "8px", fontWeight: "bold", borderBottom: "1px solid #f0f0f0" }}>SWITCH NUMBER</p>
-            {accounts.map(acc => (
-              <div 
-                key={acc._id} 
-                onClick={() => { switchAccount(acc); setShowAccountSwitcher(false); }}
-                style={{ padding: "12px", borderRadius: "10px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", background: activeAccount?._id === acc._id ? "#f0fdf4" : "transparent" }}
-              >
-                <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: activeAccount?._id === acc._id ? "#00a884" : "#ccc" }} />
-                <span style={{ fontSize: "0.85rem", fontWeight: activeAccount?._id === acc._id ? "bold" : "normal", color: "#111b21" }}>{acc.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
 
-        {/* Active Account Display (Compact for Mini Sidebar) */}
-        {activeAccount && (
-          <div 
-            onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
-            title={`Switch from: ${activeAccount.name}`}
-            style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: isChatTab ? "center" : "flex-start",
-              gap: "10px", 
-              padding: isChatTab ? "10px" : "12px", 
-              width: isChatTab ? "45px" : "100%",
-              height: isChatTab ? "45px" : "auto",
-              borderRadius: "12px", 
-              background: "#f8f9fa", 
-              marginBottom: "1rem", 
-              cursor: "pointer", 
-              border: "1px solid #e1e1e1" 
+
+        <div style={{ marginTop: "auto", borderTop: "1px solid #e2e8f0", paddingTop: "1rem", width: "100%", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+          <div
+            onClick={handleLogout}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              padding: isChatTab ? "10px" : "10px 12px",
+              borderRadius: "12px",
+              cursor: "pointer",
+              transition: "all 0.2s",
+              background: "rgba(255, 71, 87, 0.05)"
             }}
+            className="logout-btn"
+            onMouseOver={e => e.currentTarget.style.background = "rgba(255, 71, 87, 0.1)"}
+            onMouseOut={e => e.currentTarget.style.background = "rgba(255, 71, 87, 0.05)"}
+            title="Logout"
           >
-            <Smartphone size={18} color="#00a884" />
-            {!isChatTab && (
-              <>
-                <div style={{ flex: 1, overflow: "hidden" }}>
-                  <p style={{ fontSize: "0.75rem", fontWeight: "bold", margin: 0, color: "#111b21" }}>{activeAccount.name}</p>
-                  <p style={{ fontSize: "0.65rem", color: "#667781", margin: 0 }}>Active</p>
-                </div>
-                <ChevronUp size={16} color="#667781" style={{ transform: showAccountSwitcher ? "rotate(180deg)" : "none", transition: "0.2s" }} />
-              </>
-            )}
-          </div>
-        )}
-
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: isChatTab ? "0" : "0 10px", marginBottom: "1.5rem" }}>
-          <div style={{ width: "40px", height: "40px", borderRadius: "12px", background: "var(--accent-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "bold", fontSize: "1.2rem", flexShrink: 0 }}>
-            {user?.name?.charAt(0)}
-          </div>
-          {!isChatTab && (
-            <div style={{ overflow: "hidden" }}>
-              <p style={{ fontSize: "0.9rem", fontWeight: "800", color: "var(--text-primary)", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.name}</p>
-              <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", margin: 0 }}>{user?.role}</p>
+            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "var(--accent-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "bold", fontSize: "0.9rem", flexShrink: 0 }}>
+              {user?.name?.charAt(0)}
             </div>
-          )}
-        </div>
-
-        <div 
-          className="nav-link" 
-          style={{ 
-            cursor: "pointer", 
-            color: "#ff4757", 
-            justifyContent: isChatTab ? "center" : "flex-start", 
-            padding: isChatTab ? "0.8rem" : "0.8rem 1rem",
-            width: isChatTab ? "45px" : "100%",
-            height: isChatTab ? "45px" : "auto",
-            display: "flex",
-            alignItems: "center",
-            borderRadius: "12px",
-            flexShrink: 0
-          }} 
-          onClick={handleLogout}
-          title="Logout"
-        >
-          <LogOut size={22} />
-          {!isChatTab && <span style={{ marginLeft: "12px", fontWeight: "600" }}>Logout</span>}
+            {!isChatTab && (
+              <div style={{ flex: 1, overflow: "hidden" }}>
+                <p style={{ fontSize: "0.85rem", fontWeight: "700", color: "#1e293b", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.name}</p>
+                <p style={{ fontSize: "0.65rem", color: "#94a3b8", margin: 0, fontWeight: "600" }}>{user?.role} • Logout</p>
+              </div>
+            )}
+            <LogOut size={18} color="#ff4757" />
+          </div>
         </div>
       </div>
     </aside>
