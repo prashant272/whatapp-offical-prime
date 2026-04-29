@@ -12,7 +12,7 @@ import { getIO, smartEmit } from "../utils/socket.js";
 
 export const startCampaign = async (req, res) => {
   try {
-    let { name, templateName, contacts, templateComponents, whatsappAccountId, delay } = req.body;
+    let { name, templateName, contacts, templateComponents, whatsappAccountId, delay, sector } = req.body;
     
     // 1. Identify Account
     let account = null;
@@ -83,9 +83,20 @@ export const startCampaign = async (req, res) => {
             }
           }
 
-          let contact = await Contact.findOne({ phone: log.phone });
+          let contact = await Contact.findOne({ phone: log.phone, whatsappAccountId: account._id });
           if (!contact) {
-            contact = new Contact({ name: `User ${log.phone}`, phone: log.phone });
+            contact = new Contact({ 
+              name: `User ${log.phone}`, 
+              phone: log.phone, 
+              whatsappAccountId: account._id,
+              sourceCampaign: name,
+              sector: sector || "Unassigned" // Set sector from campaign
+            });
+            await contact.save();
+          } else {
+            // Update if not already set or override if sector provided
+            if (!contact.sourceCampaign) contact.sourceCampaign = name;
+            if (sector) contact.sector = sector;
             await contact.save();
           }
 

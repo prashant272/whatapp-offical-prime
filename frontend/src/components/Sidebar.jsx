@@ -43,28 +43,61 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
         flex: 1,
         paddingRight: isChatTab ? "0" : "5px"
       }}>
-        {visibleMenu.map(item => (
-          <Link 
-            key={item.id}
-            to={item.path} 
-            className={`nav-link ${location.pathname === item.path ? "active" : ""}`}
-            style={{ 
-              textDecoration: "none", 
-              justifyContent: isChatTab ? "center" : "flex-start",
-              padding: isChatTab ? "0.8rem" : "0.8rem 1rem",
-              width: isChatTab ? "45px" : "100%",
-              height: isChatTab ? "45px" : "auto",
-              borderRadius: "12px",
-              display: "flex",
-              alignItems: "center",
-              flexShrink: 0
-            }}
-            title={item.label}
-          >
-            <item.icon size={22} />
-            {!isChatTab && <span style={{ marginLeft: "12px", fontWeight: "600" }}>{item.label}</span>}
-          </Link>
-        ))}
+        {(() => {
+          const contactItems = visibleMenu.filter(item => ["contacts", "custom-fields"].includes(item.id));
+          const otherItems = visibleMenu.filter(item => !["contacts", "custom-fields"].includes(item.id));
+          
+          return (
+            <>
+              {otherItems.map(item => (
+                <Link 
+                  key={item.id}
+                  to={item.path} 
+                  className={`nav-link ${location.pathname === item.path ? "active" : ""}`}
+                  style={{ 
+                    textDecoration: "none", 
+                    justifyContent: isChatTab ? "center" : "flex-start",
+                    padding: isChatTab ? "0.8rem" : "0.8rem 1rem",
+                    width: isChatTab ? "45px" : "100%",
+                    height: isChatTab ? "45px" : "auto",
+                    borderRadius: "12px",
+                    display: "flex",
+                    alignItems: "center",
+                    flexShrink: 0
+                  }}
+                  title={item.label}
+                >
+                  <item.icon size={22} />
+                  {!isChatTab && <span style={{ marginLeft: "12px", fontWeight: "600" }}>{item.label}</span>}
+                </Link>
+              ))}
+
+              {!isChatTab && contactItems.length > 0 && (
+                <div style={{ marginTop: "1rem" }}>
+                  <p style={{ fontSize: "0.7rem", color: "#667781", padding: "0 1rem", marginBottom: "0.5rem", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>Lead Management</p>
+                  {contactItems.map(item => (
+                    <Link 
+                      key={item.id}
+                      to={item.path} 
+                      className={`nav-link ${location.pathname === item.path ? "active" : ""}`}
+                      style={{ 
+                        textDecoration: "none", 
+                        padding: "0.7rem 1rem",
+                        borderRadius: "10px",
+                        display: "flex",
+                        alignItems: "center",
+                        marginBottom: "4px"
+                      }}
+                    >
+                      <item.icon size={18} />
+                      <span style={{ marginLeft: "12px", fontSize: "0.85rem", fontWeight: "600" }}>{item.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </>
+          );
+        })()}
       </nav>
 
       <div style={{ marginTop: "auto", borderTop: "1px solid var(--border-color)", paddingTop: "1.5rem", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, position: "relative" }}>

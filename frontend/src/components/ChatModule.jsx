@@ -3,7 +3,7 @@ import axios from "axios";
 import { 
   Send, User, Search, MoreVertical, MessageSquare, Clock, 
   Calendar, Tag, ChevronDown, Check, AlertCircle, FileText, 
-  Plus, Paperclip, Loader2, Trash2 
+  Plus, Paperclip, Loader2, Trash2, Pencil 
 } from "lucide-react";
 import { io } from "socket.io-client";
 
@@ -86,6 +86,9 @@ const ChatModule = () => {
   const [isTimelineLoading, setIsTimelineLoading] = useState(false);
   const [editingTimelineId, setEditingTimelineId] = useState(null);
   const [editingTimelineContent, setEditingTimelineContent] = useState("");
+  
+  const [customFieldsDef, setCustomFieldsDef] = useState([]);
+  const [isUpdatingField, setIsUpdatingField] = useState(null);
 
   useEffect(() => {
     if (scrollRef.current && messages.length > prevMsgCount) {
@@ -107,6 +110,7 @@ const ChatModule = () => {
 
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const [activeContact, setActiveContact] = useState(null);
 
   const fetchMessages = async (phone, page = 1) => {
     try {
@@ -231,12 +235,45 @@ const ChatModule = () => {
     selectedChatRef.current = selectedChat;
     if (selectedChat) {
       // SECURITY CHECK: If the selected chat belongs to a different account, clear it
-      // (Unless we are in 'All' view where activeAccount might be null)
       if (activeAccount && selectedChat.whatsappAccountId && String(selectedChat.whatsappAccountId) !== String(activeAccount._id)) {
         console.warn("🚫 Chat account mismatch! Redirecting...");
         navigate("/chats");
         return;
       }
+
+      // FETCH CONTACT INFO: Smart Lookup
+      if (selectedChat.isNew || !selectedChat.contact) {
+        const fetchContactByPhone = async () => {
+          try {
+            // Get last 10 digits for fuzzy matching (to handle 91 or no 91)
+            const cleanPhone = selectedChat.phone.replace(/[^0-9]/g, "");
+            const last10 = cleanPhone.slice(-10);
+            
+            const res = await api.get(`/contacts?search=${last10}`, {
+              headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
+            });
+            
+            // Find best match (ending with the same 10 digits)
+            const found = res.data.contacts.find(c => {
+              const cPhone = (c.phone || "").replace(/[^0-9]/g, "");
+              return cPhone.endsWith(last10);
+            });
+
+            if (found) {
+              console.log("🔍 Found existing contact record:", found.name);
+              setActiveContact(found);
+            } else {
+              setActiveContact(null);
+            }
+          } catch (err) {
+            console.error("Error searching contact:", err);
+          }
+        };
+        fetchContactByPhone();
+      } else {
+        setActiveContact(selectedChat.contact);
+      }
+
       fetchMessages(selectedChat.phone);
       // Reset unreadCount locally on select
       setConversations(prev => prev.map(c => 
@@ -295,6 +332,41 @@ const ChatModule = () => {
     }
   };
 
+  const fetchCustomFieldsDef = async () => {
+    try {
+      const res = await api.get("/custom-fields");
+      setCustomFieldsDef(res.data);
+    } catch (err) {
+      console.error("Error fetching field definitions:", err);
+    }
+  };
+
+  const handleUpdateCustomField = async (contactId, fieldName, value) => {
+    if (!contactId) return;
+    try {
+      setIsUpdatingField(fieldName);
+      // Merge with existing custom fields from the active contact record
+      const currentFields = activeContact?.customFields || {};
+      const updatedFields = { ...currentFields, [fieldName]: value };
+      
+      const res = await api.put(`/contacts/${contactId}`, {
+        customFields: updatedFields
+      });
+      
+      // Update local state
+      setActiveContact(res.data);
+      setConversations(prev => prev.map(c => 
+        (c.contact?._id === contactId || c.contact === contactId) ? { ...c, contact: res.data } : c
+      ));
+      console.log(`✅ Field ${fieldName} updated to: ${value}`);
+    } catch (err) {
+      console.error("Error updating field:", err);
+      alert("Failed to save field. Please try again.");
+    } finally {
+      setIsUpdatingField(null);
+    }
+  };
+
   const handleAddSector = async () => {
     if (!newSectorName.trim()) return;
     try {
@@ -328,16 +400,18 @@ const ChatModule = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [temps, pres, execs, stats, sects] = await Promise.all([
+        const [temps, pres, execs, stats, sects, cFields] = await Promise.all([
           api.get(`/templates`),
           api.get(`/presets`),
           api.get(`/users`).catch(() => ({ data: [] })),
           api.get(`/statuses`).catch(() => ({ data: [] })),
-          api.get(`/sectors`).catch(() => ({ data: [] }))
+          api.get(`/sectors`).catch(() => ({ data: [] })),
+          api.get(`/custom-fields`).catch(() => ({ data: [] }))
         ]);
         
         setCustomStatuses(stats.data);
         setSectors(sects.data);
+        setCustomFieldsDef(cFields.data);
         
         setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
         setPresets(Array.isArray(pres.data) ? pres.data : []);
@@ -464,6 +538,8 @@ const ChatModule = () => {
         phone: selectedChat.phone,
         userId: userId !== undefined ? userId : selectedChat.assignedTo?._id,
         sector: sector !== undefined ? sector : selectedChat.sector
+      }, {
+        headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
       // Update local state
       setConversations(prev => prev.map(c => 
@@ -859,7 +935,7 @@ const ChatModule = () => {
   return (
     <div className="chat-container" style={{
       display: "grid",
-      gridTemplateColumns: showContactInfo ? "350px 1fr 300px" : "350px 1fr",
+      gridTemplateColumns: showContactInfo ? "350px 1fr 350px" : "350px 1fr",
       height: "100vh",
       width: "100%",
       maxWidth: "100%",
@@ -1531,33 +1607,154 @@ const ChatModule = () => {
 
       {/* Contact Info Sidebar */}
       {showContactInfo && selectedChat && (
-        <div style={{ background: "#111b21", borderLeft: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "12px 16px", background: "#202c33", display: "flex", alignItems: "center", gap: "20px", height: "60px" }}>
-            <button onClick={() => setShowContactInfo(false)} style={{ background: "transparent", border: "none", color: "#aebac1", cursor: "pointer" }}>✕</button>
-            <span style={{ color: "#e9edef", fontSize: "0.95rem" }}>Contact Info</span>
+        <div style={{ 
+          background: "white", 
+          borderLeft: "1px solid #e2e8f0", 
+          display: "flex", 
+          flexDirection: "column", 
+          width: "350px", 
+          height: "100%", 
+          position: "relative",
+          animation: "slideInRight 0.3s ease",
+          zIndex: 50,
+          boxShadow: "-4px 0 15px rgba(0,0,0,0.05)",
+          overflow: "hidden"
+        }}>
+          <div style={{ padding: "12px 16px", background: "#f8fafc", display: "flex", alignItems: "center", gap: "20px", height: "60px", borderBottom: "1px solid #e2e8f0", flexShrink: 0 }}>
+            <button onClick={() => setShowContactInfo(false)} style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
+            <span style={{ color: "#1e293b", fontSize: "0.95rem", fontWeight: "700" }}>Contact Details</span>
           </div>
           
-          <div className="chat-scroll" style={{ flex: 1, overflowY: "auto", padding: "24px", display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <div style={{ width: "200px", height: "200px", borderRadius: "50%", background: "#4f5e67", display: "flex", alignItems: "center", justifyContent: "center", color: "#dfe5e7", fontSize: "5rem", marginBottom: "20px", boxShadow: "0 4px 10px rgba(0,0,0,0.3)" }}>
-              {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
+          <div className="chat-scroll" style={{ flex: 1, overflowY: "scroll", overflowX: "hidden", padding: "24px", display: "flex", flexDirection: "column" }}>
+            <div style={{ alignSelf: "center", width: "120px", height: "120px", borderRadius: "30px", background: "linear-gradient(135deg, #00a884, #00c399)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: "3rem", fontWeight: "800", marginBottom: "15px", boxShadow: "0 10px 25px rgba(0,168,132,0.2)" }}>
+              {(activeContact?.name || selectedChat.phone).charAt(0).toUpperCase()}
             </div>
-            <h3 style={{ color: "#e9edef", margin: "0 0 5px 0", fontSize: "1.2rem" }}>{selectedChat.contact?.name || "Unknown"}</h3>
-            <p style={{ color: "#8696a0", margin: "0 0 30px 0", fontSize: "0.9rem" }}>{selectedChat.phone}</p>
+            <h3 style={{ textAlign: "center", color: "#1e293b", margin: "0 0 5px 0", fontSize: "1.2rem", fontWeight: "800" }}>{activeContact?.name || "Unknown"}</h3>
+            <p style={{ textAlign: "center", color: "#64748b", margin: "0 0 15px 0", fontSize: "0.9rem", fontWeight: "600" }}>{selectedChat.phone}</p>
             
-            <div style={{ width: "100%", background: "#202c33", borderRadius: "12px", padding: "20px", marginBottom: "20px" }}>
-              <label style={{ color: "#00a884", fontSize: "0.8rem", display: "block", marginBottom: "10px" }}>Status</label>
-              <div style={{ color: "#e9edef", fontSize: "0.95rem" }}>{selectedChat.status || "New"}</div>
+            <button 
+              onClick={() => {
+                setShowTimelineModal(true);
+                fetchTimelineEntries(activeContact?._id);
+              }}
+              style={{ 
+                margin: "0 auto 30px auto",
+                background: "rgba(0, 168, 132, 0.1)", 
+                color: "#00a884", 
+                border: "1px solid rgba(0, 168, 132, 0.2)", 
+                borderRadius: "20px", 
+                padding: "8px 20px", 
+                fontSize: "0.85rem", 
+                fontWeight: "700", 
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                width: "fit-content"
+              }}
+            >
+              <Clock size={16} /> View Timeline
+            </button>
+            
+            <div style={{ marginBottom: "25px" }}>
+              <p style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "12px" }}>Basic Info</p>
+              
+              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "12px", marginBottom: "10px", border: "1px solid #f1f5f9" }}>
+                <label style={{ color: "#00a884", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>Status</label>
+                <select 
+                  style={{ width: "100%", background: "transparent", border: "none", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer" }}
+                  value={selectedChat.status || "New"}
+                  onChange={(e) => handleUpdateStatus(e.target.value)}
+                >
+                  {customStatuses.map(s => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ background: "#f8fafc", borderRadius: "12px", padding: "12px", border: "1px solid #f1f5f9" }}>
+                <label style={{ color: "#00a884", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>Assigned To</label>
+                {currentUser.role !== "Executive" ? (
+                  <select 
+                    style={{ width: "100%", background: "transparent", border: "none", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer" }}
+                    value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
+                    onChange={(e) => handleAssign(e.target.value, undefined)}
+                  >
+                    <option value="">Unassigned</option>
+                    {executives.map(ex => (
+                      <option key={ex._id} value={ex._id}>{ex.name}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <div style={{ color: "#1e293b", fontSize: "0.9rem", fontWeight: "600" }}>{selectedChat.assignedTo?.name || "Unassigned"}</div>
+                )}
+              </div>
             </div>
 
-            <div style={{ width: "100%", background: "#202c33", borderRadius: "12px", padding: "20px" }}>
-              <label style={{ color: "#00a884", fontSize: "0.8rem", display: "block", marginBottom: "10px" }}>Assigned To</label>
-              <div style={{ color: "#e9edef", fontSize: "0.95rem" }}>{selectedChat.assignedTo?.name || "Unassigned"}</div>
+            <div style={{ marginBottom: "25px" }}>
+              <p style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "12px" }}>CRM Attributes (Custom Fields)</p>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {customFieldsDef.length === 0 ? (
+                  <p style={{ fontSize: "0.8rem", color: "#94a3b8", textAlign: "center", fontStyle: "italic" }}>No custom fields defined. Go to "Custom Fields" settings to add some.</p>
+                ) : (
+                  customFieldsDef.map(field => (
+                    <div key={field._id} style={{ background: "#ffffff", borderRadius: "12px", padding: "12px", border: "1px solid #e2e8f0", position: "relative", transition: "all 0.2s" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                        <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.5px" }}>{field.label}</label>
+                        {isUpdatingField === field.name ? (
+                          <Loader2 size={12} className="animate-spin" color="#00a884" />
+                        ) : (
+                          <Pencil size={10} color="#cbd5e1" />
+                        )}
+                      </div>
+                      
+                      {field.type === "SELECT" ? (
+                        <select 
+                          style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.9rem", color: "#1e293b", fontWeight: "600", outline: "none", cursor: "pointer" }}
+                          value={activeContact?.customFields?.[field.name] || ""}
+                          onChange={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
+                          disabled={isUpdatingField === field.name || !activeContact}
+                        >
+                          <option value="">Select Option</option>
+                          {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      ) : (
+                        <input 
+                          type="text"
+                          style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.9rem", color: "#1e293b", fontWeight: "600", outline: "none" }}
+                          placeholder={field.type === "DATE" ? "DD/MM/YYYY" : `Enter ${field.label}...`}
+                          value={activeContact?.customFields?.[field.name] || ""}
+                          onChange={(e) => {
+                            // Local state update for immediate feel
+                            const val = e.target.value;
+                            setActiveContact(prev => ({
+                              ...prev,
+                              customFields: { ...prev.customFields, [field.name]: val }
+                            }));
+                          }}
+                          onBlur={(e) => {
+                            // Persistence on blur or enter
+                            handleUpdateCustomField(activeContact?._id, field.name, e.target.value);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleUpdateCustomField(activeContact?._id, field.name, e.target.value);
+                          }}
+                          disabled={isUpdatingField === field.name || !activeContact}
+                        />
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
-            <div style={{ width: "100%", marginTop: "30px" }}>
+            <div style={{ marginTop: "auto", paddingTop: "20px" }}>
               <button 
                 onClick={() => alert("Notes feature coming soon!")}
-                style={{ width: "100%", padding: "12px", background: "rgba(255,255,255,0.05)", border: "1px solid #3b4a54", color: "#ff4757", borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem" }}
+                style={{ width: "100%", padding: "12px", background: "#fff1f2", border: "1px solid #fee2e2", color: "#e11d48", borderRadius: "10px", cursor: "pointer", fontSize: "0.85rem", fontWeight: "700", transition: "all 0.2s" }}
+                onMouseOver={e => e.currentTarget.style.background = "#ffe4e6"}
+                onMouseOut={e => e.currentTarget.style.background = "#fff1f2"}
               >
                 Block Contact
               </button>

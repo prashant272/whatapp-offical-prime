@@ -13,6 +13,8 @@ import DashboardHome from "./components/DashboardHome";
 import AutoReplyManager from "./components/AutoReplyManager";
 import WhatsAppAccountSettings from "./components/WhatsAppAccountSettings";
 import FlowManager from "./components/FlowManager";
+import ContactManager from "./components/ContactManager";
+import CustomFieldManager from "./components/CustomFieldManager";
 import { WhatsAppAccountProvider, useWhatsAppAccount } from "./WhatsAppAccountContext";
 
 function AppContent() {
@@ -67,6 +69,8 @@ function AppContent() {
     { id: "automation", label: "Auto Replies", icon: Zap, path: "/automation", roles: ["Admin", "Manager"] },
     { id: "flows", label: "Smart Flows", icon: Zap, path: "/flows", roles: ["Admin", "Manager"] },
     { id: "settings", label: "WhatsApp Setup", icon: Settings, path: "/settings", roles: ["Admin"] },
+    { id: "contacts", label: "Contacts", icon: UserPlus, path: "/contacts", roles: ["Admin", "Manager", "Executive"] },
+    { id: "custom-fields", label: "Custom Fields", icon: Settings, path: "/custom-fields", roles: ["Admin", "Manager"] },
     { id: "activity", label: "Activity", icon: History, path: "/activity", roles: ["Admin", "Manager"] },
     { id: "users", label: "Team", icon: UserPlus, path: "/users", roles: ["Admin"] },
   ];
@@ -95,6 +99,8 @@ function AppContent() {
               <Route path="/activity" element={<ActivityLog />} />
               <Route path="/automation" element={<AutoReplyManager />} />
               <Route path="/flows" element={<FlowManagerWrapper />} />
+              <Route path="/contacts" element={<ContactManager />} />
+              <Route path="/custom-fields" element={<CustomFieldManager />} />
               <Route path="/settings" element={<WhatsAppAccountSettings />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>

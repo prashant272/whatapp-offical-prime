@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import api, { API_BASE } from "../api";
 import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud, Smartphone } from "lucide-react";
 import * as XLSX from "xlsx";
@@ -7,6 +8,7 @@ import { io } from "socket.io-client";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const CampaignManager = () => {
+  const location = useLocation();
   const { activeAccount } = useWhatsAppAccount();
   const [campaigns, setCampaigns] = useState([]);
   const [templates, setTemplates] = useState([]);
@@ -26,22 +28,34 @@ const CampaignManager = () => {
     contactsRaw: "",
     delay: 2
   });
+  const [tags, setTags] = useState([]);
+  const [sectors, setSectors] = useState([]);
+  const [selectedSourceType, setSelectedSourceType] = useState(""); // "tag" or "sector"
+  const [selectedSourceValue, setSelectedSourceValue] = useState("");
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [customStatuses, setCustomStatuses] = useState([]);
   const fileInputRef = useRef(null);
 
   const fetchData = async () => {
     if (!activeAccount) return;
     setLoading(true);
     try {
-      const [campRes, tempRes, presetRes] = await Promise.all([
+      const [campRes, tempRes, presetRes, tagRes, sectorRes, statusRes] = await Promise.all([
         api.get("/campaigns"),
         api.get("/templates"),
-        api.get("/presets")
+        api.get("/presets"),
+        api.get("/contacts/tags"),
+        api.get("/sectors"),
+        api.get("/statuses")
       ]);
       setCampaigns(Array.isArray(campRes.data) ? campRes.data : []);
       // Templates are already filtered by account in the backend thanks to our middleware
       const templatesList = Array.isArray(tempRes.data) ? tempRes.data : [];
       setTemplates(templatesList.filter(t => t.status === "APPROVED"));
       setPresets(Array.isArray(presetRes.data) ? presetRes.data : []);
+      setTags(tagRes.data);
+      setSectors(sectorRes.data);
+      setCustomStatuses(statusRes.data);
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
@@ -51,6 +65,14 @@ const CampaignManager = () => {
 
   useEffect(() => {
     fetchData();
+
+    // Check if we arrived here with pre-selected numbers from Contact Manager
+    if (location.state?.numbers) {
+      setNewCampaign(prev => ({ ...prev, contactsRaw: location.state.numbers }));
+      setShowCreate(true);
+      // Clear state after reading to avoid re-triggering on refresh
+      window.history.replaceState({}, document.title);
+    }
 
     const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
     const socket = io(socketUrl);
@@ -64,7 +86,7 @@ const CampaignManager = () => {
     });
 
     return () => socket.disconnect();
-  }, [activeAccount]);
+  }, [activeAccount, location.state]);
 
   const handleImageUpload = async (e, key) => {
     // This function runs when the user selects an image from their computer for a campaign.
@@ -376,9 +398,65 @@ const CampaignManager = () => {
             </div>
           </div>
 
-          <div style={{ marginBottom: "1rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-              <label>Contacts ({contactCount})</label>
+          <div style={{ marginBottom: "20px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", color: "#667781" }}>Target Contacts</label>
+            
+            <div style={{ background: "#f0f2f5", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", marginBottom: "12px" }}>
+              <p style={{ margin: "0 0 10px 0", fontSize: "0.85rem", color: "#00a884", fontWeight: "700" }}>Option 1: Load from Database (Tags/Sectors)</p>
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                    <select 
+                      style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
+                      value={selectedSourceType}
+                      onChange={(e) => setSelectedSourceType(e.target.value)}
+                    >
+                      <option value="">Category (All)</option>
+                      <option value="tag">By Tag</option>
+                      <option value="sector">By Sector</option>
+                    </select>
+                    
+                    <select 
+                      style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
+                      value={selectedSourceValue}
+                      onChange={(e) => setSelectedSourceValue(e.target.value)}
+                      disabled={!selectedSourceType}
+                    >
+                      <option value="">Select Value</option>
+                      {selectedSourceType === "tag" ? tags.map(t => <option key={t} value={t}>{t}</option>) : 
+                       selectedSourceType === "sector" ? sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>) : null}
+                    </select>
+
+                    <select 
+                      style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
+                      value={selectedStatus}
+                      onChange={(e) => setSelectedStatus(e.target.value)}
+                    >
+                      <option value="">All Status</option>
+                      {customStatuses.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                    </select>
+                    
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          let url = `/contacts?limit=10000`;
+                          if (selectedSourceType && selectedSourceValue) url += `&${selectedSourceType}=${selectedSourceValue}`;
+                          if (selectedStatus) url += `&status=${selectedStatus}`;
+                          
+                          const res = await api.get(url);
+                          const numbers = res.data.contacts.map(c => c.phone).join("\n");
+                          setNewCampaign({ ...newCampaign, contactsRaw: numbers });
+                          alert(`✅ Loaded ${res.data.contacts.length} contacts!`);
+                        } catch (err) { alert("Failed to load contacts"); }
+                      }}
+                      style={{ padding: "10px 20px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700" }}
+                    >
+                      Load
+                    </button>
+                  </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "#667781", fontWeight: "700" }}>Option 2: Manual / File Upload</p>
               <div style={{ display: "flex", gap: "10px" }}>
                 <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
                 <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5" }}>Upload File</button>

@@ -126,8 +126,12 @@ export const handleWebhook = async (req, res) => {
         if (!contact) {
           contact = new Contact({ 
             name: profileName || `User ${from}`, 
-            phone: from 
+            phone: from,
+            whatsappAccountId: account?._id 
           });
+        } else if (!contact.whatsappAccountId) {
+          // Associate legacy contact with this account
+          contact.whatsappAccountId = account?._id;
         } else if (profileName && contact.name.startsWith("User ")) {
           // Update generic name with real profile name if found
           contact.name = profileName;

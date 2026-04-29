@@ -296,6 +296,15 @@ export const assignConversation = async (req, res) => {
       { new: true }
     ).populate("assignedTo", "name");
     
+    // SYNC: Update the master Contact record as well
+    if (conversation && conversation.contact) {
+      const contactUpdate = {};
+      if (userId !== undefined) contactUpdate.assignedTo = userId || null;
+      if (sector !== undefined) contactUpdate.sector = sector || "Unassigned";
+      
+      await Contact.findByIdAndUpdate(conversation.contact, contactUpdate);
+    }
+    
     const assignedName = conversation.assignedTo ? conversation.assignedTo.name : "Unassigned";
     const sectorName = conversation.sector || "Unassigned";
     await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName})`, phone);
