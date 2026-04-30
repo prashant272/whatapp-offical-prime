@@ -11,6 +11,10 @@ import { normalizePhone } from "../utils/phoneUtils.js";
 import { getIO, smartEmit } from "../utils/socket.js";
 
 const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req) => {
+  if (!template) {
+    console.error(`❌ Campaign Execution Error: Template missing for campaign "${campaign.name}"`);
+    return;
+  }
   const initialSent = campaign.sentCount || 0;
   const initialFailed = campaign.failedCount || 0;
   const initialLogs = campaign.logs || [];
@@ -184,6 +188,10 @@ export const retryFailedContacts = async (req, res) => {
     const { id } = req.params;
     const campaign = await Campaign.findById(id).populate("template");
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+
+    if (!campaign.template) {
+      return res.status(404).json({ error: "The template used for this campaign no longer exists." });
+    }
 
     // Find failed contacts from logs
     const failedLogs = campaign.logs.filter(l => l.status === "failed");
