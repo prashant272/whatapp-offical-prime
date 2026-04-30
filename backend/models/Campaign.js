@@ -9,6 +9,7 @@ const campaignSchema = new mongoose.Schema({
   failedCount: { type: Number, default: 0 },
   status: { type: String, enum: ["PENDING", "RUNNING", "COMPLETED", "FAILED", "PAUSED"], default: "PENDING" },
   allowOutsideHours: { type: Boolean, default: false },
+  contacts: [{ phone: String }], // Store the list of target contacts for resumption
   logs: [{
     phone: String,
     status: String,

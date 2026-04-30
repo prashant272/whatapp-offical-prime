@@ -22,6 +22,7 @@ const CampaignManager = () => {
   const [templateVars, setTemplateVars] = useState({});
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedLogs, setSelectedLogs] = useState([]);
+  const [logSearch, setLogSearch] = useState("");
   const [newCampaign, setNewCampaign] = useState({
     name: "",
     templateName: "",
@@ -604,14 +605,23 @@ const CampaignManager = () => {
               background: "#f8f9fa"
             }}>
               <h4 style={{ margin: 0, display: "flex", alignItems: "center", gap: "10px" }}>
-                <List size={20} /> Campaign Delivery Logs
+                <List size={20} /> Campaign Delivery Logs ({selectedLogs.length})
               </h4>
-              <button 
-                onClick={() => setShowLogsModal(false)}
-                style={{ background: "#eee", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
-              >
-                Close
-              </button>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <input 
+                  type="text" 
+                  placeholder="Search number..." 
+                  value={logSearch}
+                  onChange={(e) => setLogSearch(e.target.value)}
+                  style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "0.85rem" }}
+                />
+                <button 
+                  onClick={() => { setShowLogsModal(false); setLogSearch(""); }}
+                  style={{ background: "#eee", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
             
             <div style={{ padding: "0", overflowY: "auto", flex: 1 }}>
@@ -630,7 +640,10 @@ const CampaignManager = () => {
                       <td colSpan="4" style={{ padding: "40px", textAlign: "center", color: "#667781" }}>No logs available for this campaign yet.</td>
                     </tr>
                   ) : (
-                    [...selectedLogs].reverse().map((log, idx) => (
+                    [...selectedLogs]
+                      .filter(log => log.phone.toLowerCase().includes(logSearch.toLowerCase()))
+                      .reverse()
+                      .map((log, idx) => (
                       <tr key={idx} style={{ borderBottom: "1px solid #f8f9fa" }}>
                         <td style={{ padding: "12px 25px", fontWeight: "600" }}>{log.phone}</td>
                         <td style={{ padding: "12px 25px" }}>

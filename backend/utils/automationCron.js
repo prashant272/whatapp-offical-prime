@@ -11,11 +11,10 @@ export const initAutomationCron = () => {
   // We use node-cron to run this function every 1 minute automatically in the background
   cron.schedule("* * * * *", async () => {
     try {
-      // --- Business Hours Check (8 AM - 7 PM) ---
-      const now = new Date();
-      const currentHour = now.getHours();
-      if (currentHour < 8 || currentHour >= 19) {
-        // We pause automated follow-ups during the night to avoid disturbing customers.
+      // --- Business Hours Check (8 AM - 7 PM IST) ---
+      const istHour = parseInt(new Date().toLocaleString("en-US", { hour: 'numeric', hour12: false, timeZone: "Asia/Kolkata" }));
+      if (istHour < 8 || istHour >= 19) {
+        // We pause automated follow-ups during the night in India.
         return; 
       }
 

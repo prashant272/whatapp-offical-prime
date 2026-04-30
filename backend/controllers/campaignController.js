@@ -10,120 +10,135 @@ import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getIO, smartEmit } from "../utils/socket.js";
 
+// Global set to track which campaigns have active throttlers running in memory
+const activeThrottlers = new Set();
+
 const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req) => {
   if (!template) {
     console.error(`❌ Campaign Execution Error: Template missing for campaign "${campaign.name}"`);
     return;
   }
+
+  const campaignIdStr = campaign._id.toString();
+  if (activeThrottlers.has(campaignIdStr)) {
+    console.log(`⚠️ Campaign "${campaign.name}" already has an active throttler. Skipping...`);
+    return;
+  }
+  activeThrottlers.add(campaignIdStr);
+
   const initialSent = campaign.sentCount || 0;
   const initialFailed = campaign.failedCount || 0;
   const initialLogs = campaign.logs || [];
 
-  throttleCampaign(
-    account,
-    contacts,
-    template.name,
-    sendTemplateMessage,
-    async (currentSuccess, currentFailure, currentLogs, latestLog) => {
-      if (latestLog && latestLog.status === "sent") {
-        let messageBody = `Campaign [${campaign.name}]: ${template.name}`;
-        
-        const bodyComp = template.components.find(c => c.type === "BODY");
-        if (bodyComp && bodyComp.text) {
-          let text = bodyComp.text;
-          if (templateComponents) {
-            const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
-            bodyParams.forEach((p, idx) => {
-              text = text.replace(`{{${idx + 1}}}`, p.text || "");
+  try {
+    await throttleCampaign(
+      account,
+      contacts,
+      template.name,
+      sendTemplateMessage,
+      async (currentSuccess, currentFailure, currentLogs, latestLog) => {
+        if (latestLog && latestLog.status === "sent") {
+          let messageBody = `Campaign [${campaign.name}]: ${template.name}`;
+          
+          const bodyComp = template.components.find(c => c.type === "BODY");
+          if (bodyComp && bodyComp.text) {
+            let text = bodyComp.text;
+            if (templateComponents) {
+              const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
+              bodyParams.forEach((p, idx) => {
+                text = text.replace(`{{${idx + 1}}}`, p.text || "");
+              });
+            }
+            messageBody = text;
+          }
+
+          let contact = await Contact.findOne({ phone: latestLog.phone, whatsappAccountId: account._id });
+          if (!contact) {
+            contact = new Contact({ 
+              name: `User ${latestLog.phone}`, 
+              phone: latestLog.phone, 
+              whatsappAccountId: account._id,
+              sourceCampaign: campaign.name,
+              sector: "Unassigned"
             });
+            await contact.save();
+          } else {
+            if (!contact.sourceCampaign) contact.sourceCampaign = campaign.name;
+            await contact.save();
           }
-          messageBody = text;
-        }
 
-        let contact = await Contact.findOne({ phone: latestLog.phone, whatsappAccountId: account._id });
-        if (!contact) {
-          contact = new Contact({ 
-            name: `User ${latestLog.phone}`, 
-            phone: latestLog.phone, 
+          let mediaUrl = null;
+          if (templateComponents) {
+            const headerComp = templateComponents.find(c => c.type === "header");
+            if (headerComp && headerComp.parameters) {
+              const imgParam = headerComp.parameters.find(p => p.type === "image");
+              if (imgParam) mediaUrl = imgParam.image?.link;
+            }
+          }
+
+          const newMessage = new Message({
+            messageId: latestLog.messageId,
+            from: "me",
+            to: latestLog.phone,
+            body: messageBody,
+            type: "template",
             whatsappAccountId: account._id,
-            sourceCampaign: campaign.name,
-            sector: "Unassigned"
+            templateData: { name: template.name, components: templateComponents },
+            mediaUrl: mediaUrl,
+            direction: "outbound",
+            status: "sent"
           });
-          await contact.save();
-        } else {
-          if (!contact.sourceCampaign) contact.sourceCampaign = campaign.name;
-          await contact.save();
+          await newMessage.save();
+
+          const normalizedPhone = latestLog.phone.toString().replace(/\D/g, "");
+          const updatedConv = await Conversation.findOneAndUpdate(
+            { phone: normalizedPhone, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
+            { 
+              contact: contact._id,
+              whatsappAccountId: account._id,
+              lastMessage: newMessage.body, 
+              lastMessageTime: new Date(),
+              unreadCount: 0
+            },
+            { upsert: true, new: true }
+          ).populate("contact");
+
+          smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
         }
 
-        let mediaUrl = null;
-        if (templateComponents) {
-          const headerComp = templateComponents.find(c => c.type === "header");
-          if (headerComp && headerComp.parameters) {
-            const imgParam = headerComp.parameters.find(p => p.type === "image");
-            if (imgParam) mediaUrl = imgParam.image?.link;
-          }
-        }
+        const totalSent = initialSent + currentSuccess;
+        const totalFailed = initialFailed + currentFailure;
+        const allLogs = [...initialLogs, ...currentLogs];
+        const isFinished = (totalSent + totalFailed) >= campaign.totalContacts;
+        
+        const updateData = {
+          sentCount: totalSent,
+          failedCount: totalFailed,
+          logs: allLogs
+        };
+        if (isFinished) updateData.status = "COMPLETED";
 
-        const newMessage = new Message({
-          messageId: latestLog.messageId,
-          from: "me",
-          to: latestLog.phone,
-          body: messageBody,
-          type: "template",
-          whatsappAccountId: account._id,
-          templateData: { name: template.name, components: templateComponents },
-          mediaUrl: mediaUrl,
-          direction: "outbound",
-          status: "sent"
+        const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateData, { new: true });
+        const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
+
+        const io = getIO();
+        io.emit("campaign_progress", {
+          campaignId: campaign._id,
+          sentCount: totalSent,
+          failedCount: totalFailed,
+          status: currentStatus,
+          logs: allLogs,
+          whatsappAccountId: account._id
         });
-        await newMessage.save();
-
-        const normalizedPhone = latestLog.phone.toString().replace(/\D/g, "");
-        const updatedConv = await Conversation.findOneAndUpdate(
-          { phone: normalizedPhone, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
-          { 
-            contact: contact._id,
-            whatsappAccountId: account._id,
-            lastMessage: newMessage.body, 
-            lastMessageTime: new Date(),
-            unreadCount: 0
-          },
-          { upsert: true, new: true }
-        ).populate("contact");
-
-        smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
-      }
-
-      const totalSent = initialSent + currentSuccess;
-      const totalFailed = initialFailed + currentFailure;
-      const allLogs = [...initialLogs, ...currentLogs];
-      const isFinished = (totalSent + totalFailed) >= campaign.totalContacts;
-      
-      const updateData = {
-        sentCount: totalSent,
-        failedCount: totalFailed,
-        logs: allLogs
-      };
-      if (isFinished) updateData.status = "COMPLETED";
-
-      const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateData, { new: true });
-      const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
-
-      const io = getIO();
-      io.emit("campaign_progress", {
-        campaignId: campaign._id,
-        sentCount: totalSent,
-        failedCount: totalFailed,
-        status: currentStatus,
-        logs: allLogs,
-        whatsappAccountId: account._id
-      });
-    },
-    templateComponents || [],
-    template.language || "en_US",
-    delay,
-    campaign._id
-  );
+      },
+      templateComponents || [],
+      template.language || "en_US",
+      delay,
+      campaign._id
+    );
+  } finally {
+    activeThrottlers.delete(campaignIdStr);
+  }
 };
 
 export const startCampaign = async (req, res) => {
@@ -148,6 +163,7 @@ export const startCampaign = async (req, res) => {
       template: template._id,
       whatsappAccountId: account._id,
       totalContacts: allowedPhones.length,
+      contacts: allowedPhones.map(p => ({ phone: p })),
       status: "RUNNING"
     });
     await campaign.save();
@@ -167,17 +183,29 @@ export const updateCampaignStatus = async (req, res) => {
     const { id } = req.params;
     const { status, allowOutsideHours } = req.body;
     
-    const update = {};
-    if (status) update.status = status;
-    if (allowOutsideHours !== undefined) update.allowOutsideHours = allowOutsideHours;
-
-    const campaign = await Campaign.findByIdAndUpdate(id, update, { new: true });
+    const campaign = await Campaign.findById(id).populate("template");
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
 
-    // If resuming, we don't necessarily need to start a new throttler because 
-    // the existing one might be waiting in its loop.
-    // However, if the throttler finished (e.g. server restart), we might need to restart it.
-    // For now, our throttler loop handles status changes.
+    if (status) campaign.status = status;
+    if (allowOutsideHours !== undefined) campaign.allowOutsideHours = allowOutsideHours;
+    await campaign.save();
+
+    // Trigger resumption if manually resumed and no active throttler is running
+    if (status === "RUNNING" && !activeThrottlers.has(id.toString())) {
+      const account = await WhatsAppAccount.findById(campaign.whatsappAccountId);
+      
+      // Get template components from last message
+      const lastMsg = await Message.findOne({ to: { $exists: true }, whatsappAccountId: account._id }).sort({ createdAt: -1 });
+      const templateComponents = lastMsg?.templateData?.components || [];
+
+      // Find remaining contacts (not in logs)
+      const attemptedPhones = new Set(campaign.logs.map(l => l.phone));
+      const remainingContacts = (campaign.contacts || []).filter(c => !attemptedPhones.has(c.phone));
+
+      if (remainingContacts.length > 0) {
+        processCampaignExecution(campaign, account, remainingContacts, campaign.template, templateComponents, 2, req);
+      }
+    }
 
     res.json(campaign);
   } catch (error) {

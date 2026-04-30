@@ -27,15 +27,14 @@ export const throttleCampaign = async (account, contacts, templateName, sendFunc
           continue;
         }
 
-        // Handle Time Window (8 AM - 7 PM)
-        const now = new Date();
-        const hours = now.getHours();
-        const isOutsideWindow = hours < 8 || hours >= 19;
+        // Handle Time Window (8 AM - 7 PM) - Using IST (India Time)
+        const istHour = parseInt(new Date().toLocaleString("en-US", { hour: 'numeric', hour12: false, timeZone: "Asia/Kolkata" }));
+        const isOutsideWindow = istHour < 8 || istHour >= 19;
 
         if (isOutsideWindow && !campaign.allowOutsideHours) {
-          console.log(`🌙 Outside business hours (8AM-7PM) for campaign "${campaign.name}". Waiting...`);
-          // We wait 1 minute before checking again
-          await new Promise(resolve => setTimeout(resolve, 60000));
+          console.log(`🌙 Outside business hours (IST ${istHour}:00). Campaign "${campaign.name}" is waiting...`);
+          // We wait 10 seconds before checking again (so Force Send button reacts faster)
+          await new Promise(resolve => setTimeout(resolve, 10000));
           continue;
         }
 
