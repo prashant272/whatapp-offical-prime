@@ -47,8 +47,8 @@ const Login = ({ onLogin }) => {
             <label style={{ display: "block", fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "8px" }}>Email Address</label>
             <div style={{ position: "relative" }}>
               <Mail size={18} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }} />
-              <input 
-                type="email" 
+              <input
+                type="email"
                 placeholder="admin@example.com"
                 style={{ width: "100%", padding: "12px 12px 12px 40px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                 value={email}
@@ -62,8 +62,8 @@ const Login = ({ onLogin }) => {
             <label style={{ display: "block", fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: "8px" }}>Password</label>
             <div style={{ position: "relative" }}>
               <Lock size={18} style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }} />
-              <input 
-                type="password" 
+              <input
+                type="password"
                 placeholder="••••••••"
                 style={{ width: "100%", padding: "12px 12px 12px 40px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "var(--text-primary)", borderRadius: "10px" }}
                 value={password}
@@ -73,9 +73,9 @@ const Login = ({ onLogin }) => {
             </div>
           </div>
 
-          <button 
-            type="submit" 
-            className="btn-primary" 
+          <button
+            type="submit"
+            className="btn-primary"
             style={{ width: "100%", padding: "12px", display: "flex", justifyContent: "center", alignItems: "center", gap: "10px" }}
             disabled={loading}
           >

@@ -7,7 +7,8 @@ const campaignSchema = new mongoose.Schema({
   sentCount: { type: Number, default: 0 },
   deliveredCount: { type: Number, default: 0 },
   failedCount: { type: Number, default: 0 },
-  status: { type: String, enum: ["PENDING", "RUNNING", "COMPLETED", "FAILED"], default: "PENDING" },
+  status: { type: String, enum: ["PENDING", "RUNNING", "COMPLETED", "FAILED", "PAUSED"], default: "PENDING" },
+  allowOutsideHours: { type: Boolean, default: false },
   logs: [{
     phone: String,
     status: String,

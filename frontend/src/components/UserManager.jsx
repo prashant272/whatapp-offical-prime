@@ -91,7 +91,7 @@ const UserManager = () => {
                 </div>
               </div>
               {u.role !== "Admin" && (
-                <button 
+                <button
                   onClick={() => handleDelete(u._id)}
                   style={{ background: "rgba(255, 71, 87, 0.1)", border: "none", color: "#ff4757", padding: "8px", borderRadius: "8px", cursor: "pointer" }}
                 >
@@ -110,44 +110,44 @@ const UserManager = () => {
               <h3>Add New Team Member</h3>
               <button onClick={() => setShowAddModal(false)} style={{ background: "transparent", border: "none", color: "white", cursor: "pointer" }}><X /></button>
             </div>
-            
+
             <form onSubmit={handleCreate}>
               <div style={{ marginBottom: "1rem" }}>
                 <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Full Name</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px", marginTop: "5px" }}
                   value={newUser.name}
-                  onChange={e => setNewUser({...newUser, name: e.target.value})}
+                  onChange={e => setNewUser({ ...newUser, name: e.target.value })}
                   required
                 />
               </div>
               <div style={{ marginBottom: "1rem" }}>
                 <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Email Address</label>
-                <input 
-                  type="email" 
+                <input
+                  type="email"
                   style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px", marginTop: "5px" }}
                   value={newUser.email}
-                  onChange={e => setNewUser({...newUser, email: e.target.value})}
+                  onChange={e => setNewUser({ ...newUser, email: e.target.value })}
                   required
                 />
               </div>
               <div style={{ marginBottom: "1rem" }}>
                 <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Password</label>
-                <input 
-                  type="password" 
+                <input
+                  type="password"
                   style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px", marginTop: "5px" }}
                   value={newUser.password}
-                  onChange={e => setNewUser({...newUser, password: e.target.value})}
+                  onChange={e => setNewUser({ ...newUser, password: e.target.value })}
                   required
                 />
               </div>
               <div style={{ marginBottom: "2rem" }}>
                 <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)" }}>Role</label>
-                <select 
+                <select
                   style={{ width: "100%", padding: "12px", background: "var(--bg-tertiary)", border: "1px solid var(--glass-border)", color: "white", borderRadius: "10px", marginTop: "5px" }}
                   value={newUser.role}
-                  onChange={e => setNewUser({...newUser, role: e.target.value})}
+                  onChange={e => setNewUser({ ...newUser, role: e.target.value })}
                 >
                   <option value="Manager">Manager</option>
                   <option value="Executive">Executive</option>

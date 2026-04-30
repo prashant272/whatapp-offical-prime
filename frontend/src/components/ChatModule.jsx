@@ -2167,3 +2167,4 @@ const ChatModule = () => {
 };
 
 export default ChatModule;
+

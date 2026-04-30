@@ -348,6 +348,38 @@ const CampaignManager = () => {
 
   const contactCount = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5).length;
 
+  const handleUpdateStatus = async (id, status, allowOutsideHours) => {
+    try {
+      await api.patch(`/campaigns/${id}/status`, { status, allowOutsideHours });
+      setCampaigns(prev => prev.map(c => {
+        if (c._id === id) {
+          const update = { ...c };
+          if (status) update.status = status;
+          if (allowOutsideHours !== undefined) update.allowOutsideHours = allowOutsideHours;
+          return update;
+        }
+        return c;
+      }));
+    } catch (err) {
+      alert("Failed to update status");
+    }
+  };
+
+  const handleRetry = async (id) => {
+    try {
+      const res = await api.post(`/campaigns/${id}/retry`);
+      alert(res.data.message);
+      fetchData();
+    } catch (err) {
+      alert("Failed to retry campaign: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  const isNightTime = () => {
+    const hours = new Date().getHours();
+    return hours < 8 || hours >= 19;
+  };
+
   return (
     <div className="campaign-manager">
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "2rem", alignItems: "center" }}>
@@ -473,24 +505,150 @@ const CampaignManager = () => {
       ) : (
         <div style={{ display: "grid", gap: "1.5rem" }}>
           {campaigns.map(camp => (
-            <div key={camp._id} className="glass-card">
+            <div key={camp._id} className="glass-card" style={{ position: "relative" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
                 <div>
                   <h4 style={{ margin: 0 }}>{camp.name}</h4>
                   <span style={{ fontSize: "0.75rem", color: "#667781" }}>Template: {camp.templateName}</span>
                 </div>
-                <div style={{ fontSize: "0.75rem", background: "#f0f2f5", padding: "4px 10px", borderRadius: "10px" }}>{camp.status}</div>
+                <div style={{ 
+                  fontSize: "0.75rem", 
+                  background: camp.status === "RUNNING" ? "#e7fce3" : camp.status === "PAUSED" ? "#fff9db" : "#f0f2f5", 
+                  color: camp.status === "RUNNING" ? "#008069" : camp.status === "PAUSED" ? "#f08c00" : "#667781",
+                  padding: "4px 10px", 
+                  borderRadius: "10px",
+                  fontWeight: "bold"
+                }}>
+                  {camp.status} {isNightTime() && camp.status === "RUNNING" && !camp.allowOutsideHours ? "(WAITING FOR 8AM)" : ""}
+                </div>
               </div>
               <div style={{ background: "#eee", height: "6px", borderRadius: "3px", overflow: "hidden", marginBottom: "1rem" }}>
                 <div style={{ background: "#00a884", height: "100%", width: `${(camp.sentCount / camp.totalContacts) * 100}%` }}></div>
               </div>
-              <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.85rem" }}>
+              <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.85rem", alignItems: "center" }}>
                 <div>Total: <strong>{camp.totalContacts}</strong></div>
                 <div>Sent: <strong style={{ color: "#00a884" }}>{camp.sentCount}</strong></div>
                 <div>Failed: <strong style={{ color: "#ff4757" }}>{camp.failedCount}</strong></div>
               </div>
+
+              {/* ACTION BUTTONS */}
+              <div style={{ display: "flex", gap: "10px", marginTop: "1.5rem", borderTop: "1px solid #eee", paddingTop: "1rem" }}>
+                {camp.status === "RUNNING" && (
+                  <button 
+                    onClick={() => handleUpdateStatus(camp._id, "PAUSED")} 
+                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#fff9db", color: "#f08c00", border: "1px solid #fab005", cursor: "pointer" }}
+                  >
+                    Pause Campaign
+                  </button>
+                )}
+                
+                {camp.status === "PAUSED" && (
+                  <button 
+                    onClick={() => handleUpdateStatus(camp._id, "RUNNING")} 
+                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#e7fce3", color: "#008069", border: "1px solid #00a884", cursor: "pointer" }}
+                  >
+                    Resume Campaign
+                  </button>
+                )}
+
+                {camp.status === "RUNNING" && isNightTime() && !camp.allowOutsideHours && (
+                  <button 
+                    onClick={() => handleUpdateStatus(camp._id, "RUNNING", true)} 
+                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#339af0", color: "white", border: "none", cursor: "pointer" }}
+                  >
+                    Force Send (Night Mode)
+                  </button>
+                )}
+
+                {(camp.status === "COMPLETED" || camp.status === "FAILED" || (camp.status === "PAUSED" && camp.failedCount > 0)) && (
+                  <button 
+                    onClick={() => handleRetry(camp._id)} 
+                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#ff4757", color: "white", border: "none", cursor: "pointer" }}
+                  >
+                    Resend Failed ({camp.failedCount})
+                  </button>
+                )}
+                
+                <button 
+                  onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} 
+                  style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#f0f2f5", color: "#667781", border: "1px solid #ddd", cursor: "pointer", marginLeft: "auto" }}
+                >
+                  View Logs
+                </button>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+      {/* Logs Modal */}
+      {showLogsModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0, 
+          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(5px)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px"
+        }}>
+          <div style={{
+            background: "white", width: "100%", maxWidth: "900px", maxHeight: "85vh", 
+            borderRadius: "20px", overflow: "hidden", display: "flex", flexDirection: "column",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)"
+          }}>
+            <div style={{ 
+              padding: "20px 25px", borderBottom: "1px solid #eee", 
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              background: "#f8f9fa"
+            }}>
+              <h4 style={{ margin: 0, display: "flex", alignItems: "center", gap: "10px" }}>
+                <List size={20} /> Campaign Delivery Logs
+              </h4>
+              <button 
+                onClick={() => setShowLogsModal(false)}
+                style={{ background: "#eee", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
+              >
+                Close
+              </button>
+            </div>
+            
+            <div style={{ padding: "0", overflowY: "auto", flex: 1 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+                <thead style={{ position: "sticky", top: 0, background: "white", zIndex: 1, boxShadow: "0 1px 0 #eee" }}>
+                  <tr>
+                    <th style={{ padding: "15px 25px", fontSize: "0.85rem", color: "#667781" }}>Phone Number</th>
+                    <th style={{ padding: "15px 25px", fontSize: "0.85rem", color: "#667781" }}>Status</th>
+                    <th style={{ padding: "15px 25px", fontSize: "0.85rem", color: "#667781" }}>Info / Meta Error</th>
+                    <th style={{ padding: "15px 25px", fontSize: "0.85rem", color: "#667781" }}>Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedLogs.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" style={{ padding: "40px", textAlign: "center", color: "#667781" }}>No logs available for this campaign yet.</td>
+                    </tr>
+                  ) : (
+                    [...selectedLogs].reverse().map((log, idx) => (
+                      <tr key={idx} style={{ borderBottom: "1px solid #f8f9fa" }}>
+                        <td style={{ padding: "12px 25px", fontWeight: "600" }}>{log.phone}</td>
+                        <td style={{ padding: "12px 25px" }}>
+                          <span style={{ 
+                            padding: "4px 8px", borderRadius: "6px", fontSize: "0.75rem", fontWeight: "bold",
+                            background: log.status === "sent" ? "#e7fce3" : "#fff5f5",
+                            color: log.status === "sent" ? "#008069" : "#ff4757"
+                          }}>
+                            {log.status.toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={{ padding: "12px 25px", fontSize: "0.85rem", color: log.error ? "#ff4757" : "#667781" }}>
+                          {log.error || (log.messageId ? `Message ID: ${log.messageId}` : "Delivered successfully")}
+                        </td>
+                        <td style={{ padding: "12px 25px", fontSize: "0.75rem", color: "#999" }}>
+                          {log.sentAt ? new Date(log.sentAt).toLocaleString() : "-"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>

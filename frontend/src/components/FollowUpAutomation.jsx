@@ -8,7 +8,7 @@ const FollowUpAutomation = () => {
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  
+
   const [newRule, setNewRule] = useState({
     name: "",
     status: "Interested", // Default
@@ -43,7 +43,7 @@ const FollowUpAutomation = () => {
   const handleCreateRule = async (e) => {
     e.preventDefault();
     if (!newRule.name || !newRule.messageText) return alert("Name and Message are required!");
-    
+
     try {
       // Send the new rule to the Node.js backend to be saved in the database
       await api.post("/follow-ups", newRule);
@@ -88,72 +88,72 @@ const FollowUpAutomation = () => {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
             <div>
               <label>Rule Name</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
                 value={newRule.name}
-                onChange={e => setNewRule({...newRule, name: e.target.value})}
+                onChange={e => setNewRule({ ...newRule, name: e.target.value })}
                 placeholder="e.g. 24hr Interested Follow-up"
                 required
               />
             </div>
             <div>
               <label>Target Status</label>
-              <select 
+              <select
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
                 value={newRule.status}
-                onChange={e => setNewRule({...newRule, status: e.target.value})}
+                onChange={e => setNewRule({ ...newRule, status: e.target.value })}
               >
                 <option value="Interested">Interested ("Yes" Reply)</option>
                 <option value="Not Interested">Not Interested ("No" Reply)</option>
                 <option value="Pending">Pending</option>
                 {statuses.map(s => (
-                  !["Interested", "Not Interested", "Pending"].includes(s.name) && 
+                  !["Interested", "Not Interested", "Pending"].includes(s.name) &&
                   <option key={s._id} value={s.name}>{s.name}</option>
                 ))}
               </select>
             </div>
             <div>
               <label>Delay (Days)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 min="0"
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
                 value={newRule.delayDays}
-                onChange={e => setNewRule({...newRule, delayDays: e.target.value})}
+                onChange={e => setNewRule({ ...newRule, delayDays: e.target.value })}
               />
             </div>
             <div>
               <label>Delay (Hours)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 min="0"
                 max="23"
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
                 value={newRule.delayHours}
-                onChange={e => setNewRule({...newRule, delayHours: e.target.value})}
+                onChange={e => setNewRule({ ...newRule, delayHours: e.target.value })}
               />
             </div>
             <div>
               <label>Delay (Minutes)</label>
-              <input 
-                type="number" 
+              <input
+                type="number"
                 min="0"
                 max="59"
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
                 value={newRule.delayMinutes}
-                onChange={e => setNewRule({...newRule, delayMinutes: e.target.value})}
+                onChange={e => setNewRule({ ...newRule, delayMinutes: e.target.value })}
               />
             </div>
           </div>
-          
+
           <div>
             <label>Message Content</label>
-            <textarea 
+            <textarea
               rows="4"
               style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px", resize: "vertical" }}
               value={newRule.messageText}
-              onChange={e => setNewRule({...newRule, messageText: e.target.value})}
+              onChange={e => setNewRule({ ...newRule, messageText: e.target.value })}
               placeholder="Hi! We noticed you were interested. Do you have any questions?"
               required
             ></textarea>
@@ -185,22 +185,22 @@ const FollowUpAutomation = () => {
                   </span>
                 </div>
                 <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", display: "flex", gap: "15px" }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><MessageSquare size={14}/> Status: {rule.status}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Clock size={14}/> Delay: {rule.delayDays}d {rule.delayHours}h {rule.delayMinutes}m</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><MessageSquare size={14} /> Status: {rule.status}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Clock size={14} /> Delay: {rule.delayDays}d {rule.delayHours}h {rule.delayMinutes}m</span>
                 </div>
                 <div style={{ fontSize: "0.85rem", marginTop: "10px", background: "#f8f9fa", padding: "10px", borderRadius: "8px", borderLeft: "3px solid #00a884" }}>
                   {rule.messageText}
                 </div>
               </div>
               <div style={{ display: "flex", gap: "10px" }}>
-                <button 
+                <button
                   style={{ background: "none", border: "none", cursor: "pointer", color: rule.active ? "#d9534f" : "#008069" }}
                   onClick={() => toggleRuleStatus(rule._id, rule.active)}
                   title={rule.active ? "Pause Rule" : "Activate Rule"}
                 >
                   {rule.active ? <PauseCircle size={24} /> : <PlayCircle size={24} />}
                 </button>
-                <button 
+                <button
                   style={{ background: "none", border: "none", cursor: "pointer", color: "#d9534f" }}
                   onClick={() => deleteRule(rule._id)}
                   title="Delete Rule"

@@ -17,7 +17,7 @@ const ActivityLog = () => {
       const userInfo = JSON.parse(localStorage.getItem("userInfo"));
       const config = { headers: { Authorization: `Bearer ${userInfo.token}` } };
       const res = await axios.get(`${API_BASE}/activities?page=${p}&limit=50`, config);
-      
+
       const newLogs = res.data.logs || [];
       if (p === 1) {
         setLogs(newLogs);
@@ -77,8 +77,8 @@ const ActivityLog = () => {
         </button>
       </div>
 
-      <div 
-        className="chat-scroll" 
+      <div
+        className="chat-scroll"
         onScroll={handleScroll}
         style={{ background: "rgba(255,255,255,0.02)", borderRadius: "15px", border: "1px solid var(--glass-border)", overflowY: "auto", maxHeight: "70vh" }}
       >
