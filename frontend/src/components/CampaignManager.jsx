@@ -517,9 +517,15 @@ const CampaignManager = () => {
                   color: camp.status === "RUNNING" ? "#008069" : camp.status === "PAUSED" ? "#f08c00" : "#667781",
                   padding: "4px 10px", 
                   borderRadius: "10px",
-                  fontWeight: "bold"
+                  fontWeight: "bold",
+                  textAlign: "right"
                 }}>
-                  {camp.status} {isNightTime() && camp.status === "RUNNING" && !camp.allowOutsideHours ? "(WAITING FOR 8AM)" : ""}
+                  {camp.status} 
+                  {isNightTime() && (camp.status === "RUNNING" || camp.status === "PAUSED") && !camp.allowOutsideHours ? (
+                    <div style={{ fontSize: "0.65rem", color: "#339af0", marginTop: "2px" }}>
+                      (WAITING FOR 8AM)
+                    </div>
+                  ) : ""}
                 </div>
               </div>
               <div style={{ background: "#eee", height: "6px", borderRadius: "3px", overflow: "hidden", marginBottom: "1rem" }}>

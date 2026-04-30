@@ -98,14 +98,16 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
       const totalFailed = initialFailed + currentFailure;
       const allLogs = [...initialLogs, ...currentLogs];
       const isFinished = (totalSent + totalFailed) >= campaign.totalContacts;
-      const currentStatus = isFinished ? "COMPLETED" : "RUNNING";
-
-      await Campaign.findByIdAndUpdate(campaign._id, {
+      
+      const updateData = {
         sentCount: totalSent,
         failedCount: totalFailed,
-        logs: allLogs,
-        status: currentStatus
-      });
+        logs: allLogs
+      };
+      if (isFinished) updateData.status = "COMPLETED";
+
+      const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateData, { new: true });
+      const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
 
       const io = getIO();
       io.emit("campaign_progress", {

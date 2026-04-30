@@ -11,6 +11,14 @@ export const initAutomationCron = () => {
   // We use node-cron to run this function every 1 minute automatically in the background
   cron.schedule("* * * * *", async () => {
     try {
+      // --- Business Hours Check (8 AM - 7 PM) ---
+      const now = new Date();
+      const currentHour = now.getHours();
+      if (currentHour < 8 || currentHour >= 19) {
+        // We pause automated follow-ups during the night to avoid disturbing customers.
+        return; 
+      }
+
       console.log("⏰ Running Follow-up Automation Check...");
       
       // Step 1: Find all Follow-up rules that are currently turned ON (active: true).
