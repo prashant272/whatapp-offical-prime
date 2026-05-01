@@ -28,7 +28,8 @@ const autoReplySchema = new mongoose.Schema({
   delay: { 
     type: Number, 
     default: 0 // Delay in seconds
-  }
+  },
+  whatsappAccountIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }]
 }, { timestamps: true });
 
 const AutoReply = mongoose.model("AutoReply", autoReplySchema);

@@ -9,7 +9,8 @@ const customFieldSchema = new mongoose.Schema({
     default: "TEXT" 
   },
   options: [String], // For SELECT type
-  whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount", required: true },
+  whatsappAccountIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }],
+  whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }, // Backward compatibility
   createdAt: { type: Date, default: Date.now }
 });
 

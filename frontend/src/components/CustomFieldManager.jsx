@@ -12,9 +12,11 @@ const CustomFieldManager = () => {
     label: "",
     name: "",
     type: "TEXT",
-    options: ""
+    options: "",
+    whatsappAccountIds: []
   });
   const [editingField, setEditingField] = useState(null);
+  const { accounts } = useWhatsAppAccount();
 
   const fetchFields = async () => {
     if (!activeAccount) return;
@@ -41,7 +43,8 @@ const CustomFieldManager = () => {
       setLoading(true);
       const payload = {
         ...newField,
-        options: newField.type === "SELECT" ? newField.options.split(",").map(o => o.trim()) : []
+        options: newField.type === "SELECT" ? newField.options.split(",").map(o => o.trim()) : [],
+        whatsappAccountIds: newField.whatsappAccountIds.length > 0 ? newField.whatsappAccountIds : [activeAccount?._id]
       };
       await api.post("/custom-fields", payload);
       setNewField({ label: "", name: "", type: "TEXT", options: "" });
@@ -162,6 +165,41 @@ const CustomFieldManager = () => {
               </div>
             )}
           </div>
+
+          <div style={{ marginBottom: "1.5rem" }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Active For Accounts</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {accounts.map(acc => (
+                <div 
+                  key={acc._id}
+                  onClick={() => {
+                    const ids = newField.whatsappAccountIds.includes(acc._id)
+                      ? newField.whatsappAccountIds.filter(id => id !== acc._id)
+                      : [...newField.whatsappAccountIds, acc._id];
+                    setNewField({ ...newField, whatsappAccountIds: ids });
+                  }}
+                  style={{ 
+                    padding: "6px 12px", 
+                    borderRadius: "16px", 
+                    fontSize: "0.75rem", 
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    border: "1px solid",
+                    borderColor: newField.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#e2e8f0",
+                    background: newField.whatsappAccountIds.includes(acc._id) ? "rgba(0, 168, 132, 0.1)" : "white",
+                    color: newField.whatsappAccountIds.includes(acc._id) ? "#008069" : "#64748b",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}
+                >
+                  <CheckSquare size={14} style={{ opacity: newField.whatsappAccountIds.includes(acc._id) ? 1 : 0.3 }} />
+                  {acc.name}
+                </div>
+              ))}
+            </div>
+            <p style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "6px" }}>If none selected, it will be active for the current account only.</p>
+          </div>
           <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px" }} disabled={loading}>
             {loading ? <Loader2 size={18} className="animate-spin" /> : "Save Field Definition"}
           </button>
@@ -222,6 +260,40 @@ const CustomFieldManager = () => {
                 />
               </div>
             )}
+          </div>
+
+          <div style={{ marginBottom: "1.5rem" }}>
+            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Active For Accounts</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {accounts.map(acc => (
+                <div 
+                  key={acc._id}
+                  onClick={() => {
+                    const ids = editingField.whatsappAccountIds?.includes(acc._id)
+                      ? editingField.whatsappAccountIds.filter(id => id !== acc._id)
+                      : [...(editingField.whatsappAccountIds || []), acc._id];
+                    setEditingField({ ...editingField, whatsappAccountIds: ids });
+                  }}
+                  style={{ 
+                    padding: "6px 12px", 
+                    borderRadius: "16px", 
+                    fontSize: "0.75rem", 
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    border: "1px solid",
+                    borderColor: editingField.whatsappAccountIds?.includes(acc._id) ? "#6366f1" : "#e2e8f0",
+                    background: editingField.whatsappAccountIds?.includes(acc._id) ? "rgba(99, 102, 241, 0.1)" : "white",
+                    color: editingField.whatsappAccountIds?.includes(acc._id) ? "#6366f1" : "#64748b",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}
+                >
+                  <CheckSquare size={14} style={{ opacity: editingField.whatsappAccountIds?.includes(acc._id) ? 1 : 0.3 }} />
+                  {acc.name}
+                </div>
+              ))}
+            </div>
           </div>
           <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px", background: "#6366f1" }} disabled={loading}>
             {loading ? <Loader2 size={18} className="animate-spin" /> : "Update Field Definition"}

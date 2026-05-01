@@ -286,7 +286,7 @@ const ChatModule = () => {
     if (currentUser.role === "Executive") return;
     try {
       const res = await api.get("/users");
-      setExecutives(res.data.filter(u => u.role === "Executive" || u.role === "Manager"));
+      setExecutives(res.data.filter(u => u.role === "Executive" || u.role === "Manager" || u.role === "Admin"));
     } catch (err) {
       console.error("Error fetching users:", err);
     }
@@ -416,7 +416,7 @@ const ChatModule = () => {
         setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
         setPresets(Array.isArray(pres.data) ? pres.data : []);
         if (currentUser.role !== "Executive") {
-          setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager") : []);
+          setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager" || u.role === "Admin") : []);
         }
       } catch (err) {
         console.error("Initial fetch error:", err);
@@ -545,6 +545,9 @@ const ChatModule = () => {
       setConversations(prev => prev.map(c => 
         c.phone === selectedChat.phone ? { ...c, assignedTo: res.data.conversation.assignedTo, sector: res.data.conversation.sector } : c
       ));
+      if (activeContact && (activeContact._id === res.data.conversation.contact?._id || activeContact._id === res.data.conversation.contact)) {
+        setActiveContact(prev => ({ ...prev, assignedTo: res.data.conversation.assignedTo, sector: res.data.conversation.sector }));
+      }
     } catch (err) {
       alert("Error assigning: " + err.message);
     }
@@ -1199,9 +1202,18 @@ const ChatModule = () => {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
                     <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem" }}>{chat.contact?.name || chat.phone}</span>
-                    <span style={{ fontSize: "0.75rem", color: isActive ? "#008069" : "#667781", fontWeight: isActive ? "600" : "normal" }}>
-                      {chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
-                    </span>
+                    <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                      {chat.lastMessageTime ? (
+                        <>
+                          <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#008069" : "#667781" }}>
+                            {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          <span style={{ fontSize: "0.62rem", color: "#8696a0", fontWeight: "600", textTransform: "uppercase" }}>
+                            {new Date(chat.lastMessageTime).toLocaleDateString([], { day: '2-digit', month: 'short' })}
+                          </span>
+                        </>
+                      ) : ""}
+                    </div>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <p style={{ 
@@ -1246,117 +1258,36 @@ const ChatModule = () => {
       <div className="chat-area-container" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
         {selectedChat ? (
           <>
-            <div style={{ padding: "10px 16px", background: "#f0f2f5", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "60px" }}>
+            <div style={{ padding: "8px 16px", background: "#f0f2f5", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "52px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
               <div 
-                style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer" }}
+                style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
                 onClick={() => setShowContactInfo(!showContactInfo)}
               >
-                <div style={{ width: "38px", height: "38px", borderRadius: "50%", background: "#dfe5e7", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696a0", fontSize: "1.2rem", fontWeight: "bold" }}>
+                <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: "#dfe5e7", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696a0", fontSize: "1.1rem", fontWeight: "bold" }}>
                   {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: "700", color: "#111b21" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowTimelineModal(true);
-                        fetchTimelineEntries(selectedChat.contact?._id);
-                      }}
-                      style={{ 
-                        background: "rgba(0, 168, 132, 0.1)", 
-                        color: "#00a884", 
-                        border: "1px solid rgba(0, 168, 132, 0.2)", 
-                        borderRadius: "20px", 
-                        padding: "4px 12px", 
-                        fontSize: "0.75rem", 
-                        fontWeight: "700", 
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        transition: "all 0.2s ease"
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.background = "#00a884";
-                        e.currentTarget.style.color = "white";
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.background = "rgba(0, 168, 132, 0.1)";
-                        e.currentTarget.style.color = "#00a884";
-                      }}
-                    >
-                      <Clock size={14} /> Timeline
-                    </button>
+                    <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: "700", color: "#111b21" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
+                    {windowTimeLeft && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(0, 128, 105, 0.1)", padding: "2px 8px", borderRadius: "10px", fontSize: "0.65rem", color: "#008069", fontWeight: "700" }}>
+                        <Clock size={10} /> {windowTimeLeft}
+                      </div>
+                    )}
                   </div>
-                  <span style={{ fontSize: "0.7rem", color: "#667781" }}>
+                  <span style={{ fontSize: "0.68rem", color: "#667781" }}>
                     {selectedChat.contact?.name ? selectedChat.phone : "Online"}
                   </span>
                 </div>
               </div>
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                {/* Assignment Dropdown */}
-                {currentUser.role !== "Executive" && (
-                  <select 
-                    style={{ border: "1px solid #e9edef", borderRadius: "10px", padding: "6px 10px", fontSize: "0.8rem", outline: "none", cursor: "pointer", background: "white", color: "#54656f", fontWeight: "600" }}
-                    value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
-                    onChange={(e) => handleAssign(e.target.value, undefined)}
-                  >
-                    <option value="">Assign To...</option>
-                    {executives.map(ex => (
-                      <option key={ex._id} value={ex._id}>{ex.name}</option>
-                    ))}
-                  </select>
-                )}
-                
-                {/* Sector Dropdown */}
-                <select 
-                  style={{ border: "1px solid #e9edef", borderRadius: "10px", padding: "6px 10px", fontSize: "0.8rem", outline: "none", cursor: "pointer", background: "white", color: "#00a884", fontWeight: "600" }}
-                  value={selectedChat.sector || "Unassigned"}
-                  onChange={(e) => handleAssign(undefined, e.target.value)}
-                >
-                  <option value="Unassigned">Sector...</option>
-                  {sectors.map(s => (
-                    <option key={s.name} value={s.name}>{s.name}</option>
-                  ))}
-                </select>
-
-                {/* Status Dropdown */}
-                <select 
-                  className="status-select"
-                  value={selectedChat.status || "New"}
-                  onChange={(e) => handleUpdateStatus(e.target.value)}
-                  style={{
-                    padding: "6px 14px",
-                    borderRadius: "20px",
-                    fontSize: "0.85rem",
-                    fontWeight: "600",
-                    border: "none",
-                    background: getStatusColor(selectedChat.status),
-                    color: "white",
-                    cursor: "pointer",
-                    outline: "none",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                  }}
-                >
-                  {customStatuses.map(s => (
-                    <option key={s.name} value={s.name} style={{ background: "white", color: "#333" }}>{s.name}</option>
-                  ))}
-                </select>
-
-                <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#ffffff", padding: "6px 12px", borderRadius: "8px", fontSize: "0.75rem", fontWeight: "600", cursor: "pointer" }}>
+                {/* Send Template Button */}
+                <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#ffffff", padding: "6px 14px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700", cursor: "pointer", boxShadow: "0 2px 4px rgba(0, 168, 132, 0.2)", transition: "0.2s" }} onMouseOver={e => e.currentTarget.style.transform = "translateY(-1px)"} onMouseOut={e => e.currentTarget.style.transform = "translateY(0)"}>
                   Send Template
                 </button>
                 <MoreVertical size={20} style={{ color: "#8696a0", cursor: "pointer" }} />
               </div>
             </div>
-
-            {/* 24h Window Timer Bar */}
-            {windowTimeLeft && (
-              <div style={{ background: "#f0f2f5", padding: "4px 16px", borderBottom: "1px solid rgba(0,0,0,0.05)", display: "flex", justifyContent: "center", alignItems: "center", gap: "8px", fontSize: "0.75rem", color: "#008069", fontWeight: "600" }}>
-                <Clock size={14} /> 24h Service Window: {windowTimeLeft} remaining
-              </div>
-            )}
 
             <div 
               ref={scrollRef}
@@ -1635,7 +1566,7 @@ const ChatModule = () => {
                 background: "linear-gradient(135deg, #00a884, #05cd99)", 
                 display: "flex", 
                 alignItems: "center", 
-                justify: "center", 
+                justifyContent: "center", 
                 color: "white", 
                 fontSize: "3rem", 
                 fontWeight: "800", 
@@ -1698,6 +1629,23 @@ const ChatModule = () => {
                 </div>
               </div>
 
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Sector</label>
+                <div style={{ position: "relative" }}>
+                  <select 
+                    style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
+                    value={selectedChat.sector || "Unassigned"}
+                    onChange={(e) => handleAssign(undefined, e.target.value)}
+                  >
+                    <option value="Unassigned">Unassigned</option>
+                    {sectors.map(s => (
+                      <option key={s._id} value={s.name}>{s.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                </div>
+              </div>
+
               <div>
                 <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Assigned Specialist</label>
                 <div style={{ position: "relative" }}>
@@ -1708,9 +1656,9 @@ const ChatModule = () => {
                         value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
                         onChange={(e) => handleAssign(e.target.value, undefined)}
                       >
-                        <option value="">Choose Executive</option>
+                        <option value="">Nil (Unassigned)</option>
                         {executives.map(ex => (
-                          <option key={ex._id} value={ex._id}>{ex.name}</option>
+                          <option key={ex._id} value={ex._id}>{ex.name} ({ex.role})</option>
                         ))}
                       </select>
                       <User size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
@@ -2167,4 +2115,3 @@ const ChatModule = () => {
 };
 
 export default ChatModule;
-

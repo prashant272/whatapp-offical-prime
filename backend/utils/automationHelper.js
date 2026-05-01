@@ -43,8 +43,14 @@ function getSimilarity(s1, s2) {
 export const processAutoReply = async (account, phone, incomingText, contact) => {
   try {
     const text = incomingText.toLowerCase().trim();
-    console.log(`🔍 Automation Check: incomingText="${text}" | phone="${phone}"`);
-    const autoReplies = await AutoReply.find({ isActive: true });
+    console.log(`🔍 Automation Check: incomingText="${text}" | phone="${phone}" | accountId="${account?._id}"`);
+    const autoReplies = await AutoReply.find({ 
+      isActive: true,
+      $or: [
+        { whatsappAccountIds: { $size: 0 } }, // Global (if empty)
+        { whatsappAccountIds: account?._id }   // Specific to this account
+      ]
+    });
     
     let bestMatch = null;
     let highestScore = 0;
@@ -79,7 +85,13 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     // --- 2. CHECK DYNAMIC FLOW TRIGGERS (Fuzzy Match 60%) ---
-    const allFlows = await Flow.find({ isActive: true });
+    const allFlows = await Flow.find({ 
+      isActive: true,
+      $or: [
+        { whatsappAccountIds: { $size: 0 } },
+        { whatsappAccountIds: account?._id }
+      ]
+    });
     let bestFlowMatch = null;
     let highestFlowScore = 0;
 

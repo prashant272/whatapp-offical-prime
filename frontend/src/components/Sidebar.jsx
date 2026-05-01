@@ -1,39 +1,79 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LogOut, ChevronUp, Smartphone } from "lucide-react";
+import { LogOut, ChevronUp, Smartphone, Menu, ChevronLeft } from "lucide-react";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
-const Sidebar = ({ user, menuItems, handleLogout }) => {
+const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed }) => {
   const location = useLocation();
   const isChatTab = location.pathname.startsWith("/chats");
   const { accounts, activeAccount, switchAccount } = useWhatsAppAccount();
   const [showAccountSwitcher, setShowAccountSwitcher] = React.useState(false);
 
+  // Auto-expand when leaving chats
+  React.useEffect(() => {
+    if (!isChatTab && isCollapsed) {
+      setIsCollapsed(false);
+    }
+  }, [isChatTab]);
+
   const visibleMenu = user ? menuItems.filter(item => item.roles.includes(user.role)) : [];
 
   return (
-    <aside className={`sidebar ${isChatTab ? "mini-sidebar" : ""}`} style={{ 
-      width: isChatTab ? "70px" : "240px", 
-      transition: "all 0.3s ease",
-      padding: isChatTab ? "0.5rem 0" : "0.5rem 0.5rem",
+    <aside className={`sidebar ${isCollapsed ? "mini-sidebar" : ""}`} style={{ 
+      width: isCollapsed ? "70px" : "240px", 
+      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+      padding: isCollapsed ? "0.5rem 0" : "0.5rem 0.5rem",
       display: "flex",
       flexDirection: "column",
       zIndex: 100,
       background: "#ffffff",
-      borderRight: "1px solid rgba(0,0,0,0.05)"
+      borderRight: "1px solid rgba(0,0,0,0.05)",
+      position: "fixed",
+      height: "100vh"
     }}>
       {/* Premium Header Area */}
       <div style={{ 
-        padding: isChatTab ? "0" : "12px 10px",
+        padding: isCollapsed ? "0" : "12px 10px",
         marginBottom: "0.5rem",
-        background: isChatTab ? "transparent" : "linear-gradient(145deg, #f8fafc, #ffffff)",
+        background: isCollapsed ? "transparent" : "linear-gradient(145deg, #f8fafc, #ffffff)",
         borderRadius: "16px",
-        border: isChatTab ? "none" : "1px solid rgba(0,0,0,0.03)",
-        boxShadow: isChatTab ? "none" : "0 4px 12px rgba(0,0,0,0.02)"
+        border: isCollapsed ? "none" : "1px solid rgba(0,0,0,0.03)",
+        boxShadow: isCollapsed ? "none" : "0 4px 12px rgba(0,0,0,0.02)",
+        position: "relative"
       }}>
-        <div style={{ marginBottom: isChatTab ? "0.8rem" : "12px", textAlign: isChatTab ? "center" : "left" }}>
+        {/* Toggle Button - ONLY IN CHAT TAB */}
+        {isChatTab && (
+          <button 
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            style={{
+              position: "absolute",
+              right: isCollapsed ? "50%" : "-15px",
+              top: isCollapsed ? "10px" : "50%",
+              transform: isCollapsed ? "translateX(50%)" : "translateY(-50%)",
+              width: "28px",
+              height: "28px",
+              borderRadius: "50%",
+              background: "white",
+              border: "1px solid #e2e8f0",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              zIndex: 10,
+              boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+              transition: "0.3s"
+            }}
+            onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+            onMouseOut={e => e.currentTarget.style.background = "white"}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            {isCollapsed ? <Menu size={14} color="#64748b" /> : <ChevronLeft size={14} color="#64748b" />}
+          </button>
+        )}
+
+        <div style={{ marginBottom: isCollapsed ? "0.8rem" : "12px", textAlign: isCollapsed ? "center" : "left", marginTop: isCollapsed ? "40px" : "0" }}>
           <h2 style={{ display: "flex", flexDirection: "column", gap: "0px", margin: 0 }}>
-            {isChatTab ? (
+            {isCollapsed ? (
               <div style={{ width: "35px", height: "35px", background: "var(--accent-primary)", borderRadius: "10px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "900", fontSize: "1.2rem" }}>W</div>
             ) : (
               <>
@@ -53,7 +93,7 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
         </div>
 
         <div style={{ position: "relative" }}>
-          {activeAccount && !isChatTab && (
+          {activeAccount && !isCollapsed && (
             <div 
               onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
               style={{ 
@@ -86,7 +126,7 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
             </div>
           )}
 
-          {isChatTab && activeAccount && (
+          {isCollapsed && activeAccount && (
             <div 
               onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
               style={{ width: "45px", height: "45px", background: "rgba(0, 168, 132, 0.1)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", margin: "0 auto" }}
@@ -147,11 +187,11 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
         display: "flex",
         flexDirection: "column",
         gap: "0.8rem",
-        alignItems: isChatTab ? "center" : "stretch",
+        alignItems: isCollapsed ? "center" : "stretch",
         overflowY: "auto",
         overflowX: "hidden",
         flex: 1,
-        paddingRight: isChatTab ? "0" : "5px"
+        paddingRight: isCollapsed ? "0" : "5px"
       }}>
         {(() => {
           const contactItems = visibleMenu.filter(item => ["contacts", "custom-fields"].includes(item.id));
@@ -166,10 +206,10 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
                   className={`nav-link ${location.pathname === item.path ? "active" : ""}`}
                   style={{
                     textDecoration: "none",
-                    justifyContent: isChatTab ? "center" : "flex-start",
-                    padding: isChatTab ? "0.8rem" : "0.7rem 12px",
-                    width: isChatTab ? "45px" : "100%",
-                    height: isChatTab ? "45px" : "auto",
+                    justifyContent: isCollapsed ? "center" : "flex-start",
+                    padding: isCollapsed ? "0.8rem" : "0.7rem 12px",
+                    width: isCollapsed ? "45px" : "100%",
+                    height: isCollapsed ? "45px" : "auto",
                     borderRadius: "10px",
                     display: "flex",
                     alignItems: "center",
@@ -178,11 +218,11 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
                   title={item.label}
                 >
                   <item.icon size={22} />
-                  {!isChatTab && <span style={{ marginLeft: "12px", fontWeight: "600" }}>{item.label}</span>}
+                  {!isCollapsed && <span style={{ marginLeft: "12px", fontWeight: "600" }}>{item.label}</span>}
                 </Link>
               ))}
 
-              {!isChatTab && contactItems.length > 0 && (
+              {!isCollapsed && contactItems.length > 0 && (
                 <div style={{ marginTop: "1rem" }}>
                   <p style={{ fontSize: "0.7rem", color: "#667781", padding: "0 1rem", marginBottom: "0.5rem", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px" }}>Lead Management</p>
                   {contactItems.map(item => (
@@ -198,6 +238,7 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
                         alignItems: "center",
                         marginBottom: "4px"
                       }}
+                      title={item.label}
                     >
                       <item.icon size={18} />
                       <span style={{ marginLeft: "12px", fontSize: "0.85rem", fontWeight: "600" }}>{item.label}</span>
@@ -210,38 +251,34 @@ const Sidebar = ({ user, menuItems, handleLogout }) => {
         })()}
       </nav>
 
-      <div style={{ marginTop: "auto", borderTop: "1px solid var(--border-color)", paddingTop: "1.5rem", width: "100%", display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, position: "relative" }}>
-
-
-        <div style={{ marginTop: "auto", borderTop: "1px solid #e2e8f0", paddingTop: "1rem", width: "100%", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-          <div
-            onClick={handleLogout}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              padding: isChatTab ? "10px" : "10px 12px",
-              borderRadius: "12px",
-              cursor: "pointer",
-              transition: "all 0.2s",
-              background: "rgba(255, 71, 87, 0.05)"
-            }}
-            className="logout-btn"
-            onMouseOver={e => e.currentTarget.style.background = "rgba(255, 71, 87, 0.1)"}
-            onMouseOut={e => e.currentTarget.style.background = "rgba(255, 71, 87, 0.05)"}
-            title="Logout"
-          >
-            <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "var(--accent-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "bold", fontSize: "0.9rem", flexShrink: 0 }}>
-              {user?.name?.charAt(0)}
-            </div>
-            {!isChatTab && (
-              <div style={{ flex: 1, overflow: "hidden" }}>
-                <p style={{ fontSize: "0.85rem", fontWeight: "700", color: "#1e293b", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.name}</p>
-                <p style={{ fontSize: "0.65rem", color: "#94a3b8", margin: 0, fontWeight: "600" }}>{user?.role} • Logout</p>
-              </div>
-            )}
-            <LogOut size={18} color="#ff4757" />
+      <div style={{ marginTop: "auto", borderTop: "1px solid #e2e8f0", paddingTop: "1rem", width: "100%", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div
+          onClick={handleLogout}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            padding: isCollapsed ? "10px" : "10px 12px",
+            borderRadius: "12px",
+            cursor: "pointer",
+            transition: "all 0.2s",
+            background: "rgba(255, 71, 87, 0.05)"
+          }}
+          className="logout-btn"
+          onMouseOver={e => e.currentTarget.style.background = "rgba(255, 71, 87, 0.1)"}
+          onMouseOut={e => e.currentTarget.style.background = "rgba(255, 71, 87, 0.05)"}
+          title="Logout"
+        >
+          <div style={{ width: "32px", height: "32px", borderRadius: "8px", background: "var(--accent-primary)", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "bold", fontSize: "0.9rem", flexShrink: 0 }}>
+            {user?.name?.charAt(0)}
           </div>
+          {!isCollapsed && (
+            <div style={{ flex: 1, overflow: "hidden" }}>
+              <p style={{ fontSize: "0.85rem", fontWeight: "700", color: "#1e293b", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{user?.name}</p>
+              <p style={{ fontSize: "0.65rem", color: "#94a3b8", margin: 0, fontWeight: "600" }}>{user?.role} • Logout</p>
+            </div>
+          )}
+          {isCollapsed ? null : <LogOut size={18} color="#ff4757" />}
         </div>
       </div>
     </aside>

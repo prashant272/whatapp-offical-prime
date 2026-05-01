@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react";
 import api from "../api";
-import { Plus, Trash2, Save, Play, MessageSquare, ChevronDown, ChevronUp, Edit2 } from "lucide-react";
+import { Plus, Trash2, Save, Play, MessageSquare, ChevronDown, ChevronUp, Edit2, CheckCircle2 } from "lucide-react";
+import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const API_ENDPOINT = "/smart-flows";
 
-const FlowManager = ({ activeAccount }) => {
+const FlowManager = () => {
+  const { activeAccount, accounts } = useWhatsAppAccount();
   const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -14,7 +16,8 @@ const FlowManager = ({ activeAccount }) => {
     name: "",
     triggerKeyword: "",
     successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏",
-    steps: [{ question: "", saveToField: "", delay: 2 }]
+    steps: [{ question: "", saveToField: "", delay: 2 }],
+    whatsappAccountIds: []
   });
 
   useEffect(() => {
@@ -66,7 +69,7 @@ const FlowManager = ({ activeAccount }) => {
       }
       setShowAddForm(false);
       setEditingFlowId(null);
-      setNewFlow({ name: "", triggerKeyword: "", successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", steps: [{ question: "", saveToField: "", delay: 2 }] });
+      setNewFlow({ name: "", triggerKeyword: "", successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", steps: [{ question: "", saveToField: "", delay: 2 }], whatsappAccountIds: [] });
       fetchFlows();
     } catch (err) {
       console.error("Error saving flow:", err);
@@ -79,7 +82,8 @@ const FlowManager = ({ activeAccount }) => {
       name: flow.name,
       triggerKeyword: flow.triggerKeyword,
       successMessage: flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏",
-      steps: flow.steps.map(s => ({ question: s.question, saveToField: s.saveToField, delay: s.delay || 2 }))
+      steps: flow.steps.map(s => ({ question: s.question, saveToField: s.saveToField, delay: s.delay || 2 })),
+      whatsappAccountIds: flow.whatsappAccountIds || []
     });
     setShowAddForm(true);
   };
@@ -149,6 +153,43 @@ const FlowManager = ({ activeAccount }) => {
           </div>
 
           <div style={{ marginBottom: "24px" }}>
+            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "600", color: "#64748b", marginBottom: "12px" }}>Active For Accounts</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              {accounts.map(acc => (
+                <div 
+                  key={acc._id}
+                  onClick={() => {
+                    const ids = newFlow.whatsappAccountIds.includes(acc._id)
+                      ? newFlow.whatsappAccountIds.filter(id => id !== acc._id)
+                      : [...newFlow.whatsappAccountIds, acc._id];
+                    setNewFlow({ ...newFlow, whatsappAccountIds: ids });
+                  }}
+                  style={{ 
+                    padding: "8px 16px", 
+                    borderRadius: "20px", 
+                    fontSize: "0.8rem", 
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    border: "1px solid",
+                    borderColor: newFlow.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#e2e8f0",
+                    background: newFlow.whatsappAccountIds.includes(acc._id) ? "rgba(0, 168, 132, 0.1)" : "white",
+                    color: newFlow.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#64748b",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  <CheckCircle2 size={16} opacity={newFlow.whatsappAccountIds.includes(acc._id) ? 1 : 0.3} />
+                  {acc.name} ({acc.phoneNumberId})
+                </div>
+              ))}
+              {accounts.length === 0 && <p style={{ fontSize: "0.8rem", color: "#ef4444" }}>No accounts found. Please add an account first.</p>}
+            </div>
+            <p style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "8px" }}>If no accounts are selected, this flow will be available for ALL accounts.</p>
+          </div>
+
+          <div style={{ marginBottom: "24px" }}>
             <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "600", color: "#64748b", marginBottom: "8px" }}>Success Message (End of Flow)</label>
             <textarea 
               placeholder="Message to send when flow is complete..."
@@ -208,7 +249,7 @@ const FlowManager = ({ activeAccount }) => {
           </div>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>
-            <button onClick={() => { setShowAddForm(false); setEditingFlowId(null); setNewFlow({ name: "", triggerKeyword: "", successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", steps: [{ question: "", saveToField: "", delay: 2 }] }); }} style={{ background: "none", border: "none", color: "#64748b", fontWeight: "600", cursor: "pointer" }}>Discard</button>
+            <button onClick={() => { setShowAddForm(false); setEditingFlowId(null); setNewFlow({ name: "", triggerKeyword: "", successMessage: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏", steps: [{ question: "", saveToField: "", delay: 2 }], whatsappAccountIds: [] }); }} style={{ background: "none", border: "none", color: "#64748b", fontWeight: "600", cursor: "pointer" }}>Discard</button>
             <button 
               onClick={saveFlow}
               style={{ background: "#00a884", color: "white", border: "none", padding: "10px 30px", borderRadius: "10px", fontWeight: "600", cursor: "pointer" }}

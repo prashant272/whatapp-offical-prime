@@ -15,10 +15,12 @@ import {
   Clock
 } from "lucide-react";
 import FollowUpAutomation from "./FollowUpAutomation";
+import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 const AutoReplyManager = () => {
+  const { accounts } = useWhatsAppAccount();
   const [replies, setReplies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -30,7 +32,8 @@ const AutoReplyManager = () => {
     response: "",
     matchType: "CONTAINS",
     isActive: true,
-    delay: 0
+    delay: 0,
+    whatsappAccountIds: []
   });
   const [editingId, setEditingId] = useState(null);
 
@@ -80,7 +83,8 @@ const AutoReplyManager = () => {
       response: reply.response,
       matchType: reply.matchType,
       isActive: reply.isActive,
-      delay: reply.delay || 0
+      delay: reply.delay || 0,
+      whatsappAccountIds: reply.whatsappAccountIds || []
     });
     setShowModal(true);
   };
@@ -105,7 +109,7 @@ const AutoReplyManager = () => {
   };
 
   const resetForm = () => {
-    setFormData({ keyword: "", response: "", matchType: "CONTAINS", isActive: true, delay: 0 });
+    setFormData({ keyword: "", response: "", matchType: "CONTAINS", isActive: true, delay: 0, whatsappAccountIds: [] });
     setEditingId(null);
   };
 
@@ -358,6 +362,41 @@ const AutoReplyManager = () => {
                   min="0"
                   style={{ width: "100%", padding: "12px", border: "1px solid #d1d7db", borderRadius: "8px", outline: "none", fontSize: "15px" }}
                 />
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "13px", color: "#667781", marginBottom: "12px", fontWeight: "600" }}>ACTIVE FOR ACCOUNTS</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {accounts.map(acc => (
+                    <div 
+                      key={acc._id}
+                      onClick={() => {
+                        const ids = formData.whatsappAccountIds.includes(acc._id)
+                          ? formData.whatsappAccountIds.filter(id => id !== acc._id)
+                          : [...formData.whatsappAccountIds, acc._id];
+                        setFormData({ ...formData, whatsappAccountIds: ids });
+                      }}
+                      style={{ 
+                        padding: "6px 12px", 
+                        borderRadius: "16px", 
+                        fontSize: "12px", 
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        border: "1px solid",
+                        borderColor: formData.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#d1d7db",
+                        background: formData.whatsappAccountIds.includes(acc._id) ? "#e7fce3" : "white",
+                        color: formData.whatsappAccountIds.includes(acc._id) ? "#008069" : "#667781",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "5px"
+                      }}
+                    >
+                      <CheckCircle2 size={14} style={{ opacity: formData.whatsappAccountIds.includes(acc._id) ? 1 : 0.3 }} />
+                      {acc.name}
+                    </div>
+                  ))}
+                </div>
+                <p style={{ fontSize: "11px", color: "#8696a0", marginTop: "6px" }}>Leave empty to make this reply global for all accounts.</p>
               </div>
 
               <div style={{ marginBottom: "20px" }}>

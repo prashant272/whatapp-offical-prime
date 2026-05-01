@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import api, { API_BASE } from "../api";
-import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud, Smartphone } from "lucide-react";
+import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud, Smartphone, Calendar, Clock, Trash2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import { io } from "socket.io-client";
@@ -23,11 +23,13 @@ const CampaignManager = () => {
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedLogs, setSelectedLogs] = useState([]);
   const [logSearch, setLogSearch] = useState("");
+  const [showAllCampaigns, setShowAllCampaigns] = useState(false);
   const [newCampaign, setNewCampaign] = useState({
     name: "",
     templateName: "",
     contactsRaw: "",
-    delay: 2
+    delay: 2,
+    sector: ""
   });
   const [tags, setTags] = useState([]);
   const [sectors, setSectors] = useState([]);
@@ -205,54 +207,6 @@ const CampaignManager = () => {
     setTemplateVars(prev => ({ ...prev, [key]: value }));
   };
 
-  const handleStartCampaign = async (e) => {
-    e.preventDefault();
-    const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
-    
-    if (phones.length === 0) return alert("Please add at least one valid phone number.");
-    if (!newCampaign.templateName) return alert("Please select an approved template.");
-
-    const templateComponents = [];
-    if (selectedTemplate) {
-      const bodyParams = [];
-      const headerParams = [];
-
-      Object.entries(templateVars).forEach(([key, val]) => {
-        if (key.startsWith("BODY_")) {
-          bodyParams.push({ type: "text", text: val });
-        } else if (key.startsWith("HEADER_")) {
-          // Check if template has a media header
-          const headerComp = selectedTemplate.components.find(c => c.type === "HEADER");
-          if (headerComp && ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format)) {
-            const type = headerComp.format.toLowerCase();
-            headerParams.push({ type, [type]: { link: val } });
-          } else {
-            headerParams.push({ type: "text", text: val });
-          }
-        }
-      });
-
-      if (headerParams.length > 0) templateComponents.push({ type: "header", parameters: headerParams });
-      if (bodyParams.length > 0) templateComponents.push({ type: "body", parameters: bodyParams });
-    }
-
-    try {
-      await api.post("/campaigns", {
-        name: newCampaign.name,
-        templateName: newCampaign.templateName,
-        contacts: phones.map(p => ({ phone: p })),
-        templateComponents,
-        whatsappAccountId: activeAccount?._id, // Link campaign to account
-        delay: Number(newCampaign.delay)
-      });
-      setShowCreate(false);
-      fetchData();
-      alert("Campaign started successfully!");
-    } catch (err) {
-      alert("Error: " + (err.response?.data?.error || err.message));
-    }
-  };
-
   const formatPreviewText = (text, type) => {
     if (!text) return "";
     const parts = text.split(/({{\d+}})/g);
@@ -368,11 +322,74 @@ const CampaignManager = () => {
 
   const handleRetry = async (id) => {
     try {
-      const res = await api.post(`/campaigns/${id}/retry`);
-      alert(res.data.message);
+      await api.post(`/campaigns/${id}/retry`);
+      alert("Retry started!");
       fetchData();
     } catch (err) {
-      alert("Failed to retry campaign: " + (err.response?.data?.error || err.message));
+      alert("Failed to retry campaign");
+    }
+  };
+
+  const handleDeleteCampaign = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this campaign? This action cannot be undone.")) return;
+    try {
+      await api.delete(`/campaigns/${id}`);
+      setCampaigns(prev => prev.filter(c => c._id !== id));
+    } catch (err) {
+      alert("Error deleting campaign: " + err.message);
+    }
+  };
+
+  const handleStartCampaign = async (e) => {
+    e.preventDefault();
+    if (!activeAccount) return alert("Select an account first");
+    if (!newCampaign.templateName) return alert("Select a template");
+    if (!newCampaign.contactsRaw) return alert("Add contacts");
+
+    const phones = newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5);
+    if (phones.length === 0) return alert("Please add at least one valid phone number.");
+
+    const templateComponents = [];
+    if (selectedTemplate) {
+      const bodyParams = [];
+      const headerParams = [];
+
+      Object.entries(templateVars).forEach(([key, val]) => {
+        if (key.startsWith("BODY_")) {
+          bodyParams.push({ type: "text", text: val });
+        } else if (key.startsWith("HEADER_")) {
+          const headerComp = selectedTemplate.components.find(c => c.type === "HEADER");
+          if (headerComp && ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format)) {
+            const type = headerComp.format.toLowerCase();
+            headerParams.push({ type, [type]: { link: val } });
+          } else {
+            headerParams.push({ type: "text", text: val });
+          }
+        }
+      });
+
+      if (headerParams.length > 0) templateComponents.push({ type: "header", parameters: headerParams });
+      if (bodyParams.length > 0) templateComponents.push({ type: "body", parameters: bodyParams });
+    }
+
+    try {
+      const payload = {
+        name: newCampaign.name,
+        templateName: newCampaign.templateName,
+        whatsappAccountId: activeAccount._id,
+        contacts: phones,
+        templateComponents,
+        delay: parseInt(newCampaign.delay),
+        sector: newCampaign.sector
+      };
+
+      await api.post("/campaigns", payload);
+      alert("Campaign launched!");
+      setShowCreate(false);
+      setNewCampaign({ name: "", templateName: "", contactsRaw: "", delay: 2, sector: "" });
+      fetchData();
+    } catch (err) {
+      alert("Error launching campaign: " + (err.response?.data?.error || err.message));
     }
   };
 
@@ -428,6 +445,17 @@ const CampaignManager = () => {
             <div>
               <label>Delay Per Message (Sec)</label>
               <input type="number" min="0" step="1" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.delay} onChange={e => setNewCampaign({...newCampaign, delay: e.target.value})} required />
+            </div>
+            <div>
+              <label>Assign Sector to Contacts</label>
+              <select 
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
+                value={newCampaign.sector}
+                onChange={(e) => setNewCampaign({...newCampaign, sector: e.target.value})}
+              >
+                <option value="">-- Choose Sector (Optional) --</option>
+                {sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
             </div>
           </div>
 
@@ -505,25 +533,38 @@ const CampaignManager = () => {
         </form>
       ) : (
         <div style={{ display: "grid", gap: "1.5rem" }}>
-          {campaigns.map(camp => (
-            <div key={camp._id} className="glass-card" style={{ position: "relative" }}>
+          {/* Active Campaigns First */}
+          {campaigns.filter(c => ["RUNNING", "PAUSED", "PENDING"].includes(c.status)).map(camp => (
+            <div key={camp._id} className="glass-card" style={{ position: "relative", borderLeft: "4px solid #339af0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
                 <div>
-                  <h4 style={{ margin: 0 }}>{camp.name}</h4>
-                  <span style={{ fontSize: "0.75rem", color: "#667781" }}>Template: {camp.templateName}</span>
+                  <h4 style={{ margin: 0, color: "#111b21", fontSize: "1.1rem" }}>{camp.name}</h4>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginTop: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.75rem", color: "#667781", background: "#f0f2f5", padding: "2px 8px", borderRadius: "4px" }}>
+                      <Type size={14} /> <span>Template: <strong>{camp.templateName || camp.template?.name || "Unknown"}</strong></span>
+                    </div>
+                    {camp.startedAt && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.75rem", color: "#339af0", background: "#e7f5ff", padding: "2px 8px", borderRadius: "4px" }}>
+                        <Calendar size={14} /> <span>Started: {new Date(camp.startedAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{ 
-                  fontSize: "0.75rem", 
-                  background: camp.status === "RUNNING" ? "#e7fce3" : camp.status === "PAUSED" ? "#fff9db" : "#f0f2f5", 
-                  color: camp.status === "RUNNING" ? "#008069" : camp.status === "PAUSED" ? "#f08c00" : "#667781",
-                  padding: "4px 10px", 
-                  borderRadius: "10px",
-                  fontWeight: "bold",
-                  textAlign: "right"
-                }}>
-                  {camp.status} 
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                  <div style={{ 
+                    fontSize: "0.7rem", 
+                    background: camp.status === "RUNNING" ? "#e7fce3" : camp.status === "PAUSED" ? "#fff9db" : "#f0f2f5", 
+                    color: camp.status === "RUNNING" ? "#008069" : camp.status === "PAUSED" ? "#f08c00" : "#667781",
+                    padding: "4px 12px", 
+                    borderRadius: "12px",
+                    fontWeight: "bold",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px"
+                  }}>
+                    {camp.status}
+                  </div>
                   {isNightTime() && (camp.status === "RUNNING" || camp.status === "PAUSED") && !camp.allowOutsideHours ? (
-                    <div style={{ fontSize: "0.65rem", color: "#339af0", marginTop: "2px" }}>
+                    <div style={{ fontSize: "0.6rem", color: "#339af0", marginTop: "4px", fontWeight: "600" }}>
                       (WAITING FOR 8AM)
                     </div>
                   ) : ""}
@@ -538,49 +579,83 @@ const CampaignManager = () => {
                 <div>Failed: <strong style={{ color: "#ff4757" }}>{camp.failedCount}</strong></div>
               </div>
 
-              {/* ACTION BUTTONS */}
               <div style={{ display: "flex", gap: "10px", marginTop: "1.5rem", borderTop: "1px solid #eee", paddingTop: "1rem" }}>
                 {camp.status === "RUNNING" && (
-                  <button 
-                    onClick={() => handleUpdateStatus(camp._id, "PAUSED")} 
-                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#fff9db", color: "#f08c00", border: "1px solid #fab005", cursor: "pointer" }}
-                  >
-                    Pause Campaign
-                  </button>
+                  <button onClick={() => handleUpdateStatus(camp._id, "PAUSED")} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#fff9db", color: "#f08c00", border: "1px solid #fab005", cursor: "pointer" }}>Pause</button>
                 )}
-                
                 {camp.status === "PAUSED" && (
-                  <button 
-                    onClick={() => handleUpdateStatus(camp._id, "RUNNING")} 
-                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#e7fce3", color: "#008069", border: "1px solid #00a884", cursor: "pointer" }}
-                  >
-                    Resume Campaign
-                  </button>
+                  <button onClick={() => handleUpdateStatus(camp._id, "RUNNING")} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#e7fce3", color: "#008069", border: "1px solid #00a884", cursor: "pointer" }}>Resume</button>
                 )}
-
                 {camp.status === "RUNNING" && isNightTime() && !camp.allowOutsideHours && (
-                  <button 
-                    onClick={() => handleUpdateStatus(camp._id, "RUNNING", true)} 
-                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#339af0", color: "white", border: "none", cursor: "pointer" }}
-                  >
-                    Force Send (Night Mode)
-                  </button>
+                  <button onClick={() => handleUpdateStatus(camp._id, "RUNNING", true)} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#339af0", color: "white", border: "none", cursor: "pointer" }}>Force Send</button>
                 )}
-
-                {(camp.status === "COMPLETED" || camp.status === "FAILED" || (camp.status === "PAUSED" && camp.failedCount > 0)) && (
-                  <button 
-                    onClick={() => handleRetry(camp._id)} 
-                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#ff4757", color: "white", border: "none", cursor: "pointer" }}
-                  >
-                    Resend Failed ({camp.failedCount})
-                  </button>
-                )}
+                <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#f0f2f5", color: "#667781", border: "1px solid #ddd", cursor: "pointer", marginLeft: "auto" }}>View Logs</button>
                 
                 <button 
-                  onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} 
-                  style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#f0f2f5", color: "#667781", border: "1px solid #ddd", cursor: "pointer", marginLeft: "auto" }}
+                  onClick={() => handleDeleteCampaign(camp._id)} 
+                  style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#fff5f5", color: "#ff4757", border: "1px solid #ffe3e3", cursor: "pointer" }}
+                  title="Delete Campaign"
                 >
-                  View Logs
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Toggle Button for Old Campaigns */}
+          {campaigns.some(c => ["COMPLETED", "FAILED"].includes(c.status)) && (
+            <div style={{ textAlign: "center", margin: "1rem 0" }}>
+              <button 
+                onClick={() => setShowAllCampaigns(!showAllCampaigns)}
+                style={{ 
+                  background: "white", border: "1px solid #ddd", padding: "10px 24px", 
+                  borderRadius: "24px", cursor: "pointer", fontSize: "0.9rem", color: "#111b21",
+                  display: "inline-flex", alignItems: "center", gap: "10px", fontWeight: "bold",
+                  boxShadow: "0 2px 5px rgba(0,0,0,0.05)"
+                }}
+              >
+                <List size={18} /> {showAllCampaigns ? "Hide Completed Campaigns" : `Show Old Campaigns (${campaigns.filter(c => ["COMPLETED", "FAILED"].includes(c.status)).length})`}
+              </button>
+            </div>
+          )}
+
+          {/* Old/Completed Campaigns */}
+          {showAllCampaigns && campaigns.filter(c => ["COMPLETED", "FAILED"].includes(c.status)).map(camp => (
+            <div key={camp._id} className="glass-card" style={{ position: "relative" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "1rem" }}>
+                <div>
+                  <h4 style={{ margin: 0, color: "#667781" }}>{camp.name}</h4>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "8px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.7rem", color: "#999", background: "#f8f9fa", padding: "2px 8px", borderRadius: "4px" }}>
+                      <Type size={12} /> <span>Template: {camp.templateName || camp.template?.name || "Unknown"}</span>
+                    </div>
+                    {camp.startedAt && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.7rem", color: "#339af0", background: "#e7f5ff", padding: "2px 8px", borderRadius: "4px" }}>
+                        <Calendar size={12} /> <span>Started: {new Date(camp.startedAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {camp.completedAt && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.7rem", color: "#008069", background: "#e7fce3", padding: "2px 8px", borderRadius: "4px" }}>
+                        <CheckCircle2 size={12} /> <span>Completed: {new Date(camp.completedAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ fontSize: "0.65rem", background: "#f0f2f5", color: "#667781", padding: "4px 10px", borderRadius: "10px", fontWeight: "bold" }}>
+                  {camp.status}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "1.5rem", fontSize: "0.8rem", color: "#667781" }}>
+                <div>Total: {camp.totalContacts}</div>
+                <div>Sent: {camp.sentCount}</div>
+                <div>Failed: {camp.failedCount}</div>
+                <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "#339af0", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline" }}>Logs</button>
+                <button 
+                  onClick={() => handleDeleteCampaign(camp._id)} 
+                  style={{ background: "none", border: "none", color: "#ff4757", cursor: "pointer", marginLeft: "10px" }}
+                  title="Delete Campaign"
+                >
+                  <Trash2 size={16} />
                 </button>
               </div>
             </div>

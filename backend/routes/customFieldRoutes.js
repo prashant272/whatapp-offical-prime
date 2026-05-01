@@ -12,7 +12,12 @@ router.get("/", async (req, res) => {
     const accountId = req.headers["x-whatsapp-account-id"];
     if (!accountId) return res.status(400).json({ error: "Missing WhatsApp Account ID header" });
 
-    const fields = await CustomField.find({ whatsappAccountId: accountId }).sort({ createdAt: 1 });
+    const fields = await CustomField.find({ 
+      $or: [
+        { whatsappAccountIds: accountId },
+        { whatsappAccountId: accountId } // Backward compatibility
+      ]
+    }).sort({ createdAt: 1 });
     res.json(fields);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -22,10 +27,10 @@ router.get("/", async (req, res) => {
 // Create a new field (Admin/Manager only)
 router.post("/", restrictTo("Admin", "Manager"), async (req, res) => {
   try {
-    const { name, label, type, options } = req.body;
+    const { name, label, type, options, whatsappAccountIds } = req.body;
     const accountId = req.headers["x-whatsapp-account-id"];
 
-    if (!name || !label || !accountId) {
+    if (!name || !label) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -34,7 +39,7 @@ router.post("/", restrictTo("Admin", "Manager"), async (req, res) => {
       label,
       type,
       options,
-      whatsappAccountId: accountId
+      whatsappAccountIds: whatsappAccountIds || [accountId]
     });
 
     await newField.save();
@@ -57,10 +62,10 @@ router.delete("/:id", restrictTo("Admin"), async (req, res) => {
 // Update a field
 router.put("/:id", restrictTo("Admin", "Manager"), async (req, res) => {
   try {
-    const { label, type, options } = req.body;
+    const { label, type, options, whatsappAccountIds } = req.body;
     const updatedField = await CustomField.findByIdAndUpdate(
       req.params.id,
-      { label, type, options },
+      { label, type, options, whatsappAccountIds },
       { new: true }
     );
     if (!updatedField) return res.status(404).json({ error: "Field not found" });

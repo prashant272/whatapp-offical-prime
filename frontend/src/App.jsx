@@ -23,6 +23,7 @@ function AppContent() {
     return userInfo ? JSON.parse(userInfo) : null;
   });
   const [stats, setStats] = useState({ sent: 0, delivered: 0, failed: 0 });
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -81,14 +82,24 @@ function AppContent() {
     <Routes>
       <Route path="/login" element={<Login onLogin={handleLogin} />} />
       <Route path="/*" element={
-        <div className="dashboard-container">
+        <div className="dashboard-container" style={{ display: "flex" }}>
           <Sidebar 
             user={user} 
             menuItems={menuItems} 
             handleLogout={handleLogout} 
+            isCollapsed={isCollapsed}
+            setIsCollapsed={setIsCollapsed}
           />
 
-          <main className="main-content" style={{ marginLeft: isChatTab ? "70px" : "240px", padding: isChatTab ? "0" : "1rem", height: "100vh", overflow: isChatTab ? "hidden" : "auto", transition: "margin-left 0.3s ease" }}>
+          <main className="main-content" style={{ 
+            marginLeft: isCollapsed ? "70px" : "240px", 
+            padding: isChatTab ? "0" : "1rem", 
+            height: "100vh", 
+            width: `calc(100% - ${isCollapsed ? "70px" : "240px"})`,
+            overflow: isChatTab ? "hidden" : "auto", 
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            flex: 1
+          }}>
             <Routes>
               <Route path="/" element={<DashboardHome stats={stats} user={user} />} />
               <Route path="/templates" element={<TemplateManager />} />

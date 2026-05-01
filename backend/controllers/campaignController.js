@@ -13,7 +13,7 @@ import { getIO, smartEmit } from "../utils/socket.js";
 // Global set to track which campaigns have active throttlers running in memory
 const activeThrottlers = new Set();
 
-const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req) => {
+const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req, sectorName) => {
   if (!template) {
     console.error(`❌ Campaign Execution Error: Template missing for campaign "${campaign.name}"`);
     return;
@@ -59,12 +59,20 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               phone: latestLog.phone, 
               whatsappAccountId: account._id,
               sourceCampaign: campaign.name,
-              sector: "Unassigned"
+              sector: sectorName || "Unassigned"
             });
             await contact.save();
           } else {
-            if (!contact.sourceCampaign) contact.sourceCampaign = campaign.name;
-            await contact.save();
+            let needsUpdate = false;
+            if (!contact.sourceCampaign) {
+              contact.sourceCampaign = campaign.name;
+              needsUpdate = true;
+            }
+            if (sectorName && contact.sector !== sectorName) {
+              contact.sector = sectorName;
+              needsUpdate = true;
+            }
+            if (needsUpdate) await contact.save();
           }
 
           let mediaUrl = null;
@@ -116,7 +124,10 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           failedCount: totalFailed,
           logs: allLogs
         };
-        if (isFinished) updateData.status = "COMPLETED";
+        if (isFinished) {
+          updateData.status = "COMPLETED";
+          updateData.completedAt = new Date();
+        }
 
         const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateData, { new: true });
         const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
@@ -164,13 +175,14 @@ export const startCampaign = async (req, res) => {
       whatsappAccountId: account._id,
       totalContacts: allowedPhones.length,
       contacts: allowedPhones.map(p => ({ phone: p })),
-      status: "RUNNING"
+      status: "RUNNING",
+      startedAt: new Date()
     });
     await campaign.save();
 
-    await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${allowedPhones.length} contacts`, name);
+    await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${allowedPhones.length} contacts and sector ${sector || 'None'}`, name);
 
-    processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req);
+    processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req, sector);
 
     res.status(202).json({ message: "Campaign started", campaignId: campaign._id });
   } catch (error) {
@@ -208,6 +220,25 @@ export const updateCampaignStatus = async (req, res) => {
     }
 
     res.json(campaign);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const deleteCampaign = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const campaign = await Campaign.findById(id);
+    if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+
+    // If campaign is running, we might want to warn or stop it, 
+    // but the delete is final. We remove it from activeThrottlers too.
+    activeThrottlers.delete(id.toString());
+    
+    await Campaign.findByIdAndDelete(id);
+    await logActivity(req.user._id, "DELETE_CAMPAIGN", `Deleted campaign: ${campaign.name}`);
+    
+    res.json({ message: "Campaign deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -11,7 +11,8 @@ const flowSchema = new mongoose.Schema({
   triggerKeyword: { type: String, required: true, lowercase: true, trim: true },
   steps: [flowStepSchema],
   successMessage: { type: String, default: "Dhanyawad! Aapki saari details save ho gayi hain. 🙏" },
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  whatsappAccountIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }]
 }, { timestamps: true });
 
 const Flow = mongoose.model("Flow", flowSchema);

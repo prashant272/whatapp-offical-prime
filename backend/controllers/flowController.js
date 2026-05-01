@@ -11,8 +11,8 @@ export const getFlows = async (req, res) => {
 
 export const createFlow = async (req, res) => {
   try {
-    const { name, triggerKeyword, steps } = req.body;
-    const newFlow = new Flow({ name, triggerKeyword, steps });
+    const { name, triggerKeyword, steps, whatsappAccountIds } = req.body;
+    const newFlow = new Flow({ name, triggerKeyword, steps, whatsappAccountIds });
     await newFlow.save();
     res.json(newFlow);
   } catch (error) {
