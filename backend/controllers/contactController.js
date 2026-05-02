@@ -174,3 +174,55 @@ export const deleteContact = async (req, res, next) => {
     next(err);
   }
 };
+
+export const checkExistingConversations = async (req, res, next) => {
+  try {
+    const { phones } = req.body;
+
+    if (!phones || !Array.isArray(phones)) {
+      return res.status(400).json({ error: "Invalid phones list" });
+    }
+
+    // Generate variations for each phone number to handle "91" issue
+    // (with 91, without 91, with +91)
+    const phoneVariations = new Set();
+    phones.forEach(p => {
+      const clean = String(p).replace(/[^0-9]/g, "");
+      if (clean.length === 10) {
+        phoneVariations.add(clean);
+        phoneVariations.add("91" + clean);
+        phoneVariations.add("+91" + clean);
+      } else if (clean.length === 12 && clean.startsWith("91")) {
+        phoneVariations.add(clean);
+        phoneVariations.add(clean.substring(2));
+        phoneVariations.add("+" + clean);
+      } else {
+        phoneVariations.add(p);
+        if (!String(p).startsWith("+")) phoneVariations.add("+" + p);
+      }
+    });
+
+    const variationsArray = Array.from(phoneVariations);
+
+    // We check if a conversation exists for these phones across ALL accounts
+    const existingConversations = await Conversation.find({ 
+      phone: { $in: variationsArray } 
+    }).select("phone");
+
+    // Map found phones back to the original input numbers that matched
+    const foundPhones = existingConversations.map(c => c.phone);
+    const matchedOriginals = phones.filter(original => {
+      const clean = String(original).replace(/[^0-9]/g, "");
+      return foundPhones.some(found => {
+        const foundClean = String(found).replace(/[^0-9]/g, "");
+        return foundClean === clean || 
+               foundClean === "91" + clean || 
+               foundClean === clean.substring(2);
+      });
+    });
+
+    res.json({ existingPhones: matchedOriginals });
+  } catch (err) {
+    next(err);
+  }
+};

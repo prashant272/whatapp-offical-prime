@@ -37,6 +37,7 @@ const CampaignManager = () => {
   const [selectedSourceValue, setSelectedSourceValue] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [customStatuses, setCustomStatuses] = useState([]);
+  const [existingNumbers, setExistingNumbers] = useState([]);
   const fileInputRef = useRef(null);
 
   const fetchData = async () => {
@@ -164,6 +165,32 @@ const CampaignManager = () => {
       }
     } catch (err) {
       alert("Verification failed: " + (err.response?.data?.error || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkExistingMessages = async () => {
+    const phones = newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5);
+    if (phones.length === 0) return alert("No numbers to check.");
+
+    setLoading(true);
+    try {
+      const res = await api.post("/contacts/check-existing", { phones });
+      const found = res.data.existingPhones;
+      setExistingNumbers(found);
+      
+      if (found.length > 0) {
+        if (window.confirm(`Found ${found.length} numbers that have already been messaged (across all accounts). Do you want to remove them from the list?`)) {
+          const remaining = phones.filter(p => !found.includes(p));
+          setNewCampaign({ ...newCampaign, contactsRaw: remaining.join("\n") });
+          setExistingNumbers([]);
+        }
+      } else {
+        alert("No previously messaged numbers found (across all accounts).");
+      }
+    } catch (err) {
+      alert("Check failed: " + (err.response?.data?.error || err.message));
     } finally {
       setLoading(false);
     }
@@ -516,15 +543,41 @@ const CampaignManager = () => {
                   </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "#667781", fontWeight: "700" }}>Option 2: Manual / File Upload</p>
-              <div style={{ display: "flex", gap: "10px" }}>
-                <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
-                <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5" }}>Upload File</button>
-                <button type="button" onClick={verifyNumbers} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#e7fce3", color: "#008069" }}>Verify Numbers</button>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#667781", fontWeight: "700" }}>Option 2: Manual / File Upload</p>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
+                  <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5" }}>Upload File</button>
+                  <button type="button" onClick={verifyNumbers} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#e7fce3", color: "#008069" }}>Verify Numbers</button>
+                  <button type="button" onClick={checkExistingMessages} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#fff5f5", color: "#ff4757" }}>Check Previous Messages</button>
+                </div>
               </div>
-            </div>
-            <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", fontFamily: "monospace" }} placeholder="919876543210..." value={newCampaign.contactsRaw} onChange={e => setNewCampaign({...newCampaign, contactsRaw: e.target.value})} required></textarea>
+              <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", fontFamily: "monospace" }} placeholder="919876543210..." value={newCampaign.contactsRaw} onChange={e => setNewCampaign({...newCampaign, contactsRaw: e.target.value})} required></textarea>
+              
+              {existingNumbers.length > 0 && (
+                <div style={{ marginTop: "10px", padding: "12px", background: "rgba(255, 71, 87, 0.1)", borderRadius: "10px", border: "1px solid #ff4757" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                    <span style={{ fontSize: "0.85rem", color: "#ff4757", fontWeight: "bold" }}>⚠️ Found {existingNumbers.length} numbers with previous history:</span>
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
+                        const remaining = phones.filter(p => !existingNumbers.includes(p));
+                        setNewCampaign({ ...newCampaign, contactsRaw: remaining.join("\n") });
+                        setExistingNumbers([]);
+                      }}
+                      style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#ff4757", color: "white", border: "none" }}
+                    >
+                      Remove All
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", maxHeight: "80px", overflowY: "auto" }}>
+                    {existingNumbers.map(n => (
+                      <span key={n} style={{ fontSize: "0.75rem", background: "white", padding: "2px 6px", borderRadius: "4px", border: "1px solid #ff4757", color: "#ff4757" }}>{n}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
           </div>
 
           {renderTemplatePreview()}
