@@ -202,7 +202,7 @@ const ContactManager = () => {
       alert(`✅ Successfully imported ${res.data.count} contacts!`);
       setImportData([]);
       setShowImportModal(false);
-      fetchContacts();
+      fetchContacts(1, true);
     } catch (err) {
       alert("Import failed: " + (err.response?.data?.error || err.message));
     } finally {
@@ -375,6 +375,7 @@ const ContactManager = () => {
                       <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Account / Campaign</th>
                       <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Sector</th>
                       <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Status</th>
+                      <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Mark</th>
                       <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Tags</th>
                       {customFields.map(field => (
                         <th key={field._id} style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>{field.label}</th>
@@ -449,6 +450,19 @@ const ContactManager = () => {
                                   {contact.status}
                                 </span>
                               ) : <span style={{ color: "#cbd5e1" }}>-</span>}
+                            </td>
+                            <td style={{ padding: "16px 24px" }}>
+                              <span style={{ 
+                                padding: "4px 10px", 
+                                borderRadius: "20px", 
+                                fontSize: "0.75rem", 
+                                fontWeight: "700",
+                                background: contact.isCampaignSent ? "#e7fce3" : "#f1f5f9",
+                                color: contact.isCampaignSent ? "#008069" : "#64748b",
+                                border: `1px solid ${contact.isCampaignSent ? "#00a884" : "#e2e8f0"}`
+                              }}>
+                                {contact.isCampaignSent ? "SENT" : "NEW"}
+                              </span>
                             </td>
                             <td style={{ padding: "16px 24px" }}>
                               <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>

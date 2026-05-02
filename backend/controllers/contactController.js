@@ -155,17 +155,22 @@ export const importContacts = async (req, res, next) => {
       const updatedContacts = [];
       for (let i = 0; i < phones.length; i += 10000) {
         const chunk = phones.slice(i, i + 10000);
-        const chunkResults = await Contact.find({ phone: { $in: chunk } }).select("_id phone").lean();
+        const chunkResults = await Contact.find({ phone: { $in: chunk } }).select("_id phone whatsappAccountId").lean();
         updatedContacts.push(...chunkResults);
       }
 
-      const timelineOps = updatedContacts.map(contact => ({
-        contactId: contact._id,
-        whatsappAccountId: whatsappAccountId || contact.whatsappAccountId,
-        content: `Lead imported/updated via Excel (Tag: ${contacts.find(c => c.phone === contact.phone)?.tags[0] || "None"})`,
-        createdBy: req.user._id,
-        timestamp: new Date()
-      }));
+      const timelineOps = updatedContacts.map(contact => {
+        const targetAccountId = whatsappAccountId || contact.whatsappAccountId;
+        if (!targetAccountId) return null; // Skip timeline if no account ID found
+
+        return {
+          contactId: contact._id,
+          whatsappAccountId: targetAccountId,
+          content: `Lead imported/updated via Excel (Tag: ${contacts.find(c => c.phone === contact.phone)?.tags[0] || "None"})`,
+          createdBy: req.user._id,
+          timestamp: new Date()
+        };
+      }).filter(op => op !== null);
 
       if (timelineOps.length > 0) {
         for (let i = 0; i < timelineOps.length; i += CHUNK_SIZE) {
