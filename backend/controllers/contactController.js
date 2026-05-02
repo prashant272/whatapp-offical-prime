@@ -14,7 +14,17 @@ export const verifyNumbers = async (req, res, next) => {
     const sanitizedPhones = phones.map(p => String(p).startsWith("+") ? String(p) : `+${String(p)}`);
 
     console.log(`🔍 Verifying ${sanitizedPhones.length} contacts with Meta Cloud API...`);
-    const results = await verifyContacts(sanitizedPhones);
+    
+    // Meta API has a limit on how many contacts can be verified in one call (usually ~1000)
+    const CHUNK_SIZE = 1000;
+    const results = [];
+    
+    for (let i = 0; i < sanitizedPhones.length; i += CHUNK_SIZE) {
+      const chunk = sanitizedPhones.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await verifyContacts(req.whatsappAccount, chunk);
+      results.push(...chunkResults);
+    }
+
     res.json({ results });
   } catch (err) {
     next(err);
@@ -131,13 +141,23 @@ export const importContacts = async (req, res, next) => {
     }));
 
     if (bulkOps.length > 0) {
-      await Contact.bulkWrite(bulkOps);
+      // Chunking bulkWrite to avoid hitting command size limits
+      const CHUNK_SIZE = 5000;
+      for (let i = 0; i < bulkOps.length; i += CHUNK_SIZE) {
+        const chunk = bulkOps.slice(i, i + CHUNK_SIZE);
+        await Contact.bulkWrite(chunk);
+      }
+      
       importedCount = bulkOps.length;
 
       // Log timeline for these contacts
-      // For efficiency, we only log for newly created or updated contacts in this session
       const phones = contacts.map(c => c.phone);
-      const updatedContacts = await Contact.find({ phone: { $in: phones } });
+      const updatedContacts = [];
+      for (let i = 0; i < phones.length; i += 10000) {
+        const chunk = phones.slice(i, i + 10000);
+        const chunkResults = await Contact.find({ phone: { $in: chunk } }).select("_id phone").lean();
+        updatedContacts.push(...chunkResults);
+      }
 
       const timelineOps = updatedContacts.map(contact => ({
         contactId: contact._id,
@@ -148,7 +168,10 @@ export const importContacts = async (req, res, next) => {
       }));
 
       if (timelineOps.length > 0) {
-        await Timeline.insertMany(timelineOps);
+        for (let i = 0; i < timelineOps.length; i += CHUNK_SIZE) {
+          const chunk = timelineOps.slice(i, i + CHUNK_SIZE);
+          await Timeline.insertMany(chunk);
+        }
       }
     }
 
@@ -208,20 +231,27 @@ export const checkExistingConversations = async (req, res, next) => {
     const variationsArray = Array.from(phoneVariations);
 
     // We check if a conversation exists for these phones across ALL accounts
-    const existingConversations = await Conversation.find({
-      phone: { $in: variationsArray }
-    }).select("phone");
+    // Chunking the query to handle very large lists (40k+)
+    const CHUNK_SIZE = 10000;
+    const existingConversations = [];
+    
+    for (let i = 0; i < variationsArray.length; i += CHUNK_SIZE) {
+      const chunk = variationsArray.slice(i, i + CHUNK_SIZE);
+      const chunkResults = await Conversation.find({
+        phone: { $in: chunk }
+      }).select("phone").lean();
+      existingConversations.push(...chunkResults);
+    }
 
     // Map found phones back to the original input numbers that matched
-    const foundPhones = existingConversations.map(c => c.phone);
+    // We use a Set for O(1) lookup speed instead of O(N*M) nested loops
+    const normalizedFoundPhones = new Set(existingConversations.map(c => String(c.phone).replace(/[^0-9]/g, "")));
+    
     const matchedOriginals = phones.filter(original => {
       const clean = String(original).replace(/[^0-9]/g, "");
-      return foundPhones.some(found => {
-        const foundClean = String(found).replace(/[^0-9]/g, "");
-        return foundClean === clean ||
-          foundClean === "91" + clean ||
-          foundClean === clean.substring(2);
-      });
+      return normalizedFoundPhones.has(clean) || 
+             normalizedFoundPhones.has("91" + clean) || 
+             (clean.startsWith("91") && normalizedFoundPhones.has(clean.substring(2)));
     });
 
     res.json({ existingPhones: matchedOriginals });
