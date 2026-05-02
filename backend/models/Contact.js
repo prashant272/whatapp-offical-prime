@@ -33,7 +33,8 @@ const contactSchema = new mongoose.Schema({
   followUpsLog: [{ 
     ruleId: { type: mongoose.Schema.Types.ObjectId, ref: "FollowUpRule" },
     lastSentAt: { type: Date, default: Date.now }
-  }]
+  }],
+  isCampaignSent: { type: Boolean, default: false }
 }, { timestamps: true });
 
 contactSchema.index({ phone: 1, whatsappAccountId: 1 }, { unique: true });

@@ -36,6 +36,8 @@ const CampaignManager = () => {
   const [selectedSourceType, setSelectedSourceType] = useState(""); // "tag" or "sector"
   const [selectedSourceValue, setSelectedSourceValue] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [loadLimit, setLoadLimit] = useState(100);
+  const [loadCampaignStatus, setLoadCampaignStatus] = useState("all");
   const [customStatuses, setCustomStatuses] = useState([]);
   const [existingNumbers, setExistingNumbers] = useState([]);
   const fileInputRef = useRef(null);
@@ -82,9 +84,9 @@ const CampaignManager = () => {
     const socket = io(socketUrl);
 
     socket.on("campaign_progress", ({ campaignId, sentCount, failedCount, status, logs }) => {
-      setCampaigns(prev => prev.map(c => 
-        c._id === campaignId 
-          ? { ...c, sentCount, failedCount, status, logs } 
+      setCampaigns(prev => prev.map(c =>
+        c._id === campaignId
+          ? { ...c, sentCount, failedCount, status, logs }
           : c
       ));
     });
@@ -117,7 +119,7 @@ const CampaignManager = () => {
     const template = templates.find(t => t.name === name);
     setSelectedTemplate(template);
     setNewCampaign({ ...newCampaign, templateName: name });
-    
+
     const vars = {};
     if (template) {
       template.components.forEach(comp => {
@@ -140,7 +142,7 @@ const CampaignManager = () => {
   const handlePresetChange = (pId) => {
     const preset = presets.find(p => p._id === pId);
     if (!preset) return;
-    
+
     setSelectedPreset(pId);
     setSelectedTemplate(preset.template);
     setNewCampaign({ ...newCampaign, templateName: preset.template.name });
@@ -152,14 +154,14 @@ const CampaignManager = () => {
     // It automatically filters out invalid numbers so your campaign doesn't fail.
     const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
     if (phones.length === 0) return alert("No numbers to verify.");
-    
+
     setLoading(true);
     try {
       const res = await api.post("/contacts/verify", { phones });
       const results = res.data.results;
       const valid = results.filter(r => r.status === "valid").map(r => r.wa_id);
       const invalid = results.filter(r => r.status === "invalid").length;
-      
+
       if (window.confirm(`Verification Done!\n✅ Valid: ${valid.length}\n❌ Invalid: ${invalid}\n\nDo you want to remove invalid numbers from the list?`)) {
         setNewCampaign({ ...newCampaign, contactsRaw: valid.join("\n") });
       }
@@ -179,7 +181,7 @@ const CampaignManager = () => {
       const res = await api.post("/contacts/check-existing", { phones });
       const found = res.data.existingPhones;
       setExistingNumbers(found);
-      
+
       if (found.length > 0) {
         if (window.confirm(`Found ${found.length} numbers that have already been messaged (across all accounts). Do you want to remove them from the list?`)) {
           const remaining = phones.filter(p => !found.includes(p));
@@ -257,9 +259,9 @@ const CampaignManager = () => {
             <Eye size={18} /> Message Preview
           </h4>
         </div>
-        
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.2fr", gap: "2rem" }}>
-          <div className="whatsapp-preview-box" style={{ 
+          <div className="whatsapp-preview-box" style={{
             background: "url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png')",
             backgroundSize: "cover", borderRadius: "15px", padding: "20px", minHeight: "200px", display: "flex", alignItems: "flex-start", border: "1px solid var(--glass-border)"
           }}>
@@ -300,7 +302,7 @@ const CampaignManager = () => {
                 // Smart Media Detection for Label
                 const headerComp = selectedTemplate.components.find(c => c.type === "HEADER");
                 const isMedia = (["IMAGE", "VIDEO", "DOCUMENT"].some(type => key.includes(type))) || (key.includes("HANDLE") && headerComp && ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format));
-                
+
                 let label = `Variable ${key.split("_")[1]}`;
                 if (isMedia) {
                   label = `${headerComp?.format || "Media"} URL`;
@@ -446,13 +448,13 @@ const CampaignManager = () => {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
             <div>
               <label>Campaign Name</label>
-              <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} placeholder="Festival Greeting" value={newCampaign.name} onChange={e => setNewCampaign({...newCampaign, name: e.target.value})} required />
+              <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} placeholder="Festival Greeting" value={newCampaign.name} onChange={e => setNewCampaign({ ...newCampaign, name: e.target.value })} required />
             </div>
             <div>
               <label>Select Preset (Optional)</label>
-              <select 
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #00a884", marginTop: "8px", background: "#f0fdf4" }} 
-                value={selectedPreset} 
+              <select
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #00a884", marginTop: "8px", background: "#f0fdf4" }}
+                value={selectedPreset}
                 onChange={(e) => handlePresetChange(e.target.value)}
               >
                 <option value="">-- Use a Saved Preset --</option>
@@ -471,14 +473,14 @@ const CampaignManager = () => {
             </div>
             <div>
               <label>Delay Per Message (Sec)</label>
-              <input type="number" min="0" step="1" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.delay} onChange={e => setNewCampaign({...newCampaign, delay: e.target.value})} required />
+              <input type="number" min="0" step="1" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.delay} onChange={e => setNewCampaign({ ...newCampaign, delay: e.target.value })} required />
             </div>
             <div>
               <label>Assign Sector to Contacts</label>
-              <select 
+              <select
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
                 value={newCampaign.sector}
-                onChange={(e) => setNewCampaign({...newCampaign, sector: e.target.value})}
+                onChange={(e) => setNewCampaign({ ...newCampaign, sector: e.target.value })}
               >
                 <option value="">-- Choose Sector (Optional) --</option>
                 {sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
@@ -488,96 +490,119 @@ const CampaignManager = () => {
 
           <div style={{ marginBottom: "20px" }}>
             <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", color: "#667781" }}>Target Contacts</label>
-            
+
             <div style={{ background: "#f0f2f5", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", marginBottom: "12px" }}>
               <p style={{ margin: "0 0 10px 0", fontSize: "0.85rem", color: "#00a884", fontWeight: "700" }}>Option 1: Load from Database (Tags/Sectors)</p>
-                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                    <select 
-                      style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
-                      value={selectedSourceType}
-                      onChange={(e) => setSelectedSourceType(e.target.value)}
-                    >
-                      <option value="">Category (All)</option>
-                      <option value="tag">By Tag</option>
-                      <option value="sector">By Sector</option>
-                    </select>
-                    
-                    <select 
-                      style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
-                      value={selectedSourceValue}
-                      onChange={(e) => setSelectedSourceValue(e.target.value)}
-                      disabled={!selectedSourceType}
-                    >
-                      <option value="">Select Value</option>
-                      {selectedSourceType === "tag" ? tags.map(t => <option key={t} value={t}>{t}</option>) : 
-                       selectedSourceType === "sector" ? sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>) : null}
-                    </select>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <select
+                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
+                  value={selectedSourceType}
+                  onChange={(e) => setSelectedSourceType(e.target.value)}
+                >
+                  <option value="">Category (All)</option>
+                  <option value="tag">By Tag</option>
+                  <option value="sector">By Sector</option>
+                </select>
 
-                    <select 
-                      style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
-                      value={selectedStatus}
-                      onChange={(e) => setSelectedStatus(e.target.value)}
-                    >
-                      <option value="">All Status</option>
-                      {customStatuses.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                    </select>
-                    
-                    <button 
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          let url = `/contacts?limit=10000`;
-                          if (selectedSourceType && selectedSourceValue) url += `&${selectedSourceType}=${selectedSourceValue}`;
-                          if (selectedStatus) url += `&status=${selectedStatus}`;
-                          
-                          const res = await api.get(url);
-                          const numbers = res.data.contacts.map(c => c.phone).join("\n");
-                          setNewCampaign({ ...newCampaign, contactsRaw: numbers });
-                          alert(`✅ Loaded ${res.data.contacts.length} contacts!`);
-                        } catch (err) { alert("Failed to load contacts"); }
-                      }}
-                      style={{ padding: "10px 20px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700" }}
-                    >
-                      Load
-                    </button>
-                  </div>
+                <select
+                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
+                  value={selectedSourceValue}
+                  onChange={(e) => setSelectedSourceValue(e.target.value)}
+                  disabled={!selectedSourceType}
+                >
+                  <option value="">Select Value</option>
+                  {selectedSourceType === "tag" ? tags.map(t => <option key={t} value={t}>{t}</option>) :
+                    selectedSourceType === "sector" ? sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>) : null}
+                </select>
+
+                <select
+                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                >
+                  <option value="">All Status</option>
+                  {customStatuses.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
+                </select>
+
+                <select
+                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
+                  value={loadCampaignStatus}
+                  onChange={(e) => setLoadCampaignStatus(e.target.value)}
+                >
+                  <option value="all">All Contacts</option>
+                  <option value="unsent">Unsent Only</option>
+                  <option value="sent">Already Sent</option>
+                </select>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "white", padding: "0 10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                  <span style={{ fontSize: "0.75rem", color: "#667781" }}>Limit:</span>
+                  <input 
+                    type="number" 
+                    value={loadLimit} 
+                    onChange={(e) => setLoadLimit(e.target.value)} 
+                    style={{ width: "60px", border: "none", outline: "none", fontSize: "0.85rem", padding: "10px 0" }}
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      let url = `/contacts?limit=${loadLimit}`;
+                      if (selectedSourceType && selectedSourceValue) url += `&${selectedSourceType}=${selectedSourceValue}`;
+                      if (selectedStatus) url += `&status=${selectedStatus}`;
+                      
+                      if (loadCampaignStatus === "unsent") url += `&isCampaignSent=false`;
+                      else if (loadCampaignStatus === "sent") url += `&isCampaignSent=true`;
+
+                      const res = await api.get(url);
+                      const numbers = res.data.contacts.map(c => c.phone).join("\n");
+                      setNewCampaign({ ...newCampaign, contactsRaw: numbers });
+                      alert(`✅ Loaded ${res.data.contacts.length} contacts!`);
+                    } catch (err) { alert("Failed to load contacts"); }
+                  }}
+                  style={{ padding: "10px 20px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700" }}
+                >
+                  Load
+                </button>
+              </div>
             </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <p style={{ margin: 0, fontSize: "0.85rem", color: "#667781", fontWeight: "700" }}>Option 2: Manual / File Upload</p>
-                <div style={{ display: "flex", gap: "10px" }}>
-                  <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
-                  <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5" }}>Upload File</button>
-                  <button type="button" onClick={verifyNumbers} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#e7fce3", color: "#008069" }}>Verify Numbers</button>
-                  <button type="button" onClick={checkExistingMessages} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#fff5f5", color: "#ff4757" }}>Check Previous Messages</button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "#667781", fontWeight: "700" }}>Option 2: Manual / File Upload</p>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
+                <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5" }}>Upload File</button>
+                <button type="button" onClick={verifyNumbers} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#e7fce3", color: "#008069" }}>Verify Numbers</button>
+                <button type="button" onClick={checkExistingMessages} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#fff5f5", color: "#ff4757" }}>Check Previous Messages</button>
+              </div>
+            </div>
+            <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", fontFamily: "monospace" }} placeholder="919876543210..." value={newCampaign.contactsRaw} onChange={e => setNewCampaign({ ...newCampaign, contactsRaw: e.target.value })} required></textarea>
+
+            {existingNumbers.length > 0 && (
+              <div style={{ marginTop: "10px", padding: "12px", background: "rgba(255, 71, 87, 0.1)", borderRadius: "10px", border: "1px solid #ff4757" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "0.85rem", color: "#ff4757", fontWeight: "bold" }}>⚠️ Found {existingNumbers.length} numbers with previous history:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
+                      const remaining = phones.filter(p => !existingNumbers.includes(p));
+                      setNewCampaign({ ...newCampaign, contactsRaw: remaining.join("\n") });
+                      setExistingNumbers([]);
+                    }}
+                    style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#ff4757", color: "white", border: "none" }}
+                  >
+                    Remove All
+                  </button>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", maxHeight: "80px", overflowY: "auto" }}>
+                  {existingNumbers.map(n => (
+                    <span key={n} style={{ fontSize: "0.75rem", background: "white", padding: "2px 6px", borderRadius: "4px", border: "1px solid #ff4757", color: "#ff4757" }}>{n}</span>
+                  ))}
                 </div>
               </div>
-              <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", fontFamily: "monospace" }} placeholder="919876543210..." value={newCampaign.contactsRaw} onChange={e => setNewCampaign({...newCampaign, contactsRaw: e.target.value})} required></textarea>
-              
-              {existingNumbers.length > 0 && (
-                <div style={{ marginTop: "10px", padding: "12px", background: "rgba(255, 71, 87, 0.1)", borderRadius: "10px", border: "1px solid #ff4757" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "0.85rem", color: "#ff4757", fontWeight: "bold" }}>⚠️ Found {existingNumbers.length} numbers with previous history:</span>
-                    <button 
-                      type="button" 
-                      onClick={() => {
-                        const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
-                        const remaining = phones.filter(p => !existingNumbers.includes(p));
-                        setNewCampaign({ ...newCampaign, contactsRaw: remaining.join("\n") });
-                        setExistingNumbers([]);
-                      }}
-                      style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#ff4757", color: "white", border: "none" }}
-                    >
-                      Remove All
-                    </button>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", maxHeight: "80px", overflowY: "auto" }}>
-                    {existingNumbers.map(n => (
-                      <span key={n} style={{ fontSize: "0.75rem", background: "white", padding: "2px 6px", borderRadius: "4px", border: "1px solid #ff4757", color: "#ff4757" }}>{n}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
+            )}
           </div>
 
           {renderTemplatePreview()}
@@ -604,11 +629,11 @@ const CampaignManager = () => {
                   </div>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-                  <div style={{ 
-                    fontSize: "0.7rem", 
-                    background: camp.status === "RUNNING" ? "#e7fce3" : camp.status === "PAUSED" ? "#fff9db" : "#f0f2f5", 
+                  <div style={{
+                    fontSize: "0.7rem",
+                    background: camp.status === "RUNNING" ? "#e7fce3" : camp.status === "PAUSED" ? "#fff9db" : "#f0f2f5",
                     color: camp.status === "RUNNING" ? "#008069" : camp.status === "PAUSED" ? "#f08c00" : "#667781",
-                    padding: "4px 12px", 
+                    padding: "4px 12px",
                     borderRadius: "12px",
                     fontWeight: "bold",
                     textTransform: "uppercase",
@@ -643,9 +668,9 @@ const CampaignManager = () => {
                   <button onClick={() => handleUpdateStatus(camp._id, "RUNNING", true)} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#339af0", color: "white", border: "none", cursor: "pointer" }}>Force Send</button>
                 )}
                 <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#f0f2f5", color: "#667781", border: "1px solid #ddd", cursor: "pointer", marginLeft: "auto" }}>View Logs</button>
-                
-                <button 
-                  onClick={() => handleDeleteCampaign(camp._id)} 
+
+                <button
+                  onClick={() => handleDeleteCampaign(camp._id)}
                   style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#fff5f5", color: "#ff4757", border: "1px solid #ffe3e3", cursor: "pointer" }}
                   title="Delete Campaign"
                 >
@@ -658,10 +683,10 @@ const CampaignManager = () => {
           {/* Toggle Button for Old Campaigns */}
           {campaigns.some(c => ["COMPLETED", "FAILED"].includes(c.status)) && (
             <div style={{ textAlign: "center", margin: "1rem 0" }}>
-              <button 
+              <button
                 onClick={() => setShowAllCampaigns(!showAllCampaigns)}
-                style={{ 
-                  background: "white", border: "1px solid #ddd", padding: "10px 24px", 
+                style={{
+                  background: "white", border: "1px solid #ddd", padding: "10px 24px",
                   borderRadius: "24px", cursor: "pointer", fontSize: "0.9rem", color: "#111b21",
                   display: "inline-flex", alignItems: "center", gap: "10px", fontWeight: "bold",
                   boxShadow: "0 2px 5px rgba(0,0,0,0.05)"
@@ -703,8 +728,8 @@ const CampaignManager = () => {
                 <div>Sent: {camp.sentCount}</div>
                 <div>Failed: {camp.failedCount}</div>
                 <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "#339af0", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline" }}>Logs</button>
-                <button 
-                  onClick={() => handleDeleteCampaign(camp._id)} 
+                <button
+                  onClick={() => handleDeleteCampaign(camp._id)}
                   style={{ background: "none", border: "none", color: "#ff4757", cursor: "pointer", marginLeft: "10px" }}
                   title="Delete Campaign"
                 >
@@ -718,17 +743,17 @@ const CampaignManager = () => {
       {/* Logs Modal */}
       {showLogsModal && (
         <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, bottom: 0, 
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
           background: "rgba(0,0,0,0.7)", backdropFilter: "blur(5px)",
           display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: "20px"
         }}>
           <div style={{
-            background: "white", width: "100%", maxWidth: "900px", maxHeight: "85vh", 
+            background: "white", width: "100%", maxWidth: "900px", maxHeight: "85vh",
             borderRadius: "20px", overflow: "hidden", display: "flex", flexDirection: "column",
             boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)"
           }}>
-            <div style={{ 
-              padding: "20px 25px", borderBottom: "1px solid #eee", 
+            <div style={{
+              padding: "20px 25px", borderBottom: "1px solid #eee",
               display: "flex", justifyContent: "space-between", alignItems: "center",
               background: "#f8f9fa"
             }}>
@@ -736,14 +761,14 @@ const CampaignManager = () => {
                 <List size={20} /> Campaign Delivery Logs ({selectedLogs.length})
               </h4>
               <div style={{ display: "flex", gap: "10px" }}>
-                <input 
-                  type="text" 
-                  placeholder="Search number..." 
+                <input
+                  type="text"
+                  placeholder="Search number..."
                   value={logSearch}
                   onChange={(e) => setLogSearch(e.target.value)}
                   style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "0.85rem" }}
                 />
-                <button 
+                <button
                   onClick={() => { setShowLogsModal(false); setLogSearch(""); }}
                   style={{ background: "#eee", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
                 >
@@ -751,7 +776,7 @@ const CampaignManager = () => {
                 </button>
               </div>
             </div>
-            
+
             <div style={{ padding: "0", overflowY: "auto", flex: 1 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                 <thead style={{ position: "sticky", top: 0, background: "white", zIndex: 1, boxShadow: "0 1px 0 #eee" }}>
@@ -772,25 +797,25 @@ const CampaignManager = () => {
                       .filter(log => log.phone.toLowerCase().includes(logSearch.toLowerCase()))
                       .reverse()
                       .map((log, idx) => (
-                      <tr key={idx} style={{ borderBottom: "1px solid #f8f9fa" }}>
-                        <td style={{ padding: "12px 25px", fontWeight: "600" }}>{log.phone}</td>
-                        <td style={{ padding: "12px 25px" }}>
-                          <span style={{ 
-                            padding: "4px 8px", borderRadius: "6px", fontSize: "0.75rem", fontWeight: "bold",
-                            background: log.status === "sent" ? "#e7fce3" : "#fff5f5",
-                            color: log.status === "sent" ? "#008069" : "#ff4757"
-                          }}>
-                            {log.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td style={{ padding: "12px 25px", fontSize: "0.85rem", color: log.error ? "#ff4757" : "#667781" }}>
-                          {log.error || (log.messageId ? `Message ID: ${log.messageId}` : "Delivered successfully")}
-                        </td>
-                        <td style={{ padding: "12px 25px", fontSize: "0.75rem", color: "#999" }}>
-                          {log.sentAt ? new Date(log.sentAt).toLocaleString() : "-"}
-                        </td>
-                      </tr>
-                    ))
+                        <tr key={idx} style={{ borderBottom: "1px solid #f8f9fa" }}>
+                          <td style={{ padding: "12px 25px", fontWeight: "600" }}>{log.phone}</td>
+                          <td style={{ padding: "12px 25px" }}>
+                            <span style={{
+                              padding: "4px 8px", borderRadius: "6px", fontSize: "0.75rem", fontWeight: "bold",
+                              background: log.status === "sent" ? "#e7fce3" : "#fff5f5",
+                              color: log.status === "sent" ? "#008069" : "#ff4757"
+                            }}>
+                              {log.status.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ padding: "12px 25px", fontSize: "0.85rem", color: log.error ? "#ff4757" : "#667781" }}>
+                            {log.error || (log.messageId ? `Message ID: ${log.messageId}` : "Delivered successfully")}
+                          </td>
+                          <td style={{ padding: "12px 25px", fontSize: "0.75rem", color: "#999" }}>
+                            {log.sentAt ? new Date(log.sentAt).toLocaleString() : "-"}
+                          </td>
+                        </tr>
+                      ))
                   )}
                 </tbody>
               </table>

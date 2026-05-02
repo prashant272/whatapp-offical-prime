@@ -25,13 +25,13 @@ export const getContacts = async (req, res, next) => {
   try {
     const accountId = req.headers["x-whatsapp-account-id"];
     const { search, status, tag, sector, showAllAccounts, page = 1, limit = 50 } = req.query;
-    
+
     let query = {};
     const PRIMARY_ID = "69ef020c6c021bd0911d62c2";
 
     if (showAllAccounts !== "true") {
       if (!accountId) return res.status(400).json({ error: "Missing WhatsApp Account ID header" });
-      
+
       if (accountId === PRIMARY_ID) {
         query.$or = [
           { whatsappAccountId: accountId },
@@ -47,17 +47,20 @@ export const getContacts = async (req, res, next) => {
         { name: { $regex: search, $options: "i" } },
         { phone: { $regex: search, $options: "i" } }
       ];
-      
+
       if (query.$or) {
         query = { $and: [{ $or: query.$or }, { $or: searchFilter }] };
       } else {
         query.$or = searchFilter;
       }
     }
-    
+
     if (status) query.status = status;
     if (tag) query.tags = { $in: [tag] };
     if (sector) query.sector = sector;
+    if (req.query.isCampaignSent !== undefined) {
+      query.isCampaignSent = req.query.isCampaignSent === "true";
+    }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await Contact.countDocuments(query);
@@ -71,13 +74,13 @@ export const getContacts = async (req, res, next) => {
 
     // Attach conversationId to each contact
     const contacts = await Promise.all(rawContacts.map(async (contact) => {
-      const conv = await Conversation.findOne({ 
+      const conv = await Conversation.findOne({
         contact: contact._id,
-        $or: [{ whatsappAccountId: accountId }, { whatsappAccountId: null }] 
+        $or: [{ whatsappAccountId: accountId }, { whatsappAccountId: null }]
       }).select("_id");
       return { ...contact, conversationId: conv?._id };
     }));
-      
+
     res.json({
       contacts,
       total,
@@ -114,8 +117,8 @@ export const importContacts = async (req, res, next) => {
     const bulkOps = contacts.map(c => ({
       updateOne: {
         filter: { phone: c.phone },
-        update: { 
-          $set: { 
+        update: {
+          $set: {
             name: c.name,
             sector: c.sector,
             whatsappAccountId: whatsappAccountId || c.whatsappAccountId,
@@ -135,7 +138,7 @@ export const importContacts = async (req, res, next) => {
       // For efficiency, we only log for newly created or updated contacts in this session
       const phones = contacts.map(c => c.phone);
       const updatedContacts = await Contact.find({ phone: { $in: phones } });
-      
+
       const timelineOps = updatedContacts.map(contact => ({
         contactId: contact._id,
         whatsappAccountId: whatsappAccountId || contact.whatsappAccountId,
@@ -205,8 +208,8 @@ export const checkExistingConversations = async (req, res, next) => {
     const variationsArray = Array.from(phoneVariations);
 
     // We check if a conversation exists for these phones across ALL accounts
-    const existingConversations = await Conversation.find({ 
-      phone: { $in: variationsArray } 
+    const existingConversations = await Conversation.find({
+      phone: { $in: variationsArray }
     }).select("phone");
 
     // Map found phones back to the original input numbers that matched
@@ -215,9 +218,9 @@ export const checkExistingConversations = async (req, res, next) => {
       const clean = String(original).replace(/[^0-9]/g, "");
       return foundPhones.some(found => {
         const foundClean = String(found).replace(/[^0-9]/g, "");
-        return foundClean === clean || 
-               foundClean === "91" + clean || 
-               foundClean === clean.substring(2);
+        return foundClean === clean ||
+          foundClean === "91" + clean ||
+          foundClean === clean.substring(2);
       });
     });
 

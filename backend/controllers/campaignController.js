@@ -59,7 +59,8 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               phone: latestLog.phone, 
               whatsappAccountId: account._id,
               sourceCampaign: campaign.name,
-              sector: sectorName || "Unassigned"
+              sector: sectorName || "Unassigned",
+              isCampaignSent: true
             });
             await contact.save();
           } else {
@@ -70,6 +71,10 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             }
             if (sectorName && contact.sector !== sectorName) {
               contact.sector = sectorName;
+              needsUpdate = true;
+            }
+            if (!contact.isCampaignSent) {
+              contact.isCampaignSent = true;
               needsUpdate = true;
             }
             if (needsUpdate) await contact.save();
