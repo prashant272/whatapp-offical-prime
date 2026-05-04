@@ -22,7 +22,6 @@ export const WhatsAppAccountProvider = ({ children }) => {
         const defaultAccount = res.data.find(a => a.isDefault) || res.data[0];
         setActiveAccount(defaultAccount);
         localStorage.setItem("whatsappAccountId", defaultAccount._id);
-        // No reload here to avoid loops, just set it
       }
     } catch (err) {
       console.error("Error fetching WhatsApp accounts:", err);

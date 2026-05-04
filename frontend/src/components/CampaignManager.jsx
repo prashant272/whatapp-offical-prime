@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import api, { API_BASE } from "../api";
-import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud, Smartphone, Calendar, Clock, Trash2 } from "lucide-react";
+import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud, Smartphone, Calendar, Clock, Trash2, RotateCcw } from "lucide-react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import { io } from "socket.io-client";
@@ -9,7 +9,7 @@ import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const CampaignManager = () => {
   const location = useLocation();
-  const { activeAccount } = useWhatsAppAccount();
+  const { activeAccount, accounts } = useWhatsAppAccount();
   const [campaigns, setCampaigns] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [presets, setPresets] = useState([]);
@@ -29,7 +29,8 @@ const CampaignManager = () => {
     templateName: "",
     contactsRaw: "",
     delay: 2,
-    sector: ""
+    sector: "",
+    whatsappAccountId: activeAccount?._id || ""
   });
   const [tags, setTags] = useState([]);
   const [sectors, setSectors] = useState([]);
@@ -37,31 +38,37 @@ const CampaignManager = () => {
   const [selectedSourceValue, setSelectedSourceValue] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
   const [loadLimit, setLoadLimit] = useState(100);
+  const [loadSkip, setLoadSkip] = useState(0);
+  const [loadFromAllAccounts, setLoadFromAllAccounts] = useState(false);
   const [loadCampaignStatus, setLoadCampaignStatus] = useState("all");
   const [customStatuses, setCustomStatuses] = useState([]);
-  const [existingNumbers, setExistingNumbers] = useState([]);
+  const [existingNumbers, setExistingNumbers] = useState([]); // Array of { phone, sector }
+  const [bulkSector, setBulkSector] = useState("");
   const fileInputRef = useRef(null);
 
   const fetchData = async () => {
     if (!activeAccount) return;
     setLoading(true);
     try {
-      const [campRes, tempRes, presetRes, tagRes, sectorRes, statusRes] = await Promise.all([
-        api.get("/campaigns"),
-        api.get("/templates"),
-        api.get("/presets"),
-        api.get("/contacts/tags"),
-        api.get("/sectors"),
-        api.get("/statuses")
+      const [campRes, tempRes, presetRes, tagRes] = await Promise.all([
+        api.get("/campaigns").catch(e => ({ data: [] })),
+        api.get("/templates").catch(e => ({ data: [] })),
+        api.get("/presets").catch(e => ({ data: [] })),
+        api.get("/contacts/tags").catch(e => ({ data: [] }))
       ]);
+
+      const [sectorRes, statusRes] = await Promise.all([
+        api.get("/sectors").catch(e => ({ data: [] })),
+        api.get("/statuses").catch(e => ({ data: [] }))
+      ]);
+
       setCampaigns(Array.isArray(campRes.data) ? campRes.data : []);
-      // Templates are already filtered by account in the backend thanks to our middleware
       const templatesList = Array.isArray(tempRes.data) ? tempRes.data : [];
       setTemplates(templatesList.filter(t => t.status === "APPROVED"));
       setPresets(Array.isArray(presetRes.data) ? presetRes.data : []);
-      setTags(tagRes.data);
-      setSectors(sectorRes.data);
-      setCustomStatuses(statusRes.data);
+      setTags(Array.isArray(tagRes.data) ? tagRes.data : []);
+      setSectors(Array.isArray(sectorRes.data) ? sectorRes.data : []);
+      setCustomStatuses(Array.isArray(statusRes.data) ? statusRes.data : []);
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
@@ -72,11 +79,9 @@ const CampaignManager = () => {
   useEffect(() => {
     fetchData();
 
-    // Check if we arrived here with pre-selected numbers from Contact Manager
     if (location.state?.numbers) {
       setNewCampaign(prev => ({ ...prev, contactsRaw: location.state.numbers }));
       setShowCreate(true);
-      // Clear state after reading to avoid re-triggering on refresh
       window.history.replaceState({}, document.title);
     }
 
@@ -85,14 +90,16 @@ const CampaignManager = () => {
 
     socket.on("campaign_progress", ({ campaignId, sentCount, failedCount, status, logs }) => {
       setCampaigns(prev => prev.map(c =>
-        c._id === campaignId
-          ? { ...c, sentCount, failedCount, status, logs }
-          : c
+        c._id === campaignId ? { ...c, sentCount, failedCount, status, logs } : c
       ));
     });
 
+    if (activeAccount) {
+      setNewCampaign(prev => ({ ...prev, whatsappAccountId: activeAccount._id }));
+    }
+
     return () => socket.disconnect();
-  }, [activeAccount, location.state]);
+  }, [activeAccount, location.state]); 
 
   const handleImageUpload = async (e, key) => {
     // This function runs when the user selects an image from their computer for a campaign.
@@ -112,6 +119,43 @@ const CampaignManager = () => {
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleRecampaign = (camp) => {
+    const tName = camp.templateName || camp.template?.name || "";
+    const template = templates.find(t => t.name === tName);
+    
+    setSelectedTemplate(template);
+    setNewCampaign({
+      name: `${camp.name} - Copy`,
+      templateName: tName,
+      contactsRaw: (camp.contacts || []).map(c => c.phone).join("\n"),
+      delay: 2,
+      sector: camp.sector || "",
+      whatsappAccountId: activeAccount?._id || camp.whatsappAccountId?._id || ""
+    });
+
+    // Reset template variables (since they aren't stored in Campaign model)
+    const vars = {};
+    if (template) {
+      template.components.forEach(comp => {
+        if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
+          vars[`HEADER_${comp.format}`] = "";
+        }
+        const text = comp.text || "";
+        const matches = text.match(/{{(\d+)}}/g);
+        if (matches) {
+          matches.forEach(m => {
+            const num = m.replace(/{{|}}/g, "");
+            vars[`${comp.type}_${num}`] = "";
+          });
+        }
+      });
+    }
+    setTemplateVars(vars);
+    setExistingNumbers([]); // Clear any previous warning box
+    setShowCreate(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleTemplateChange = (e) => {
@@ -179,15 +223,11 @@ const CampaignManager = () => {
     setLoading(true);
     try {
       const res = await api.post("/contacts/check-existing", { phones });
-      const found = res.data.existingPhones;
+      const found = res.data.contacts || []; // New format: { phone, sector }
       setExistingNumbers(found);
 
       if (found.length > 0) {
-        if (window.confirm(`Found ${found.length} numbers that have already been messaged (across all accounts). Do you want to remove them from the list?`)) {
-          const remaining = phones.filter(p => !found.includes(p));
-          setNewCampaign({ ...newCampaign, contactsRaw: remaining.join("\n") });
-          setExistingNumbers([]);
-        }
+        alert(`Found ${found.length} numbers that have already been messaged. Check the table below to assign sectors.`);
       } else {
         alert("No previously messaged numbers found (across all accounts).");
       }
@@ -402,10 +442,16 @@ const CampaignManager = () => {
     }
 
     try {
+      if (!newCampaign.whatsappAccountId || newCampaign.whatsappAccountId === "all") {
+        alert("Please select a specific Sender Number (cannot be 'All Accounts').");
+        setLoading(false);
+        return;
+      }
+
       const payload = {
         name: newCampaign.name,
         templateName: newCampaign.templateName,
-        whatsappAccountId: activeAccount._id,
+        whatsappAccountId: newCampaign.whatsappAccountId,
         contacts: phones,
         templateComponents,
         delay: parseInt(newCampaign.delay),
@@ -447,9 +493,27 @@ const CampaignManager = () => {
         <form className="glass-card" onSubmit={handleStartCampaign}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
             <div>
+              <label>Select Sender Number {activeAccount && <span style={{ color: "#00a884", fontSize: "0.75rem", fontWeight: "bold" }}>(Auto-selected from Sidebar)</span>}</label>
+              <select 
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px", background: activeAccount ? "#f8f9fa" : "white" }}
+                value={newCampaign.whatsappAccountId}
+                onChange={e => setNewCampaign({ ...newCampaign, whatsappAccountId: e.target.value })}
+                required
+                disabled={!!activeAccount}
+              >
+                <option value="">-- Choose Account --</option>
+                {accounts.map(acc => (
+                  <option key={acc._id} value={acc._id}>{acc.name} ({acc.phoneNumberId})</option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label>Campaign Name</label>
               <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} placeholder="Festival Greeting" value={newCampaign.name} onChange={e => setNewCampaign({ ...newCampaign, name: e.target.value })} required />
             </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
             <div>
               <label>Select Preset (Optional)</label>
               <select
@@ -462,7 +526,7 @@ const CampaignManager = () => {
               </select>
             </div>
             <div>
-              <label>Or Choose Template ({activeAccount?.name})</label>
+              <label>Choose Message Template</label>
               <select style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.templateName} onChange={(e) => {
                 handleTemplateChange(e);
                 setSelectedPreset("");
@@ -471,6 +535,9 @@ const CampaignManager = () => {
                 {templates.map(t => <option key={t._id} value={t.name}>{t.name}</option>)}
               </select>
             </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
             <div>
               <label>Delay Per Message (Sec)</label>
               <input type="number" min="0" step="1" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.delay} onChange={e => setNewCampaign({ ...newCampaign, delay: e.target.value })} required />
@@ -535,6 +602,16 @@ const CampaignManager = () => {
                 </select>
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "white", padding: "0 10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                  <span style={{ fontSize: "0.75rem", color: "#667781" }}>Start from:</span>
+                  <input 
+                    type="number" 
+                    value={loadSkip} 
+                    onChange={(e) => setLoadSkip(e.target.value)} 
+                    style={{ width: "60px", border: "none", outline: "none", fontSize: "0.85rem", padding: "10px 0" }}
+                  />
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "white", padding: "0 10px", borderRadius: "8px", border: "1px solid #ddd" }}>
                   <span style={{ fontSize: "0.75rem", color: "#667781" }}>Limit:</span>
                   <input 
                     type="number" 
@@ -548,17 +625,19 @@ const CampaignManager = () => {
                   type="button"
                   onClick={async () => {
                     try {
-                      let url = `/contacts?limit=${loadLimit}`;
+                      let url = `/contacts?limit=${loadLimit}&skip=${loadSkip}&showAllAccounts=true`;
                       if (selectedSourceType && selectedSourceValue) url += `&${selectedSourceType}=${selectedSourceValue}`;
                       if (selectedStatus) url += `&status=${selectedStatus}`;
                       
                       if (loadCampaignStatus === "unsent") url += `&isCampaignSent=false`;
                       else if (loadCampaignStatus === "sent") url += `&isCampaignSent=true`;
 
-                      const res = await api.get(url);
+                      const res = await api.get(url, {
+                        headers: { "x-whatsapp-account-id": "all" }
+                      });
                       const numbers = res.data.contacts.map(c => c.phone).join("\n");
                       setNewCampaign({ ...newCampaign, contactsRaw: numbers });
-                      alert(`✅ Loaded ${res.data.contacts.length} contacts!`);
+                      alert(`✅ Loaded ${res.data.contacts.length} contacts starting from #${loadSkip}!`);
                     } catch (err) { alert("Failed to load contacts"); }
                   }}
                   style={{ padding: "10px 20px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700" }}
@@ -580,26 +659,79 @@ const CampaignManager = () => {
             <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", fontFamily: "monospace" }} placeholder="919876543210..." value={newCampaign.contactsRaw} onChange={e => setNewCampaign({ ...newCampaign, contactsRaw: e.target.value })} required></textarea>
 
             {existingNumbers.length > 0 && (
-              <div style={{ marginTop: "10px", padding: "12px", background: "rgba(255, 71, 87, 0.1)", borderRadius: "10px", border: "1px solid #ff4757" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "0.85rem", color: "#ff4757", fontWeight: "bold" }}>⚠️ Found {existingNumbers.length} numbers with previous history:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
-                      const remaining = phones.filter(p => !existingNumbers.includes(p));
-                      setNewCampaign({ ...newCampaign, contactsRaw: remaining.join("\n") });
-                      setExistingNumbers([]);
-                    }}
-                    style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#ff4757", color: "white", border: "none" }}
-                  >
-                    Remove All
-                  </button>
+              <div style={{ marginTop: "10px", padding: "12px", background: "rgba(255, 171, 0, 0.05)", borderRadius: "10px", border: "1px solid #ffab00" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                  <span style={{ fontSize: "0.85rem", color: "#ffab00", fontWeight: "bold" }}>⚠️ {existingNumbers.length} Existing Contacts Found:</span>
+                  
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <select 
+                      style={{ padding: "6px 10px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "0.75rem" }}
+                      value={bulkSector}
+                      onChange={(e) => setBulkSector(e.target.value)}
+                    >
+                      <option value="">-- Bulk Sector --</option>
+                      {sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!bulkSector) return alert("Select a sector first");
+                        try {
+                          await api.post("/contacts/bulk-update", { 
+                            phones: existingNumbers.map(n => n.phone), 
+                            sector: bulkSector 
+                          });
+                          alert(`✅ Updated ${existingNumbers.length} contacts to ${bulkSector}!`);
+                          setExistingNumbers(prev => prev.map(n => ({ ...n, sector: bulkSector })));
+                        } catch (err) { alert("Bulk update failed"); }
+                      }}
+                      style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "8px", background: "#00a884", color: "white", border: "none", fontWeight: "bold" }}
+                    >
+                      Assign to All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const phones = newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5);
+                        const existingPhonesOnly = existingNumbers.map(n => n.phone);
+                        const remaining = phones.filter(p => !existingPhonesOnly.includes(p));
+                        setNewCampaign({ ...newCampaign, contactsRaw: remaining.join("\n") });
+                        setExistingNumbers([]);
+                      }}
+                      style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "8px", background: "#ff4757", color: "white", border: "none", fontWeight: "bold" }}
+                    >
+                      Remove All
+                    </button>
+                  </div>
                 </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "5px", maxHeight: "80px", overflowY: "auto" }}>
-                  {existingNumbers.map(n => (
-                    <span key={n} style={{ fontSize: "0.75rem", background: "white", padding: "2px 6px", borderRadius: "4px", border: "1px solid #ff4757", color: "#ff4757" }}>{n}</span>
-                  ))}
+
+                <div style={{ maxHeight: "200px", overflowY: "auto", background: "white", borderRadius: "8px", border: "1px solid #eee" }}>
+                  <table style={{ width: "100%", fontSize: "0.75rem", borderCollapse: "collapse" }}>
+                    <thead style={{ background: "#f8f9fa", position: "sticky", top: 0 }}>
+                      <tr>
+                        <th style={{ padding: "8px", textAlign: "left", borderBottom: "1px solid #eee" }}>Phone</th>
+                        <th style={{ padding: "8px", textAlign: "left", borderBottom: "1px solid #eee" }}>Current Sector</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {existingNumbers.map((n, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid #f8f9fa" }}>
+                          <td style={{ padding: "6px 8px" }}>{n.phone}</td>
+                          <td style={{ padding: "6px 8px" }}>
+                            <span style={{ 
+                              background: n.sector === "Unassigned" ? "#f1f5f9" : "#e0f2fe", 
+                              color: n.sector === "Unassigned" ? "#64748b" : "#0369a1",
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              fontWeight: "bold"
+                            }}>
+                              {n.sector}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
@@ -624,6 +756,11 @@ const CampaignManager = () => {
                     {camp.startedAt && (
                       <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.75rem", color: "#339af0", background: "#e7f5ff", padding: "2px 8px", borderRadius: "4px" }}>
                         <Calendar size={14} /> <span>Started: {new Date(camp.startedAt).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {camp.whatsappAccountId && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.75rem", color: "#00a884", background: "#f0fdf4", padding: "2px 8px", borderRadius: "4px" }}>
+                        <Smartphone size={14} /> <span>From: {camp.whatsappAccountId.name || "Primary"}</span>
                       </div>
                     )}
                   </div>
@@ -668,6 +805,14 @@ const CampaignManager = () => {
                   <button onClick={() => handleUpdateStatus(camp._id, "RUNNING", true)} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#339af0", color: "white", border: "none", cursor: "pointer" }}>Force Send</button>
                 )}
                 <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#f0f2f5", color: "#667781", border: "1px solid #ddd", cursor: "pointer", marginLeft: "auto" }}>View Logs</button>
+
+                <button 
+                  onClick={() => handleRecampaign(camp)} 
+                  style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#e7f5ff", color: "#339af0", border: "1px solid #a5d8ff", cursor: "pointer", display: "flex", alignItems: "center", gap: "5px" }}
+                  title="Re-campaign (Copy Details)"
+                >
+                  <RotateCcw size={14} /> Re-campaign
+                </button>
 
                 <button
                   onClick={() => handleDeleteCampaign(camp._id)}
@@ -717,6 +862,11 @@ const CampaignManager = () => {
                         <CheckCircle2 size={12} /> <span>Completed: {new Date(camp.completedAt).toLocaleString()}</span>
                       </div>
                     )}
+                    {camp.whatsappAccountId && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.7rem", color: "#00a884", background: "#f0fdf4", padding: "2px 8px", borderRadius: "4px" }}>
+                        <Smartphone size={12} /> <span>From: {camp.whatsappAccountId.name || "Primary"}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div style={{ fontSize: "0.65rem", background: "#f0f2f5", color: "#667781", padding: "4px 10px", borderRadius: "10px", fontWeight: "bold" }}>
@@ -728,6 +878,12 @@ const CampaignManager = () => {
                 <div>Sent: {camp.sentCount}</div>
                 <div>Failed: {camp.failedCount}</div>
                 <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "#339af0", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline" }}>Logs</button>
+                <button 
+                  onClick={() => handleRecampaign(camp)} 
+                  style={{ marginLeft: "10px", background: "none", border: "none", color: "#00a884", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "3px" }}
+                >
+                  <RotateCcw size={12} /> Re-campaign
+                </button>
                 <button
                   onClick={() => handleDeleteCampaign(camp._id)}
                   style={{ background: "none", border: "none", color: "#ff4757", cursor: "pointer", marginLeft: "10px" }}

@@ -9,34 +9,41 @@ import { getIO, smartEmit } from "../utils/socket.js";
 
 export const getConversations = async (req, res) => {
   try {
+    const { page = 1, limit = 20, status, assignedTo, sector, showAllAccounts } = req.query;
     const account = req.whatsappAccount;
     const accountId = account?._id;
-    
-    // SMART FILTER: If it's the primary/default account, show its own chats + legacy (null) chats
-    const isPrimary = account?.isDefault || account?.name?.toLowerCase().includes("primary");
-    
-    let filter = { whatsappAccountId: accountId };
-    if (isPrimary) {
-      filter = {
-        $or: [
+
+    let filter = {};
+
+    if (showAllAccounts === "true" || (account && account.isAll)) {
+      // Show all accounts - no base filter needed
+    } else {
+      // Filter by current account (including legacy null/undefined for primary)
+      const isPrimary = account?.isDefault || account?.name?.toLowerCase().includes("primary");
+      if (isPrimary) {
+        filter.$or = [
           { whatsappAccountId: accountId },
           { whatsappAccountId: { $exists: false } },
           { whatsappAccountId: null }
-        ]
-      };
+        ];
+      } else {
+        filter.whatsappAccountId = accountId;
+      }
     }
 
-    const { page = 1, limit = 20, status, assignedTo, sector } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    // Apply additional filters
+    if (status && status !== "all") filter.status = status;
+    if (assignedTo && assignedTo !== "all") filter.assignedTo = assignedTo;
+    if (sector && sector !== "all") filter.sector = sector;
 
-    if (status && status.toLowerCase() !== "all") filter.status = status;
-    if (assignedTo && assignedTo.toLowerCase() !== "all") filter.assignedTo = assignedTo;
-    if (sector && sector.toLowerCase() !== "all") filter.sector = sector;
-
+    // Role-based restriction
     if (req.user.role === "Executive") {
       filter.assignedTo = req.user._id;
     }
 
+    console.log("🔍 Final Conversation Filter:", JSON.stringify(filter));
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await Conversation.countDocuments(filter);
     const conversations = await Conversation.find(filter)
       .populate("contact")
@@ -63,21 +70,23 @@ export const getMessages = async (req, res) => {
     const { phone } = req.params;
     const account = req.whatsappAccount;
     const accountId = account?._id;
-    
+
     // SMART FILTER: Include legacy messages for default account
-    let filter = { 
-      $or: [{ from: phone }, { to: phone }] 
+    let filter = {
+      $or: [{ from: phone }, { to: phone }]
     };
-    
+
     if (account?.isDefault) {
       filter = {
         $and: [
           { $or: [{ from: phone }, { to: phone }] },
-          { $or: [
-            { whatsappAccountId: accountId },
-            { whatsappAccountId: { $exists: false } },
-            { whatsappAccountId: null }
-          ]}
+          {
+            $or: [
+              { whatsappAccountId: accountId },
+              { whatsappAccountId: { $exists: false } },
+              { whatsappAccountId: null }
+            ]
+          }
         ]
       };
     } else {
@@ -92,15 +101,15 @@ export const getMessages = async (req, res) => {
       .sort({ timestamp: -1 })
       .skip(skip)
       .limit(limit);
-    
+
     const total = await Message.countDocuments(filter);
 
     // Update unread count only for current account context
     await Conversation.findOneAndUpdate(
-      { phone, whatsappAccountId: accountId }, 
+      { phone, whatsappAccountId: accountId },
       { unreadCount: 0 }
     );
-    
+
     res.json({
       messages: messages.reverse(),
       hasMore: total > skip + messages.length
@@ -136,10 +145,10 @@ export const sendMessage = async (req, res) => {
     // We look for an existing conversation for this phone that either belongs to this account or is unassigned (null).
     const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
-      { 
-        lastMessage: body, 
-        lastMessageTime: new Date(), 
-        unreadCount: 0, 
+      {
+        lastMessage: body,
+        lastMessageTime: new Date(),
+        unreadCount: 0,
         whatsappAccountId: account._id // Claim it
       },
       { upsert: true, new: true }
@@ -165,15 +174,17 @@ export const sendMessage = async (req, res) => {
 
 export const updateConversationStatus = async (req, res) => {
   try {
-    const { phone, status } = req.body;
+    const { phone, status, followUpTime } = req.body;
     const account = req.whatsappAccount; // The account currently selected in the UI
-    
+
     // Step 1: Update the Status in the Conversation (so it shows in the Chat List).
     // If the conversation is unassigned (legacy/null), this claims ownership of it for the currently active account.
     const conversation = await Conversation.findOneAndUpdate(
       { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
-      { 
+      {
         status, // Set the new status (e.g. "Interested")
+        followUpTime: followUpTime || null, // Set follow-up reminder time
+        followUpNotified: false, // Reset notification status
         whatsappAccountId: account?._id // Claim it for this account
       },
       { new: true }
@@ -204,22 +215,37 @@ export const sendChatTemplateMessage = async (req, res) => {
     const account = req.whatsappAccount;
 
     if (!account) throw new Error("No active WhatsApp account found");
-    
+
     const template = await Template.findOne({ name: templateName });
     const lang = template ? template.language : "en_US";
 
     const metaRes = await sendTemplateMessage(account, to, templateName, lang, templateComponents);
     const messageId = metaRes.messages?.[0]?.id;
 
+    // Reconstruct body for display in chat
+    let messageBody = `[Template: ${templateName}]`;
+    if (template && template.components) {
+      const bodyComp = template.components.find(c => c.type === "BODY");
+      if (bodyComp && bodyComp.text) {
+        let text = bodyComp.text;
+        const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
+        bodyParams.forEach((p, idx) => {
+          text = text.replace(`{{${idx + 1}}}`, p.text || "");
+        });
+        messageBody = text;
+      }
+    }
+
     const newMessage = new Message({
       messageId,
       from: "me",
       to,
-      body: `[Template: ${templateName}]`,
+      body: messageBody,
       type: "template",
       templateData: { name: templateName, components: templateComponents },
       direction: "outbound",
-      whatsappAccountId: account._id
+      whatsappAccountId: account._id,
+      status: messageId ? "sent" : "failed"
     });
     await newMessage.save();
 
@@ -295,16 +321,16 @@ export const assignConversation = async (req, res) => {
       updateData,
       { new: true }
     ).populate("assignedTo", "name");
-    
+
     // SYNC: Update the master Contact record as well
     if (conversation && conversation.contact) {
       const contactUpdate = {};
       if (userId !== undefined) contactUpdate.assignedTo = userId || null;
       if (sector !== undefined) contactUpdate.sector = sector || "Unassigned";
-      
+
       await Contact.findByIdAndUpdate(conversation.contact, contactUpdate);
     }
-    
+
     const assignedName = conversation.assignedTo ? conversation.assignedTo.name : "Unassigned";
     const sectorName = conversation.sector || "Unassigned";
     await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName})`, phone);
@@ -320,7 +346,7 @@ export const markAsRead = async (req, res) => {
     const { phone } = req.body;
     const account = req.whatsappAccount;
     await Conversation.findOneAndUpdate(
-      { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] }, 
+      { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
       { unreadCount: 0 }
     );
     res.json({ success: true });

@@ -10,8 +10,10 @@ import { io } from "socket.io-client";
 import { useParams, useNavigate } from "react-router-dom";
 import api, { API_BASE } from "../api";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
+import { startFollowUpAlarm } from "../utils/beep_sound";
+import { useCallback } from "react";
 
-const STATUS_OPTIONS = ["New", "Interested", "Not Interested", "Follow-up", "Closed"];
+const STATUS_OPTIONS = ["New", "Interested", "Not Interested", "Follow-up", "Missed Follow-up", "Closed"];
 
 const ChatModule = () => {
   const { chatId } = useParams();
@@ -89,6 +91,27 @@ const ChatModule = () => {
   
   const [customFieldsDef, setCustomFieldsDef] = useState([]);
   const [isUpdatingField, setIsUpdatingField] = useState(null);
+  
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpTime, setFollowUpTime] = useState("");
+  const [pendingStatus, setPendingStatus] = useState("");
+
+  const [activeReminders, setActiveReminders] = useState([]);
+  const [shownReminders, setShownReminders] = useState(new Set());
+  const [isGlobalView, setIsGlobalView] = useState(false);
+  const alarmRef = useRef(null);
+
+  const allStatusOptions = useMemo(() => {
+    const combined = [...customStatuses];
+    const essential = ["New", "Interested", "Not Interested", "Follow-up", "Missed Follow-up", "Closed"];
+    essential.forEach(status => {
+      if (!combined.find(s => s.name === status)) {
+        combined.push({ name: status, isDefault: true });
+      }
+    });
+    return combined;
+  }, [customStatuses]);
 
   useEffect(() => {
     if (scrollRef.current && messages.length > prevMsgCount) {
@@ -111,13 +134,24 @@ const ChatModule = () => {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
   const [activeContact, setActiveContact] = useState(null);
+  const conversationsRef = useRef(conversations);
+
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  useEffect(() => {
+    if (Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
 
   const fetchMessages = async (phone, page = 1) => {
     try {
       if (page === 1) setLoading(true);
       // Pass the specific account ID for this chat to ensure we get the right messages
       const res = await api.get(`/messages/${phone}?page=${page}&limit=50`, {
-        headers: { "x-whatsapp-account-id": selectedChat?.whatsappAccountId }
+        headers: { "x-whatsapp-account-id": isGlobalView ? "all" : (selectedChat?.whatsappAccountId || activeAccount?._id) }
       });
       const newMsgs = res.data.messages || [];
       
@@ -144,10 +178,12 @@ const ChatModule = () => {
     setIsFetchingMsgs(false);
   };
 
-  const fetchConversations = async (page = 1) => {
+  const fetchConversations = useCallback(async (page = 1) => {
     try {
       setIsFetchingConvs(true);
-      const res = await api.get(`/conversations?page=${page}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`);
+      const res = await api.get(`/conversations?page=${page}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}${isGlobalView ? "&showAllAccounts=true" : ""}`, {
+        headers: { "x-whatsapp-account-id": isGlobalView ? "all" : activeAccount?._id }
+      });
       const newData = res.data.conversations || [];
       
       if (page === 1) {
@@ -167,7 +203,7 @@ const ChatModule = () => {
     } finally {
       setIsFetchingConvs(false);
     }
-  };
+  }, [statusFilter, userFilter, sectorFilter, activeAccount, isGlobalView]);
 
   const fetchMoreConversations = async () => {
     if (!hasMoreConvs || isFetchingConvs) return;
@@ -179,7 +215,9 @@ const ChatModule = () => {
     setIsFetchingConvs(true);
     
     try {
-      const res = await api.get(`/conversations?page=${nextPage}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`);
+      const res = await api.get(`/conversations?page=${nextPage}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}${isGlobalView ? "&showAllAccounts=true" : ""}`, {
+        headers: { "x-whatsapp-account-id": isGlobalView ? "all" : activeAccount?._id }
+      });
       const newData = res.data.conversations || [];
       
       setConversations(prev => {
@@ -235,7 +273,8 @@ const ChatModule = () => {
     selectedChatRef.current = selectedChat;
     if (selectedChat) {
       // SECURITY CHECK: If the selected chat belongs to a different account, clear it
-      if (activeAccount && selectedChat.whatsappAccountId && String(selectedChat.whatsappAccountId) !== String(activeAccount._id)) {
+      // Bypassed if in 'All Accounts' mode (Global View)
+      if (activeAccount && !isGlobalView && selectedChat.whatsappAccountId && String(selectedChat.whatsappAccountId) !== String(activeAccount._id)) {
         console.warn("🚫 Chat account mismatch! Redirecting...");
         navigate("/chats");
         return;
@@ -394,7 +433,7 @@ const ChatModule = () => {
     setConversations([]); // Clear list for fresh start
     setConvPage(1);
     fetchConversations(1);
-  }, [statusFilter, userFilter, sectorFilter, activeAccount]);
+  }, [statusFilter, userFilter, sectorFilter, activeAccount, isGlobalView]);
 
   // Socket.io Real-time connection
   useEffect(() => {
@@ -497,6 +536,34 @@ const ChatModule = () => {
       setMessages(prev => prev.map(m => m.messageId === messageId ? { ...m, status } : m));
     });
 
+    socket.on("followup_reminder", ({ conversation }) => {
+      console.log("🔔 Backend Reminder received:", conversation.phone);
+      setActiveReminders(prev => {
+        if (prev.find(p => p._id === conversation._id)) return prev;
+        return [...prev, conversation];
+      });
+
+      // Browser Native Notification
+      if (Notification.permission === "granted") {
+        new Notification(`Follow-up Reminder: ${conversation.contact?.name || conversation.phone}`, {
+          body: `Scheduled for ${new Date(conversation.followUpTime).toLocaleTimeString()}`,
+          icon: "/favicon.ico"
+        });
+      }
+
+      // Start alarm
+      if (!alarmRef.current) {
+        alarmRef.current = startFollowUpAlarm();
+      }
+    });
+
+    socket.on("conversation_status_update", ({ phone, status }) => {
+      console.log(`🔄 Conversation status sync: ${phone} -> ${status}`);
+      setConversations(prev => prev.map(c => 
+        c.phone === phone ? { ...c, status } : c
+      ));
+    });
+
     return () => socket.disconnect();
   }, []);
 
@@ -528,6 +595,24 @@ const ChatModule = () => {
     const timer = setInterval(updateTimer, 1000);
     return () => clearInterval(timer);
   }, [messages]); // Updates whenever messages update
+
+  // Alarm Management
+  useEffect(() => {
+    if (activeReminders.length === 0 && alarmRef.current) {
+      alarmRef.current();
+      alarmRef.current = null;
+    }
+  }, [activeReminders]);
+
+  // Handle cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (alarmRef.current) {
+        alarmRef.current();
+        alarmRef.current = null;
+      }
+    };
+  }, []);
 
   // Socket.io selectedChat tracking is now handled by derived state
 
@@ -657,22 +742,43 @@ const ChatModule = () => {
     }
   };
 
-  const handleUpdateStatus = async (status) => {
+  const handleUpdateStatus = async (status, fTime = null) => {
     if (!selectedChat) return;
+
+    // If changing to Follow-up and no time provided, show modal
+    if (status.toLowerCase().includes("follow") && !fTime) {
+      setPendingStatus(status);
+      setFollowUpDate(new Date().toISOString().split('T')[0]);
+      setFollowUpTime(new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' }));
+      setShowFollowUpModal(true);
+      return;
+    }
+
     try {
       await api.post(`/conversations/status`, {
         phone: selectedChat.phone,
-        status
+        status,
+        followUpTime: status.toLowerCase().includes("follow") ? fTime : null
       }, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
       // Update local state instead of full fetch
       setConversations(prev => prev.map(c => 
-        c.phone === selectedChat.phone ? { ...c, status } : c
+        c.phone === selectedChat.phone ? { ...c, status, followUpTime: status.toLowerCase().includes("follow") ? fTime : null } : c
       ));
+      setShowFollowUpModal(false);
     } catch (err) {
       alert("Error updating status: " + err.message);
     }
+  };
+
+  const handleSaveFollowUp = () => {
+    if (!followUpDate || !followUpTime) {
+      alert("Please select date and time");
+      return;
+    }
+    const combined = new Date(`${followUpDate}T${followUpTime}`);
+    handleUpdateStatus(pendingStatus, combined);
   };
 
   const fetchTimelineEntries = async (contactId) => {
@@ -1041,6 +1147,35 @@ const ChatModule = () => {
               ))}
             </select>
           </div>
+          
+          {/* Global View Toggle Button */}
+          <button
+            onClick={() => {
+              const newState = !isGlobalView;
+              console.log("🌐 Toggling Global View to:", newState);
+              setIsGlobalView(newState);
+            }}
+            style={{
+              width: "100%",
+              marginTop: "8px",
+              padding: "10px",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+              background: isGlobalView ? "#00a884" : "white",
+              color: isGlobalView ? "white" : "#111b21",
+              fontWeight: "600",
+              fontSize: "0.85rem",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+              cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+          >
+            <Search size={16} />
+            {isGlobalView ? "Showing All Accounts" : "View All Accounts"}
+          </button>
 
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
             <button 
@@ -1116,7 +1251,7 @@ const ChatModule = () => {
                 style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
               >
                 <option value="all">Status: All</option>
-                {customStatuses.map(s => (
+                {allStatusOptions.map(s => (
                   <option key={s.name} value={s.name}>{s.name}</option>
                 ))}
               </select>
@@ -1621,12 +1756,20 @@ const ChatModule = () => {
                     value={selectedChat.status || "New"}
                     onChange={(e) => handleUpdateStatus(e.target.value)}
                   >
-                    {customStatuses.map(s => (
+                    {allStatusOptions.map(s => (
                       <option key={s.name} value={s.name}>{s.name}</option>
                     ))}
                   </select>
                   <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
                 </div>
+                {selectedChat.status?.toLowerCase().includes("follow") && selectedChat.followUpTime && (
+                  <div style={{ marginTop: "8px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fef3c7", borderRadius: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Clock size={12} color="#d97706" />
+                    <span style={{ fontSize: "0.7rem", color: "#d97706", fontWeight: "700" }}>
+                      Due: {new Date(selectedChat.followUpTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div style={{ marginBottom: "16px" }}>
@@ -1714,6 +1857,29 @@ const ChatModule = () => {
                             <option value="">Select Option</option>
                             {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                           </select>
+                          <ChevronDown size={14} style={{ position: "absolute", right: "0", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                        </div>
+                      ) : field.type === "COMBOBOX" ? (
+                        <div style={{ position: "relative" }}>
+                          <input 
+                            list={`list-${field._id}`}
+                            style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none" }}
+                            value={activeContact?.customFields?.[field.name] || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setActiveContact(prev => ({
+                                ...prev,
+                                customFields: { ...prev.customFields, [field.name]: val }
+                              }));
+                            }}
+                            onBlur={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
+                            placeholder={`Select or type ${field.label.toLowerCase()}...`}
+                            disabled={isUpdatingField === field.name || !activeContact}
+                          />
+                          <datalist id={`list-${field._id}`}>
+                            {field.options.map(opt => <option key={opt} value={opt} />)}
+                          </datalist>
                           <ChevronDown size={14} style={{ position: "absolute", right: "0", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
                         </div>
                       ) : (
@@ -2108,6 +2274,77 @@ const ChatModule = () => {
 
             <button onClick={() => setShowManageModal(false)} className="btn-secondary" style={{ width: "100%", marginTop: "1.5rem" }}>Close</button>
           </div>
+        </div>
+      )}
+
+      {/* Follow-up Time Picker Modal */}
+      {showFollowUpModal && (
+        <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 3000, backdropFilter: "blur(5px)" }}>
+          <div className="glass-card" style={{ width: "400px", padding: "2rem" }}>
+            <h3 style={{ marginBottom: "1rem" }}>Set Follow-up Reminder</h3>
+            <p style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "1.5rem" }}>When should we remind you to follow up with this lead?</p>
+            
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "800", color: "#94a3b8", marginBottom: "8px" }}>DATE</label>
+              <input 
+                type="date" 
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1.5px solid #e2e8f0" }}
+              />
+            </div>
+
+            <div style={{ marginBottom: "2rem" }}>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "800", color: "#94a3b8", marginBottom: "8px" }}>TIME</label>
+              <input 
+                type="time" 
+                value={followUpTime}
+                onChange={(e) => setFollowUpTime(e.target.value)}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1.5px solid #e2e8f0" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button onClick={() => setShowFollowUpModal(false)} className="btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={handleSaveFollowUp} className="btn-primary" style={{ flex: 1 }}>Save Reminder</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* activeReminders Popup */}
+      {activeReminders.length > 0 && (
+        <div style={{ position: "fixed", bottom: "30px", right: "30px", zIndex: 9999, display: "flex", flexDirection: "column", gap: "15px" }}>
+          {activeReminders.map(rem => (
+            <div key={rem._id} className="glass-card" style={{ width: "320px", padding: "20px", borderLeft: "5px solid #00a884", boxShadow: "0 10px 40px rgba(0,0,0,0.15)", animation: "slideInRight 0.3s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "12px" }}>
+                <span style={{ fontSize: "0.7rem", fontWeight: "800", color: "#00a884", textTransform: "uppercase" }}>⏰ Follow-up Due Now</span>
+                <button onClick={() => setActiveReminders(prev => prev.filter(r => r._id !== rem._id))} style={{ background: "none", border: "none", color: "#cbd5e1", cursor: "pointer" }}>✕</button>
+              </div>
+              <h4 style={{ margin: "0 0 5px 0", fontSize: "1rem" }}>{rem.contact?.name || rem.phone}</h4>
+              <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748b" }}>Status: {rem.status}</p>
+              
+              <div style={{ marginTop: "15px", display: "flex", gap: "10px" }}>
+                <button 
+                  onClick={() => {
+                    navigate(`/chats/${rem._id}`);
+                    setActiveReminders(prev => prev.filter(r => r._id !== rem._id));
+                  }}
+                  style={{ flex: 1, padding: "8px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer" }}
+                >
+                  Go to Chat
+                </button>
+                <button 
+                  onClick={() => {
+                    setActiveReminders(prev => prev.filter(r => r._id !== rem._id));
+                  }}
+                  style={{ padding: "8px 12px", background: "#f1f5f9", color: "#64748b", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer" }}
+                >
+                  Later
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

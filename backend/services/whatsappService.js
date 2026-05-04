@@ -9,24 +9,28 @@ const getHeaders = (accessToken) => {
   } else {
     console.log("⚠️ No Access Token provided for this request!");
   }
-  // This header proves to Meta that we are authorized to send messages on behalf of the selected account.
   return {
     Authorization: `Bearer ${accessToken?.trim()}`,
     "Content-Type": "application/json",
   };
 };
 
-export const sendTemplateMessage = async (account, to, templateName, languageCode = "en_US", components = []) => {
+export const sendTemplateMessage = async (account, to, templateName, languageCode, components = []) => {
+  // If no languageCode provided, fallback to "en_US" safely
+  const finalLang = languageCode || "en_US";
+  let cleanTo = to.toString().replace(/\D/g, "");
+  if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
+
   try {
     const res = await axios.post(
       `${BASE_URL}/${account.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
-        to,
+        to: cleanTo,
         type: "template",
         template: {
           name: templateName,
-          language: { code: languageCode },
+          language: { code: finalLang },
           components,
         },
       },
@@ -34,20 +38,24 @@ export const sendTemplateMessage = async (account, to, templateName, languageCod
     );
     return res.data;
   } catch (error) {
+    const metaError = error.response?.data?.error;
+    if (metaError) {
+      console.error(`❌ Meta API Error (Template: ${templateName}):`, JSON.stringify(metaError, null, 2));
+    }
     throw error;
   }
 };
 
 export const sendTextMessage = async (account, to, text) => {
+  let cleanTo = to.toString().replace(/\D/g, "");
+  if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
   try {
-    // Sends a simple Text message (like what humans type) to the customer using Meta's Cloud API.
-    // The "account.phoneNumberId" ensures the message comes from the correct specific WhatsApp number.
     const res = await axios.post(
       `${BASE_URL}/${account.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to,
+        to: cleanTo,
         type: "text",
         text: { body: text },
       },
@@ -60,13 +68,15 @@ export const sendTextMessage = async (account, to, text) => {
 };
 
 export const sendImageMessage = async (account, to, imageUrl, caption = "") => {
+  let cleanTo = to.toString().replace(/\D/g, "");
+  if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
   try {
     const res = await axios.post(
       `${BASE_URL}/${account.phoneNumberId}/messages`,
       {
         messaging_product: "whatsapp",
         recipient_type: "individual",
-        to,
+        to: cleanTo,
         type: "image",
         image: { link: imageUrl, caption },
       },
@@ -123,11 +133,12 @@ export const deleteMetaTemplate = async (account, templateName) => {
 
 export const verifyContacts = async (account, phones) => {
   try {
+    const cleanPhones = phones.map(p => p.toString().replace(/\D/g, ""));
     const res = await axios.post(
       `${BASE_URL}/${account.phoneNumberId}/contacts`,
       {
         blocking: "wait",
-        contacts: phones,
+        contacts: cleanPhones.map(cp => cp.startsWith("+") ? cp : `+${cp}`),
         force_check: false
       },
       { headers: getHeaders(account.accessToken) }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "../api";
-import { Plus, Trash2, Database, List, Type, Hash, Calendar, CheckSquare, Loader2, Pencil } from "lucide-react";
+import { Plus, Trash2, Database, List, Type, Hash, Calendar, CheckSquare, Loader2, Pencil, Edit3 } from "lucide-react";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const CustomFieldManager = () => {
@@ -43,7 +43,7 @@ const CustomFieldManager = () => {
       setLoading(true);
       const payload = {
         ...newField,
-        options: newField.type === "SELECT" ? newField.options.split(",").map(o => o.trim()) : [],
+        options: ["SELECT", "COMBOBOX"].includes(newField.type) ? newField.options.split(",").map(o => o.trim()) : [],
         whatsappAccountIds: newField.whatsappAccountIds.length > 0 ? newField.whatsappAccountIds : [activeAccount?._id]
       };
       await api.post("/custom-fields", payload);
@@ -65,7 +65,7 @@ const CustomFieldManager = () => {
       setLoading(true);
       const payload = {
         ...editingField,
-        options: editingField.type === "SELECT" 
+        options: ["SELECT", "COMBOBOX"].includes(editingField.type) 
           ? (typeof editingField.options === 'string' ? editingField.options.split(",").map(o => o.trim()) : editingField.options)
           : []
       };
@@ -95,6 +95,7 @@ const CustomFieldManager = () => {
       case "NUMBER": return <Hash size={16} />;
       case "DATE": return <Calendar size={16} />;
       case "SELECT": return <List size={16} />;
+      case "COMBOBOX": return <Edit3 size={16} />;
       default: return <Database size={16} />;
     }
   };
@@ -149,9 +150,10 @@ const CustomFieldManager = () => {
                 <option value="NUMBER">Number</option>
                 <option value="DATE">Date</option>
                 <option value="SELECT">Dropdown (Options)</option>
+                <option value="COMBOBOX">Dropdown + Text</option>
               </select>
             </div>
-            {newField.type === "SELECT" && (
+            {["SELECT", "COMBOBOX"].includes(newField.type) && (
               <div>
                 <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Dropdown Options (Comma separated)</label>
                 <input 
@@ -245,9 +247,10 @@ const CustomFieldManager = () => {
                 <option value="NUMBER">Number</option>
                 <option value="DATE">Date</option>
                 <option value="SELECT">Dropdown (Options)</option>
+                <option value="COMBOBOX">Dropdown + Text</option>
               </select>
             </div>
-            {editingField.type === "SELECT" && (
+            {["SELECT", "COMBOBOX"].includes(editingField.type) && (
               <div>
                 <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Dropdown Options (Comma separated)</label>
                 <input 
@@ -333,7 +336,7 @@ const CustomFieldManager = () => {
                       </div>
                     </td>
                     <td style={{ padding: "16px 24px", color: "#64748b" }}>
-                      {field.type === "SELECT" ? field.options.join(", ") : "-"}
+                      {["SELECT", "COMBOBOX"].includes(field.type) ? field.options.join(", ") : "-"}
                     </td>
                     <td style={{ padding: "16px 24px", textAlign: "right" }}>
                       <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px" }}>

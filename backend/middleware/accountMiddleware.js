@@ -4,13 +4,13 @@ export const attachWhatsAppAccount = async (req, res, next) => {
   const accountId = req.headers["x-whatsapp-account-id"];
   
   if (accountId) {
-    console.log(`🔍 Received Account ID Header: "${accountId}"`);
+    if (accountId === "all") {
+      req.whatsappAccount = { _id: "all", name: "All Accounts", isAll: true };
+      return next();
+    }
     const account = await WhatsAppAccount.findById(accountId).catch(() => null);
     if (account) {
-      console.log(`✅ Found Account: ${account.name}`);
       req.whatsappAccount = account;
-    } else {
-      console.log(`❌ Account NOT Found for ID: ${accountId}`);
     }
   }
 

@@ -5,7 +5,7 @@ const customFieldSchema = new mongoose.Schema({
   label: { type: String, required: true }, // e.g., "Customer City"
   type: { 
     type: String, 
-    enum: ["TEXT", "NUMBER", "DATE", "SELECT"], 
+    enum: ["TEXT", "NUMBER", "DATE", "SELECT", "COMBOBOX"], 
     default: "TEXT" 
   },
   options: [String], // For SELECT type

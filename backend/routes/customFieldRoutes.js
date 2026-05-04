@@ -12,12 +12,18 @@ router.get("/", async (req, res) => {
     const accountId = req.headers["x-whatsapp-account-id"];
     if (!accountId) return res.status(400).json({ error: "Missing WhatsApp Account ID header" });
 
-    const fields = await CustomField.find({ 
+    let query = { 
       $or: [
         { whatsappAccountIds: accountId },
         { whatsappAccountId: accountId } // Backward compatibility
       ]
-    }).sort({ createdAt: 1 });
+    };
+
+    if (accountId === "all") {
+      query = {}; // Return all fields
+    }
+
+    const fields = await CustomField.find(query).sort({ createdAt: 1 });
     res.json(fields);
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -11,7 +11,7 @@ router.get("/:contactId", protect, async (req, res) => {
     // But since the contactId is already unique per account in this system, 
     // fetching by contactId is sufficient. However, we'll verify account for safety.
     const whatsappAccountId = req.headers["x-whatsapp-account-id"];
-    
+
     const query = { contactId: req.params.contactId };
     if (whatsappAccountId) {
       query.whatsappAccountId = whatsappAccountId;
@@ -20,7 +20,7 @@ router.get("/:contactId", protect, async (req, res) => {
     const entries = await Timeline.find(query)
       .populate("createdBy", "name")
       .sort({ timestamp: -1 });
-      
+
     res.json(entries);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -31,7 +31,7 @@ router.get("/:contactId", protect, async (req, res) => {
 router.post("/", protect, async (req, res) => {
   try {
     const { contactId, whatsappAccountId, content } = req.body;
-    
+
     if (!contactId || !whatsappAccountId || !content) {
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -46,7 +46,7 @@ router.post("/", protect, async (req, res) => {
 
     await newEntry.save();
     const populated = await newEntry.populate("createdBy", "name");
-    
+
     res.status(201).json(populated);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -4,10 +4,15 @@ import Template from "../models/Template.js";
 export const getTemplates = async (req, res) => {
   try {
     const account = req.whatsappAccount;
-    // Strict Filtering: Only show templates for the active account
+    // Strict Filtering: Only show templates for the active account (unless 'all')
     if (!account) return res.status(400).json({ error: "No active account selected" });
 
-    const templates = await Template.find({ whatsappAccountId: account._id }).sort({ createdAt: -1 });
+    let query = { whatsappAccountId: account._id };
+    if (account.isAll) {
+      query = {}; // Return all templates
+    }
+
+    const templates = await Template.find(query).sort({ createdAt: -1 });
     res.json(templates);
   } catch (error) {
     res.status(500).json({ error: error.message });

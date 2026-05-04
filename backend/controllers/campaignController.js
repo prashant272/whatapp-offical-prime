@@ -104,8 +104,13 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           await newMessage.save();
 
           const normalizedPhone = latestLog.phone.toString().replace(/\D/g, "");
+          const convFilter = { phone: normalizedPhone };
+          if (account._id.toString() !== "all") {
+            convFilter.$or = [{ whatsappAccountId: account._id }, { whatsappAccountId: null }];
+          }
+
           const updatedConv = await Conversation.findOneAndUpdate(
-            { phone: normalizedPhone, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
+            convFilter,
             { 
               contact: contact._id,
               whatsappAccountId: account._id,
@@ -161,8 +166,14 @@ export const startCampaign = async (req, res) => {
   try {
     let { name, templateName, contacts, templateComponents, whatsappAccountId, delay, sector } = req.body;
     
-    let account = whatsappAccountId ? await WhatsAppAccount.findById(whatsappAccountId) : req.whatsappAccount;
-    if (!account) return res.status(400).json({ error: "No valid WhatsApp account found" });
+    let accountId = whatsappAccountId;
+    if (!accountId || accountId === "all") {
+      const primary = await WhatsAppAccount.findOne({ isDefault: true }) || await WhatsAppAccount.findOne();
+      accountId = primary?._id;
+    }
+
+    let account = await WhatsAppAccount.findById(accountId);
+    if (!account) return res.status(400).json({ error: "Please select a valid sender account (cannot be 'all')" });
 
     const uniquePhones = [...new Set(contacts.map(c => normalizePhone(typeof c === 'object' ? c.phone : c)))];
     const blockedContacts = await Contact.find({ phone: { $in: uniquePhones }, isBlocked: true }, 'phone');
@@ -288,9 +299,16 @@ export const retryFailedContacts = async (req, res) => {
 export const getAllCampaigns = async (req, res) => {
   try {
     const account = req.whatsappAccount;
-    const filter = account ? { whatsappAccountId: account._id } : {};
+    let filter = {};
     
-    const campaigns = await Campaign.find(filter).populate("template").sort({ createdAt: -1 });
+    if (account && account._id !== "all") {
+      filter.whatsappAccountId = account._id;
+    }
+    
+    const campaigns = await Campaign.find(filter)
+      .populate("template")
+      .populate("whatsappAccountId", "name")
+      .sort({ createdAt: -1 });
     res.json(campaigns);
   } catch (error) {
     res.status(500).json({ error: error.message });

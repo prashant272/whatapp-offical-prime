@@ -14,11 +14,11 @@ export const verifyNumbers = async (req, res, next) => {
     const sanitizedPhones = phones.map(p => String(p).startsWith("+") ? String(p) : `+${String(p)}`);
 
     console.log(`🔍 Verifying ${sanitizedPhones.length} contacts with Meta Cloud API...`);
-    
+
     // Meta API has a limit on how many contacts can be verified in one call (usually ~1000)
     const CHUNK_SIZE = 1000;
     const results = [];
-    
+
     for (let i = 0; i < sanitizedPhones.length; i += CHUNK_SIZE) {
       const chunk = sanitizedPhones.slice(i, i + CHUNK_SIZE);
       const chunkResults = await verifyContacts(req.whatsappAccount, chunk);
@@ -34,22 +34,21 @@ export const verifyNumbers = async (req, res, next) => {
 export const getContacts = async (req, res, next) => {
   try {
     const accountId = req.headers["x-whatsapp-account-id"];
-    const { search, status, tag, sector, showAllAccounts, page = 1, limit = 50 } = req.query;
+    const { search, status, tag, sector, showAllAccounts, page = 1, limit = 50, skip: skipParam } = req.query;
 
     let query = {};
-    const PRIMARY_ID = "69ef020c6c021bd0911d62c2";
+    const isAll = showAllAccounts === "true" || accountId === "all";
 
-    if (showAllAccounts !== "true") {
-      if (!accountId) return res.status(400).json({ error: "Missing WhatsApp Account ID header" });
-
-      if (accountId === PRIMARY_ID) {
-        query.$or = [
-          { whatsappAccountId: accountId },
-          { whatsappAccountId: null }
-        ];
-      } else {
-        query.whatsappAccountId = accountId;
-      }
+    if (isAll || !accountId) {
+      // Global search - no account filter
+      query = {};
+    } else {
+      // Filter by specific account or unassigned
+      query.$or = [
+        { whatsappAccountId: accountId },
+        { whatsappAccountId: null },
+        { whatsappAccountId: { $exists: false } }
+      ];
     }
 
     if (search) {
@@ -72,7 +71,8 @@ export const getContacts = async (req, res, next) => {
       query.isCampaignSent = req.query.isCampaignSent === "true";
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const limitInt = parseInt(limit);
+    const skip = skipParam ? parseInt(skipParam) : (parseInt(page) - 1) * limitInt;
     const total = await Contact.countDocuments(query);
     const rawContacts = await Contact.find(query)
       .populate("assignedTo", "name")
@@ -82,13 +82,24 @@ export const getContacts = async (req, res, next) => {
       .limit(parseInt(limit))
       .lean();
 
-    // Attach conversationId to each contact
-    const contacts = await Promise.all(rawContacts.map(async (contact) => {
-      const conv = await Conversation.findOne({
-        contact: contact._id,
-        $or: [{ whatsappAccountId: accountId }, { whatsappAccountId: null }]
-      }).select("_id");
-      return { ...contact, conversationId: conv?._id };
+    // Optimized: Fetch all conversations for these contacts in ONE single query
+    const contactIds = rawContacts.map(c => c._id);
+    const convFilter = { contact: { $in: contactIds } };
+    if (accountId && accountId !== "all") {
+      convFilter.$or = [{ whatsappAccountId: accountId }, { whatsappAccountId: null }];
+    }
+    
+    const allConvs = await Conversation.find(convFilter).select("_id contact").lean();
+    
+    // Create a lookup map: contactId -> conversationId
+    const convMap = new Map();
+    allConvs.forEach(conv => {
+      convMap.set(conv.contact.toString(), conv._id);
+    });
+
+    const contacts = rawContacts.map(contact => ({
+      ...contact,
+      conversationId: convMap.get(contact._id.toString()) || null
     }));
 
     res.json({
@@ -97,6 +108,19 @@ export const getContacts = async (req, res, next) => {
       hasMore: total > skip + rawContacts.length,
       currentPage: parseInt(page)
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getBulkDetails = async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids)) {
+      return res.status(400).json({ error: "IDs array required" });
+    }
+    const contacts = await Contact.find({ _id: { $in: ids } }).select("phone").lean();
+    res.json(contacts);
   } catch (err) {
     next(err);
   }
@@ -123,7 +147,8 @@ export const importContacts = async (req, res, next) => {
       return res.status(400).json({ error: "Invalid contacts list" });
     }
 
-    let importedCount = 0;
+    const validAccountId = (whatsappAccountId && whatsappAccountId !== "all") ? whatsappAccountId : null;
+
     const bulkOps = contacts.map(c => ({
       updateOne: {
         filter: { phone: c.phone },
@@ -131,7 +156,7 @@ export const importContacts = async (req, res, next) => {
           $set: {
             name: c.name,
             sector: c.sector,
-            whatsappAccountId: whatsappAccountId || c.whatsappAccountId,
+            whatsappAccountId: validAccountId || (c.whatsappAccountId !== "all" ? c.whatsappAccountId : null),
             customFields: c.customFields
           },
           $addToSet: { tags: { $each: c.tags || [] } }
@@ -147,7 +172,7 @@ export const importContacts = async (req, res, next) => {
         const chunk = bulkOps.slice(i, i + CHUNK_SIZE);
         await Contact.bulkWrite(chunk);
       }
-      
+
       importedCount = bulkOps.length;
 
       // Log timeline for these contacts
@@ -160,8 +185,10 @@ export const importContacts = async (req, res, next) => {
       }
 
       const timelineOps = updatedContacts.map(contact => {
-        const targetAccountId = whatsappAccountId || contact.whatsappAccountId;
-        if (!targetAccountId) return null; // Skip timeline if no account ID found
+        let targetAccountId = whatsappAccountId || contact.whatsappAccountId;
+        
+        // CRITICAL: Ensure we never try to save "all" as an ObjectId in Timeline
+        if (!targetAccountId || targetAccountId === "all") return null;
 
         return {
           contactId: contact._id,
@@ -188,7 +215,15 @@ export const importContacts = async (req, res, next) => {
 
 export const getUniqueTags = async (req, res, next) => {
   try {
-    const tags = await Contact.distinct("tags");
+    const accountId = req.headers["x-whatsapp-account-id"];
+    let query = {};
+    
+    // If not 'all', filter tags by account (optional, but keep global for now as requested)
+    if (accountId && accountId !== "all") {
+      // query.whatsappAccountId = accountId; // Uncomment if we want account-specific tags
+    }
+
+    const tags = await Contact.distinct("tags", query);
     res.json(tags.filter(t => t && t.trim() !== ""));
   } catch (err) {
     next(err);
@@ -239,7 +274,7 @@ export const checkExistingConversations = async (req, res, next) => {
     // Chunking the query to handle very large lists (40k+)
     const CHUNK_SIZE = 10000;
     const existingConversations = [];
-    
+
     for (let i = 0; i < variationsArray.length; i += CHUNK_SIZE) {
       const chunk = variationsArray.slice(i, i + CHUNK_SIZE);
       const chunkResults = await Conversation.find({
@@ -249,17 +284,62 @@ export const checkExistingConversations = async (req, res, next) => {
     }
 
     // Map found phones back to the original input numbers that matched
-    // We use a Set for O(1) lookup speed instead of O(N*M) nested loops
     const normalizedFoundPhones = new Set(existingConversations.map(c => String(c.phone).replace(/[^0-9]/g, "")));
-    
+
     const matchedOriginals = phones.filter(original => {
       const clean = String(original).replace(/[^0-9]/g, "");
-      return normalizedFoundPhones.has(clean) || 
-             normalizedFoundPhones.has("91" + clean) || 
-             (clean.startsWith("91") && normalizedFoundPhones.has(clean.substring(2)));
+      return normalizedFoundPhones.has(clean) ||
+        normalizedFoundPhones.has("91" + clean) ||
+        (clean.startsWith("91") && normalizedFoundPhones.has(clean.substring(2)));
     });
 
-    res.json({ existingPhones: matchedOriginals });
+    // Fetch contact details (sectors) for matched numbers
+    const contactsInfo = await Contact.find({
+      phone: { $in: variationsArray }
+    }).select("phone sector").lean();
+
+    const result = matchedOriginals.map(original => {
+      const clean = String(original).replace(/[^0-9]/g, "");
+      const contact = contactsInfo.find(c => {
+        const cClean = String(c.phone).replace(/[^0-9]/g, "");
+        return cClean === clean || cClean === "91" + clean || (clean.startsWith("91") && cClean === clean.substring(2));
+      });
+      return {
+        phone: original,
+        sector: contact?.sector || "Unassigned"
+      };
+    });
+
+    res.json({ existingPhones: matchedOriginals, contacts: result });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const bulkUpdateContacts = async (req, res, next) => {
+  try {
+    const { phones, sector } = req.body;
+    if (!phones || !Array.isArray(phones) || !sector) {
+      return res.status(400).json({ error: "Phones list and sector are required" });
+    }
+
+    // Numbers variations to be safe
+    const phoneVariations = new Set();
+    phones.forEach(p => {
+      const clean = String(p).replace(/[^0-9]/g, "");
+      phoneVariations.add(clean);
+      if (clean.length === 10) phoneVariations.add("91" + clean);
+      if (clean.length === 12 && clean.startsWith("91")) phoneVariations.add(clean.substring(2));
+    });
+
+    const variationsArray = Array.from(phoneVariations);
+
+    await Contact.updateMany(
+      { phone: { $in: variationsArray } },
+      { $set: { sector: sector } }
+    );
+
+    res.json({ success: true, message: `Updated ${phones.length} contacts to sector: ${sector}` });
   } catch (err) {
     next(err);
   }

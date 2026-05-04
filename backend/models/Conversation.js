@@ -10,7 +10,9 @@ const conversationSchema = new mongoose.Schema({
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
   status: { type: String, default: "New" },
-  sector: { type: String, default: "Unassigned" }
+  sector: { type: String, default: "Unassigned" },
+  followUpTime: { type: Date },
+  followUpNotified: { type: Boolean, default: false }
 }, { timestamps: true });
 
 conversationSchema.index({ phone: 1, whatsappAccountId: 1 }, { unique: true });

@@ -15,11 +15,56 @@ export const initAutomationCron = () => {
       const istHour = parseInt(new Date().toLocaleString("en-US", { hour: 'numeric', hour12: false, timeZone: "Asia/Kolkata" }));
       if (istHour < 8 || istHour >= 19) {
         // We pause automated follow-ups during the night in India.
-        return; 
+        return;
       }
 
       console.log("⏰ Running Follow-up Automation Check...");
-      
+
+      // --- NEW: Personal Follow-up Reminders ---
+      const now = new Date();
+      const dueReminders = await Conversation.find({
+        followUpTime: { $lte: now },
+        followUpNotified: { $ne: true }
+      }).populate("contact");
+
+      for (const conv of dueReminders) {
+        console.log(`🔔 Reminder due for ${conv.phone}`);
+        smartEmit("followup_reminder", { conversation: conv });
+        conv.followUpNotified = true;
+        await conv.save();
+      }
+
+      // --- NEW: Missed Follow-up Detection ---
+      const thirtyMinsAgo = new Date(Date.now() - 30 * 60 * 1000);
+      const missedFollowUps = await Conversation.find({
+        status: { $regex: /follow/i }, // Matches "Follow-up" or similar
+        followUpTime: { $lt: thirtyMinsAgo },
+        followUpNotified: true // Only check those that were already alerted
+      });
+
+      for (const conv of missedFollowUps) {
+        // Check if there's any timeline entry for this contact after followUpTime
+        const Timeline = (await import("../models/Timeline.js")).default;
+        const recentTimeline = await Timeline.findOne({
+          contactId: conv.contact,
+          createdAt: { $gt: conv.followUpTime }
+        });
+
+        if (!recentTimeline) {
+          console.log(`⚠️ Moving ${conv.phone} to Missed Follow-up (No activity)`);
+          conv.status = "Missed Follow-up";
+          // We clear followUpTime so it doesn't keep triggering this check
+          conv.followUpTime = null;
+          await conv.save();
+
+          // Sync with Contact model too
+          const Contact = (await import("../models/Contact.js")).default;
+          await Contact.findByIdAndUpdate(conv.contact, { status: "Missed Follow-up" });
+
+          smartEmit("conversation_status_update", { phone: conv.phone, status: "Missed Follow-up" });
+        }
+      }
+
       // Step 1: Find all Follow-up rules that are currently turned ON (active: true).
       // This is global, meaning it checks rules for all accounts at once.
       const activeRules = await FollowUpRule.find({ active: true });
@@ -33,10 +78,10 @@ export const initAutomationCron = () => {
 
         // Step 3: Calculate the total delay time in milliseconds (Days + Hours + Minutes).
         // This tells us exactly how long we need to wait before sending the message.
-        const delayMs = (rule.delayDays * 24 * 60 * 60 * 1000) + 
-                        (rule.delayHours * 60 * 60 * 1000) + 
-                        (rule.delayMinutes * 60 * 1000);
-        
+        const delayMs = (rule.delayDays * 24 * 60 * 60 * 1000) +
+          (rule.delayHours * 60 * 60 * 1000) +
+          (rule.delayMinutes * 60 * 1000);
+
         // We don't actually use thresholdDate right now, but it's good for debugging.
         const thresholdDate = new Date(Date.now() - delayMs);
 
@@ -70,7 +115,7 @@ export const initAutomationCron = () => {
 
               // Step 8: Actually SEND the WhatsApp message using the Official Meta API!
               const metaRes = await sendTextMessage(accountToUse, contact.phone, rule.messageText);
-              
+
               // Step 9: Extract the unique WhatsApp Message ID to track if it gets "Read" or "Delivered" later.
               const messageId = metaRes?.messages?.[0]?.id;
 
@@ -93,9 +138,9 @@ export const initAutomationCron = () => {
               // This pushes the conversation to the top of the list and updates the "last message" text.
               const updatedConv = await Conversation.findOneAndUpdate(
                 { phone: normalizedPhone, $or: [{ whatsappAccountId: accountToUse._id }, { whatsappAccountId: null }] },
-                { 
-                  lastMessage: rule.messageText, 
-                  lastMessageTime: new Date(), 
+                {
+                  lastMessage: rule.messageText,
+                  lastMessageTime: new Date(),
                   unreadCount: 0,
                   whatsappAccountId: accountToUse._id
                 },
@@ -104,7 +149,7 @@ export const initAutomationCron = () => {
 
               // Step 12: Tell the Frontend (React) via WebSockets to instantly display the new message without refreshing the page!
               smartEmit("new_message", { message: newMessage, conversation: updatedConv });
-              
+
               // Step 13: Log the time we sent this follow-up into the Customer's history.
               // This ensures the next cron cycle will wait for the exact delay time again before repeating!
               if (logEntry) {
@@ -118,9 +163,9 @@ export const initAutomationCron = () => {
               }
               // Save the updated customer history to the Database.
               await contact.save();
-              
+
               console.log(`✅ Repeated Follow-up sent to ${contact.phone} for rule: ${rule.name}`);
-              
+
               // Wait 2 seconds between messages to avoid rate limits
               await new Promise(resolve => setTimeout(resolve, 2000));
             } catch (err) {
@@ -133,6 +178,6 @@ export const initAutomationCron = () => {
       console.error("❌ Error in Follow-up Automation Cron:", error);
     }
   });
-  
+
   console.log("📅 Follow-up Automation Cron initialized.");
 };

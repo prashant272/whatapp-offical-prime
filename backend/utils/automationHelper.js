@@ -15,7 +15,7 @@ function getSimilarity(s1, s2) {
   }
   let longerLength = longer.length;
   if (longerLength === 0) return 1.0;
-  
+
   const editDistance = (s1, s2) => {
     const costs = [];
     for (let i = 0; i <= s1.length; i++) {
@@ -44,14 +44,14 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
   try {
     const text = incomingText.toLowerCase().trim();
     console.log(`🔍 Automation Check: incomingText="${text}" | phone="${phone}" | accountId="${account?._id}"`);
-    const autoReplies = await AutoReply.find({ 
+    const autoReplies = await AutoReply.find({
       isActive: true,
       $or: [
         { whatsappAccountIds: { $size: 0 } }, // Global (if empty)
         { whatsappAccountIds: account?._id }   // Specific to this account
       ]
     });
-    
+
     let bestMatch = null;
     let highestScore = 0;
 
@@ -85,7 +85,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     // --- 2. CHECK DYNAMIC FLOW TRIGGERS (Fuzzy Match 60%) ---
-    const allFlows = await Flow.find({ 
+    const allFlows = await Flow.find({
       isActive: true,
       $or: [
         { whatsappAccountIds: { $size: 0 } },
@@ -109,7 +109,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       contact.currentStepIndex = 0;
       contact.chatData = new Map(); // Reset data for new flow
       await contact.save();
-      
+
       const firstQuestion = bestFlowMatch.steps[0].question;
       const firstDelay = (bestFlowMatch.steps[0].delay || 2) * 1000;
       return await sendDelayedMessage(account, phone, firstQuestion, contact, firstDelay);
@@ -161,11 +161,11 @@ async function sendDelayedMessage(account, phone, text, contact, delayMs) {
       const normalizedPhone = phone.toString().replace(/\D/g, "");
       const updatedConv = await Conversation.findOneAndUpdate(
         { phone: normalizedPhone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
-        { 
+        {
           whatsappAccountId: account?._id,
-          lastMessage: text, 
+          lastMessage: text,
           lastMessageTime: new Date(),
-          unreadCount: 0 
+          unreadCount: 0
         },
         { new: true, upsert: true }
       ).populate("contact");
@@ -194,15 +194,15 @@ async function processDynamicFlow(account, phone, text, contact) {
 
   // 1. Save the user's response to the current step's field
   if (!contact.chatData) contact.chatData = new Map();
-  
+
   // Save to specialized field if it's name
   if (currentStep.saveToField === "name") {
     contact.name = text;
   }
-  
+
   // Always save to chatData for variable interpolation {{field}}
   contact.chatData.set(currentStep.saveToField, text);
-  
+
   // CRITICAL: Mongoose doesn't auto-detect Map changes, we must mark it as modified!
   contact.markModified("chatData");
   await contact.save();
@@ -228,7 +228,7 @@ async function processDynamicFlow(account, phone, text, contact) {
   } else {
     // Flow complete
     let msg = flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏";
-    
+
     // Also replace variables in success message
     if (contact.chatData && contact.chatData.size > 0) {
       contact.chatData.forEach((value, key) => {
