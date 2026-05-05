@@ -65,7 +65,13 @@ export const handleWebhook = async (req, res) => {
         if (updatedMsg && updatedMsg.campaignId) {
           const campaign = await Campaign.findById(updatedMsg.campaignId);
           if (campaign) {
-            const logIndex = campaign.logs.findIndex(l => l.phone === updatedMsg.to);
+            // Use fuzzy matching for phone numbers in logs
+            const targetPhone = updatedMsg.to.replace(/\D/g, "");
+            const logIndex = campaign.logs.findIndex(l => {
+              const cleanLogPhone = l.phone.replace(/\D/g, "");
+              return cleanLogPhone.endsWith(targetPhone.slice(-10));
+            });
+
             if (logIndex !== -1) {
               const oldStatus = campaign.logs[logIndex].status;
               const newStatus = status.status;
@@ -79,7 +85,11 @@ export const handleWebhook = async (req, res) => {
               campaign.logs[logIndex].status = newStatus;
               if (status.errors && status.errors[0]) {
                 campaign.logs[logIndex].error = status.errors[0].message;
+              } else if (newStatus === "failed") {
+                campaign.logs[logIndex].error = "Delivery Failed";
               }
+              
+              campaign.markModified("logs");
               await campaign.save();
               
               // Emit campaign update
@@ -87,7 +97,9 @@ export const handleWebhook = async (req, res) => {
                 campaignId: campaign._id,
                 sentCount: campaign.sentCount,
                 failedCount: campaign.failedCount,
-                status: campaign.status
+                status: campaign.status,
+                logs: campaign.logs,
+                whatsappAccountId: account._id
               });
             }
           }

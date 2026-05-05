@@ -41,6 +41,11 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         const deltaSuccess = currentSuccess - lastReportedSuccess;
         const deltaFailure = currentFailure - lastReportedFailure;
         
+        // Use atomic increments to avoid race conditions with webhooks
+        // And use $push with $each to append ONLY the NEW logs since the last update
+        const previousTotal = lastReportedSuccess + lastReportedFailure;
+        const newLogsSinceLastReport = currentLogs.slice(previousTotal);
+        
         lastReportedSuccess = currentSuccess;
         lastReportedFailure = currentFailure;
 
@@ -132,24 +137,24 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
         }
 
-        const initialLogs = campaign.logs || [];
-        const allLogs = [...initialLogs, ...currentLogs];
         const totalSentCount = initialSent + currentSuccess;
         const totalFailedCount = initialFailed + currentFailure;
         const isFinished = (totalSentCount + totalFailedCount) >= campaign.totalContacts;
         
-        // Use atomic increments to avoid race conditions with webhooks
-        // IMPORTANT: We only set status to RUNNING if it's not already PAUSED
         const updateOps = {
           $inc: { 
             sentCount: deltaSuccess, 
             failedCount: deltaFailure 
           },
-          $set: { 
-            logs: allLogs,
-            ...(isFinished ? { status: "COMPLETED", completedAt: new Date() } : {})
+          $set: {
+            status: isFinished ? "COMPLETED" : "RUNNING",
+            ...(isFinished ? { completedAt: new Date() } : {})
           }
         };
+
+        if (newLogsSinceLastReport.length > 0) {
+          updateOps.$push = { logs: { $each: newLogsSinceLastReport } };
+        }
 
         // If it's not finished and not paused, ensure it's marked as RUNNING
         const currentCampaignInDb = await Campaign.findById(campaign._id);
@@ -162,6 +167,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
         const finalSent = updatedCampaign?.sentCount || totalSentCount;
         const finalFailed = updatedCampaign?.failedCount || totalFailedCount;
+        const finalLogs = updatedCampaign?.logs || allLogs;
 
         const io = getIO();
         io.emit("campaign_progress", {
@@ -169,7 +175,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           sentCount: finalSent,
           failedCount: finalFailed,
           status: currentStatus,
-          logs: allLogs,
+          logs: finalLogs,
           whatsappAccountId: account._id
         });
       },
