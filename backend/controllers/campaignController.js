@@ -139,21 +139,25 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         const isFinished = (totalSentCount + totalFailedCount) >= campaign.totalContacts;
         
         // Use atomic increments to avoid race conditions with webhooks
-        const updatedCampaign = await Campaign.findByIdAndUpdate(
-          campaign._id,
-          {
-            $inc: { 
-              sentCount: deltaSuccess, 
-              failedCount: deltaFailure 
-            },
-            $set: { 
-              logs: allLogs,
-              status: isFinished ? "COMPLETED" : "RUNNING",
-              ...(isFinished ? { completedAt: new Date() } : {})
-            }
+        // IMPORTANT: We only set status to RUNNING if it's not already PAUSED
+        const updateOps = {
+          $inc: { 
+            sentCount: deltaSuccess, 
+            failedCount: deltaFailure 
           },
-          { new: true }
-        );
+          $set: { 
+            logs: allLogs,
+            ...(isFinished ? { status: "COMPLETED", completedAt: new Date() } : {})
+          }
+        };
+
+        // If it's not finished and not paused, ensure it's marked as RUNNING
+        const currentCampaignInDb = await Campaign.findById(campaign._id);
+        if (!isFinished && currentCampaignInDb && currentCampaignInDb.status !== "PAUSED") {
+          updateOps.$set.status = "RUNNING";
+        }
+
+        const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateOps, { new: true });
 
         const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
         const finalSent = updatedCampaign?.sentCount || totalSentCount;
