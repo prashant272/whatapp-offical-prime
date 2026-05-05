@@ -503,7 +503,7 @@ const ChatModule = () => {
           // IMPORTANT: Only add to sidebar if it matches the CURRENTLY VIEWED account
           const matchesAccount = !activeAccount || (function(conv, active) {
             const chatAccountId = conv.whatsappAccountId ? String(conv.whatsappAccountId) : null;
-            const activeAccountId = String(active.id);
+            const activeAccountId = String(active._id);
             if (!chatAccountId && active.name.toLowerCase().includes("primary")) return true;
             return chatAccountId === activeAccountId;
           })(conversation, activeAccount);
@@ -990,56 +990,41 @@ const ChatModule = () => {
   };
 
   const filteredConversations = useMemo(() => {
-    let result = conversations;
+    return conversations.filter(c => {
+      // ALWAYS include the currently open chat in the sidebar
+      if (c._id === chatId) return true;
 
-    // 1. Unread/All/Window Filter
-    if (filter === "unread") {
-      result = result.filter(c => c.unreadCount > 0);
-    } else if (filter === "window") {
-      const now = new Date().getTime();
-      const twentyFourHours = 24 * 60 * 60 * 1000;
-      result = result.filter(c => {
-        if (!c.lastCustomerMessageAt) return false;
-        return (now - new Date(c.lastCustomerMessageAt).getTime()) < twentyFourHours;
-      });
-    }
-
-    // 2. Status Filter
-    if (statusFilter && statusFilter.toLowerCase() !== "all") {
-      result = result.filter(c => c.status === statusFilter);
-    }
-
-    // 3. User Filter
-    if (userFilter && userFilter.toLowerCase() !== "all") {
-      if (userFilter === "Unassigned") {
-        result = result.filter(c => !c.assignedTo);
-      } else {
-        result = result.filter(c => 
-          (typeof c.assignedTo === 'object' ? c.assignedTo?._id : c.assignedTo) === userFilter
-        );
+      // 1. Unread/Window Filter
+      if (filter === "unread" && !(c.unreadCount > 0)) return false;
+      if (filter === "window") {
+        const now = new Date().getTime();
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+        if (!c.lastCustomerMessageAt || (now - new Date(c.lastCustomerMessageAt).getTime()) >= twentyFourHours) return false;
       }
-    }
-    
-    // Sector Filter
-    if (sectorFilter !== "all") {
-      result = result.filter(c => c.sector === sectorFilter);
-    }
 
-    // 4. Search Query
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(c => 
-        (c.contact?.name || "").toLowerCase().includes(q) || 
-        c.phone.includes(q) ||
-        (c.lastMessage || "").toLowerCase().includes(q)
-      );
-    }
+      // 2. Status Filter
+      if (statusFilter && statusFilter.toLowerCase() !== "all" && c.status !== statusFilter) return false;
 
-    // 4. Account Siloing Filter (Removed - Backend already filters this)
-    // result = result.filter(c => ...);
+      // 3. User Filter
+      if (userFilter && userFilter.toLowerCase() !== "all") {
+        const assignedId = typeof c.assignedTo === 'object' ? c.assignedTo?._id : c.assignedTo;
+        if (userFilter === "Unassigned") {
+          if (c.assignedTo) return false;
+        } else if (assignedId !== userFilter) return false;
+      }
+      
+      // Sector Filter
+      if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
 
-    return result;
-  }, [conversations, filter, statusFilter, sectorFilter, userFilter, searchQuery]);
+      // 4. Search Query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        if (!((c.contact?.name || "").toLowerCase().includes(q) || c.phone.includes(q) || (c.lastMessage || "").toLowerCase().includes(q))) return false;
+      }
+
+      return true;
+    });
+  }, [conversations, filter, statusFilter, sectorFilter, userFilter, searchQuery, chatId]);
 
   return (
     <div className="chat-container" style={{

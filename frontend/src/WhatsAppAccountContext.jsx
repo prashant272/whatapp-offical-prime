@@ -33,8 +33,7 @@ export const WhatsAppAccountProvider = ({ children }) => {
   const switchAccount = (account) => {
     setActiveAccount(account);
     localStorage.setItem("whatsappAccountId", account._id);
-    // Reload to clear states and trigger re-fetches with new header
-    window.location.reload();
+    // Reload removed to enable smooth SPA transitions
   };
 
   useEffect(() => {
