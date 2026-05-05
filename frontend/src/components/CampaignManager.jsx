@@ -870,6 +870,18 @@ const CampaignManager = () => {
                 {camp.status === "PAUSED" && (
                   <button onClick={() => handleUpdateStatus(camp._id, "RUNNING")} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#e7fce3", color: "#008069", border: "1px solid #00a884", cursor: "pointer" }}>Resume</button>
                 )}
+                {(camp.status === "RUNNING" || camp.status === "PAUSED") && (
+                  <button 
+                    onClick={() => {
+                      if (window.confirm("Are you sure you want to STOP this campaign permanently?")) {
+                        handleUpdateStatus(camp._id, "COMPLETED");
+                      }
+                    }} 
+                    style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#fff5f5", color: "#ff4757", border: "1px solid #ffe3e3", cursor: "pointer" }}
+                  >
+                    Stop
+                  </button>
+                )}
                 {camp.status === "RUNNING" && isNightTime() && !camp.allowOutsideHours && (
                   <button onClick={() => handleUpdateStatus(camp._id, "RUNNING", true)} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#339af0", color: "white", border: "none", cursor: "pointer" }}>Force Send</button>
                 )}

@@ -147,8 +147,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             failedCount: deltaFailure 
           },
           $set: {
-            status: isFinished ? "COMPLETED" : "RUNNING",
-            ...(isFinished ? { completedAt: new Date() } : {})
+            ...(isFinished ? { status: "COMPLETED", completedAt: new Date() } : {})
           }
         };
 
@@ -156,10 +155,12 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           updateOps.$push = { logs: { $each: newLogsSinceLastReport } };
         }
 
-        // If it's not finished and not paused, ensure it's marked as RUNNING
-        const currentCampaignInDb = await Campaign.findById(campaign._id);
-        if (!isFinished && currentCampaignInDb && currentCampaignInDb.status !== "PAUSED") {
-          updateOps.$set.status = "RUNNING";
+        // If it's not finished, only set status to RUNNING if it's not already PAUSED or COMPLETED
+        if (!isFinished) {
+          const currentCampaignInDb = await Campaign.findById(campaign._id);
+          if (currentCampaignInDb && !["PAUSED", "COMPLETED", "FAILED"].includes(currentCampaignInDb.status)) {
+            updateOps.$set.status = "RUNNING";
+          }
         }
 
         const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateOps, { new: true });
