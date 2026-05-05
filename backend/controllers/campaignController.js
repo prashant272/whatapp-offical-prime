@@ -189,9 +189,10 @@ export const startCampaign = async (req, res) => {
     const campaign = new Campaign({
       name,
       template: template._id,
-      whatsappAccountId: account._id,
       totalContacts: allowedPhones.length,
       contacts: allowedPhones.map(p => ({ phone: p })),
+      templateComponents,
+      whatsappAccountId: account._id,
       status: "RUNNING",
       startedAt: new Date()
     });
@@ -223,9 +224,7 @@ export const updateCampaignStatus = async (req, res) => {
     if (status === "RUNNING" && !activeThrottlers.has(id.toString())) {
       const account = await WhatsAppAccount.findById(campaign.whatsappAccountId);
       
-      // Get template components from last message
-      const lastMsg = await Message.findOne({ to: { $exists: true }, whatsappAccountId: account._id }).sort({ createdAt: -1 });
-      const templateComponents = lastMsg?.templateData?.components || [];
+      const templateComponents = campaign.templateComponents || [];
 
       // Find remaining contacts (not in logs)
       const attemptedPhones = new Set(campaign.logs.map(l => l.phone));

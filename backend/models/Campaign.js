@@ -16,6 +16,7 @@ const campaignSchema = new mongoose.Schema({
     error: String,
     sentAt: { type: Date, default: Date.now }
   }],
+  templateComponents: { type: Array, default: [] },
   whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
   startedAt: { type: Date },
   completedAt: { type: Date },

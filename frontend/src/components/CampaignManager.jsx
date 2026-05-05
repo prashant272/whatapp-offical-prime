@@ -211,10 +211,34 @@ const CampaignManager = () => {
     const preset = presets.find(p => p._id === pId);
     if (!preset) return;
 
+    // Find the full template object from the templates list
+    const templateName = preset.template?.name || preset.templateName;
+    const fullTemplate = templates.find(t => t.name === templateName || t._id === preset.template);
+
     setSelectedPreset(pId);
-    setSelectedTemplate(preset.template);
-    setNewCampaign({ ...newCampaign, templateName: preset.template.name });
-    setTemplateVars(preset.config || {});
+    setSelectedTemplate(fullTemplate || preset.template);
+    setNewCampaign({ ...newCampaign, templateName: templateName || (fullTemplate?.name) });
+
+    // Initialize all variables the template expects
+    const vars = {};
+    if (fullTemplate) {
+      fullTemplate.components.forEach(comp => {
+        if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
+          vars[`HEADER_${comp.format}`] = "";
+        }
+        const text = comp.text || "";
+        const matches = text.match(/{{(\d+)}}/g);
+        if (matches) {
+          matches.forEach(m => {
+            const num = m.replace(/{{|}}/g, "");
+            vars[`${comp.type}_${num}`] = "";
+          });
+        }
+      });
+    }
+
+    // Merge with preset config (Preset config overrides default empty strings)
+    setTemplateVars({ ...vars, ...(preset.config || {}) });
   };
 
   const verifyNumbers = async () => {
@@ -447,10 +471,20 @@ const CampaignManager = () => {
       const bodyParams = [];
       const headerParams = [];
 
-      Object.entries(templateVars).forEach(([key, val]) => {
-        if (key.startsWith("BODY_")) {
+      // Sort keys to ensure variables are added in order (1, 2, 3...)
+      const sortedVarKeys = Object.keys(templateVars).sort((a, b) => {
+        const numA = parseInt(a.split("_").pop()) || 0;
+        const numB = parseInt(b.split("_").pop()) || 0;
+        return numA - numB;
+      });
+
+      sortedVarKeys.forEach(key => {
+        const val = templateVars[key] || "";
+        const upperKey = key.toUpperCase();
+        
+        if (upperKey.startsWith("BODY_") || upperKey.startsWith("VARIABLE_")) {
           bodyParams.push({ type: "text", text: val });
-        } else if (key.startsWith("HEADER_")) {
+        } else if (upperKey.startsWith("HEADER_")) {
           const headerComp = selectedTemplate.components.find(c => c.type === "HEADER");
           if (headerComp && ["IMAGE", "VIDEO", "DOCUMENT"].includes(headerComp.format)) {
             const type = headerComp.format.toLowerCase();
