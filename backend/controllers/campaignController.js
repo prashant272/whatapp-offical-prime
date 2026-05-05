@@ -96,6 +96,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             body: messageBody,
             type: "template",
             whatsappAccountId: account._id,
+            campaignId: campaign._id,
             templateData: { name: template.name, components: templateComponents },
             mediaUrl: mediaUrl,
             direction: "outbound",

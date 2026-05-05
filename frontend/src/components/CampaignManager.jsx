@@ -44,6 +44,8 @@ const CampaignManager = () => {
   const [customStatuses, setCustomStatuses] = useState([]);
   const [existingNumbers, setExistingNumbers] = useState([]); // Array of { phone, sector }
   const [bulkSector, setBulkSector] = useState("");
+  const [showRecampaignModal, setShowRecampaignModal] = useState(false);
+  const [recampaignSource, setRecampaignSource] = useState(null);
   const fileInputRef = useRef(null);
 
   const fetchData = async () => {
@@ -122,20 +124,41 @@ const CampaignManager = () => {
   };
 
   const handleRecampaign = (camp) => {
+    setRecampaignSource(camp);
+    setShowRecampaignModal(true);
+  };
+
+  const handleRecampaignSelection = (filterType) => {
+    if (!recampaignSource) return;
+    const camp = recampaignSource;
     const tName = camp.templateName || camp.template?.name || "";
     const template = templates.find(t => t.name === tName);
     
+    let targetPhones = [];
+    if (filterType === "all") {
+      targetPhones = (camp.contacts || []).map(c => c.phone);
+    } else if (filterType === "failed") {
+      targetPhones = (camp.logs || []).filter(l => l.status === "failed").map(l => l.phone);
+    } else if (filterType === "sent") {
+      targetPhones = (camp.logs || []).filter(l => l.status !== "failed").map(l => l.phone);
+    }
+
+    if (targetPhones.length === 0) {
+      alert(`No contacts found matching the filter: ${filterType}`);
+      return;
+    }
+
     setSelectedTemplate(template);
     setNewCampaign({
-      name: `${camp.name} - Copy`,
+      name: `${camp.name} - ${filterType.toUpperCase()}`,
       templateName: tName,
-      contactsRaw: (camp.contacts || []).map(c => c.phone).join("\n"),
+      contactsRaw: targetPhones.join("\n"),
       delay: 2,
       sector: camp.sector || "",
       whatsappAccountId: activeAccount?._id || camp.whatsappAccountId?._id || ""
     });
 
-    // Reset template variables (since they aren't stored in Campaign model)
+    // Reset template variables
     const vars = {};
     if (template) {
       template.components.forEach(comp => {
@@ -153,7 +176,8 @@ const CampaignManager = () => {
       });
     }
     setTemplateVars(vars);
-    setExistingNumbers([]); // Clear any previous warning box
+    setExistingNumbers([]);
+    setShowRecampaignModal(false);
     setShowCreate(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -648,7 +672,14 @@ const CampaignManager = () => {
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <p style={{ margin: 0, fontSize: "0.85rem", color: "#667781", fontWeight: "700" }}>Option 2: Manual / File Upload</p>
+              <p style={{ margin: 0, fontSize: "0.85rem", color: "#667781", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+                Option 2: Manual / File Upload
+                {newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5).length > 0 && (
+                  <span style={{ background: "#00a884", color: "white", padding: "2px 10px", borderRadius: "10px", fontSize: "0.7rem", fontWeight: "bold" }}>
+                    {newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5).length} Numbers Detected
+                  </span>
+                )}
+              </p>
               <div style={{ display: "flex", gap: "10px" }}>
                 <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
                 <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5" }}>Upload File</button>
@@ -976,6 +1007,52 @@ const CampaignManager = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Recampaign Modal */}
+      {showRecampaignModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(5px)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100
+        }}>
+          <div style={{ background: "white", padding: "30px", borderRadius: "20px", width: "400px", boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)" }}>
+            <h4 style={{ margin: "0 0 10px 0" }}>Re-campaign Strategy</h4>
+            <p style={{ fontSize: "0.9rem", color: "#667781", marginBottom: "20px" }}>Choose which contacts you want to target from "<b>{recampaignSource?.name}</b>":</p>
+            
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button 
+                onClick={() => handleRecampaignSelection("all")}
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #ddd", background: "#f8f9fa", cursor: "pointer", fontWeight: "600", textAlign: "left", display: "flex", justifyContent: "space-between" }}
+              >
+                <span>All Contacts</span>
+                <span style={{ color: "#00a884" }}>{recampaignSource?.totalContacts}</span>
+              </button>
+              
+              <button 
+                onClick={() => handleRecampaignSelection("failed")}
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #ff4757", background: "#fff5f5", color: "#ff4757", cursor: "pointer", fontWeight: "600", textAlign: "left", display: "flex", justifyContent: "space-between" }}
+              >
+                <span>Only Failed</span>
+                <span>{recampaignSource?.failedCount}</span>
+              </button>
+              
+              <button 
+                onClick={() => handleRecampaignSelection("sent")}
+                style={{ padding: "12px", borderRadius: "10px", border: "1px solid #00a884", background: "#f0fdf4", color: "#00a884", cursor: "pointer", fontWeight: "600", textAlign: "left", display: "flex", justifyContent: "space-between" }}
+              >
+                <span>Only Sent/Success</span>
+                <span>{recampaignSource?.sentCount}</span>
+              </button>
+            </div>
+
+            <button 
+              onClick={() => setShowRecampaignModal(false)}
+              style={{ width: "100%", marginTop: "20px", padding: "10px", borderRadius: "10px", border: "none", background: "#eee", cursor: "pointer", fontWeight: "bold" }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

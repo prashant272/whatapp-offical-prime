@@ -84,6 +84,10 @@ export const sendImageMessage = async (account, to, imageUrl, caption = "") => {
     );
     return res.data;
   } catch (error) {
+    const metaError = error.response?.data?.error;
+    if (metaError) {
+      console.error("❌ Meta API Error (Image):", JSON.stringify(metaError, null, 2));
+    }
     throw error;
   }
 };

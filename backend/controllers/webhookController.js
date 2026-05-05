@@ -2,6 +2,7 @@ import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import Contact from "../models/Contact.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
+import Campaign from "../models/Campaign.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getMediaUrl } from "../services/whatsappService.js";
 import { getIO, smartEmit } from "../utils/socket.js";
@@ -54,10 +55,43 @@ export const handleWebhook = async (req, res) => {
 
       if (status) {
         console.log(`📈 Status Update: ${status.status} for ${status.id}`);
-        await Message.findOneAndUpdate(
+        const updatedMsg = await Message.findOneAndUpdate(
           { messageId: status.id },
-          { status: status.status }
+          { status: status.status },
+          { new: true }
         );
+
+        // SYNC WITH CAMPAIGN LOGS
+        if (updatedMsg && updatedMsg.campaignId) {
+          const campaign = await Campaign.findById(updatedMsg.campaignId);
+          if (campaign) {
+            const logIndex = campaign.logs.findIndex(l => l.phone === updatedMsg.to);
+            if (logIndex !== -1) {
+              const oldStatus = campaign.logs[logIndex].status;
+              const newStatus = status.status;
+
+              // If status changed to failed, update counts
+              if (newStatus === "failed" && oldStatus !== "failed") {
+                campaign.failedCount = (campaign.failedCount || 0) + 1;
+                campaign.sentCount = Math.max(0, (campaign.sentCount || 0) - 1);
+              }
+
+              campaign.logs[logIndex].status = newStatus;
+              if (status.errors && status.errors[0]) {
+                campaign.logs[logIndex].error = status.errors[0].message;
+              }
+              await campaign.save();
+              
+              // Emit campaign update
+              getIO().emit("campaign_progress", {
+                campaignId: campaign._id,
+                sentCount: campaign.sentCount,
+                failedCount: campaign.failedCount,
+                status: campaign.status
+              });
+            }
+          }
+        }
 
         // Notify UI about status update
         const io = getIO();
@@ -137,18 +171,21 @@ export const handleWebhook = async (req, res) => {
           contact.name = profileName;
         }
 
-        // Step 3: Check if the user typed "yes", "no", or "stop".
-        // This is a built-in hardcoded automation to automatically update customer status.
+        // Step 3: Check dynamic Keyword Rules for automation
         const textContent = bodyContent.trim().toLowerCase();
+        const KeywordRule = (await import("../models/KeywordRule.js")).default;
+        const matchingRule = await KeywordRule.findOne({ keyword: textContent, active: true });
+        
         let statusUpdated = false;
-        if (textContent === "yes") {
-          contact.status = "Interested";
-          contact.statusUpdatedAt = new Date(); // Record time so the Follow-up Cron knows when to start counting
-          statusUpdated = true;
-        } else if (textContent === "no") {
-          contact.status = "Not Interested";
+        if (matchingRule) {
+          console.log(`🤖 Keyword Rule matched: "${textContent}" -> ${matchingRule.targetStatus}`);
+          contact.status = matchingRule.targetStatus;
           contact.statusUpdatedAt = new Date();
           statusUpdated = true;
+          
+          if (matchingRule.assignedTo) {
+            contact.assignedTo = matchingRule.assignedTo;
+          }
         } else if (textContent === "stop") {
           contact.isBlocked = true; // Prevents the Cron Job and Campaigns from messaging this number
         }
@@ -160,7 +197,8 @@ export const handleWebhook = async (req, res) => {
             contact: contact._id, 
             phone: from,
             whatsappAccountId: account?._id,
-            status: contact.status || "New" // Sync status from contact if it's a fresh conversation record
+            status: contact.status || "New", // Sync status from contact if it's a fresh conversation record
+            assignedTo: contact.assignedTo // Carry over assignment if any
           });
         }
         
@@ -171,9 +209,12 @@ export const handleWebhook = async (req, res) => {
         conversation.lastCustomerMessageAt = new Date();
         conversation.unreadCount += 1;
         
-        // Step 5: If the status changed because they typed "yes" or "no", update the Conversation status too!
+        // Step 5: If a keyword rule matched, update the Conversation status and assignment too!
         if (statusUpdated) {
           conversation.status = contact.status;
+          if (matchingRule?.assignedTo) {
+            conversation.assignedTo = matchingRule.assignedTo;
+          }
         }
 
         await conversation.save();

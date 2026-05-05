@@ -1,17 +1,20 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
-import { 
-  Send, User, Search, MoreVertical, MessageSquare, Clock, 
-  Calendar, Tag, ChevronDown, Check, AlertCircle, FileText, 
-  Plus, Paperclip, Loader2, Trash2, Pencil 
+import {
+  Send, User, Search, MoreVertical, MessageSquare, Clock,
+  Calendar, Tag, ChevronDown, Check, AlertCircle, FileText,
+  Plus, Paperclip, Loader2, Trash2, Pencil, Key, Smile, Zap
 } from "lucide-react";
 import { io } from "socket.io-client";
+import KeywordRuleModal from "./KeywordRuleModal";
 
 import { useParams, useNavigate } from "react-router-dom";
 import api, { API_BASE } from "../api";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 import { startFollowUpAlarm } from "../utils/beep_sound";
 import { useCallback } from "react";
+
+const COMMON_EMOJIS = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🤲", "👐", "🙌", "👏", "🤝", "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘", "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐", "🖖", "👋", "🤙", "💪", "🦾", "🖕", "✍️", "🙏", "🦶", "🦵", "🦿", "💄", "💋", "👄", "🦷", "👅", "👂", "🦻", "👃", "👣", "👁", "👀", "🧠", "🫀", "🫁", "🦴", "💩", "🔥", "✨", "🌟", "⭐", "🌈", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"];
 
 const STATUS_OPTIONS = ["New", "Interested", "Not Interested", "Follow-up", "Missed Follow-up", "Closed"];
 
@@ -37,18 +40,19 @@ const ChatModule = () => {
       return { phone, status: "New", isNew: true, whatsappAccountId: activeAccount?._id };
     }
     const chat = conversations.find(c => c._id === chatId);
-    
-    // Fallback: If a customer is from the old system and doesn't have an account ID yet,
-    // we temporarily assign them the currently viewed account ID so messages can be sent.
-    if (chat && !chat.whatsappAccountId) {
-      chat.whatsappAccountId = activeAccount?._id;
+    if (!chat) return null;
+
+    const normalized = { ...chat };
+    if (!normalized.whatsappAccountId && activeAccount?.isDefault) {
+      normalized.whatsappAccountId = activeAccount._id;
     }
-    return chat;
+    return normalized;
   }, [chatId, conversations, activeAccount]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState([]);
-  const [presets, setPresets] = useState([]);
+  const [templatePresets, setTemplatePresets] = useState([]);
+  const [quickReplies, setQuickReplies] = useState([]);
   const [selectedPreset, setSelectedPreset] = useState("");
   const [executives, setExecutives] = useState([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -73,6 +77,7 @@ const ChatModule = () => {
   const [newSectorName, setNewSectorName] = useState("");
 
   const [showManageModal, setShowManageModal] = useState(false);
+  const [showKeywordModal, setShowKeywordModal] = useState(false);
   const [manageType, setManageType] = useState("status"); // 'status' or 'sector'
 
   // Filters State
@@ -81,17 +86,17 @@ const ChatModule = () => {
   const [sectorFilter, setSectorFilter] = useState("all");
   const [userFilter, setUserFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   const [showTimelineModal, setShowTimelineModal] = useState(false);
   const [timelineEntries, setTimelineEntries] = useState([]);
   const [newTimelineContent, setNewTimelineContent] = useState("");
   const [isTimelineLoading, setIsTimelineLoading] = useState(false);
   const [editingTimelineId, setEditingTimelineId] = useState(null);
   const [editingTimelineContent, setEditingTimelineContent] = useState("");
-  
+
   const [customFieldsDef, setCustomFieldsDef] = useState([]);
   const [isUpdatingField, setIsUpdatingField] = useState(null);
-  
+
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpTime, setFollowUpTime] = useState("");
@@ -117,7 +122,7 @@ const ChatModule = () => {
     if (scrollRef.current && messages.length > prevMsgCount) {
       const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
       const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
-      
+
       // Scroll to bottom ONLY if it's the first load of THIS chat or user is already at bottom
       if (prevMsgCount === 0 || isAtBottom) {
         scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -132,7 +137,15 @@ const ChatModule = () => {
   }, [selectedChat?.phone]);
 
   const [isUploading, setIsUploading] = useState(false);
+  const [pendingImage, setPendingImage] = useState(null); // { file, previewUrl }
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [showAddQuickReplyModal, setShowAddQuickReplyModal] = useState(false);
+  const [newQR, setNewQR] = useState({ name: "", content: "", file: null, preview: "" });
+  const [isSavingQR, setIsSavingQR] = useState(false);
   const fileInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
+  const quickRepliesRef = useRef(null);
   const [activeContact, setActiveContact] = useState(null);
   const conversationsRef = useRef(conversations);
 
@@ -154,7 +167,7 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": isGlobalView ? "all" : (selectedChat?.whatsappAccountId || activeAccount?._id) }
       });
       const newMsgs = res.data.messages || [];
-      
+
       if (page === 1) {
         setMessages(newMsgs);
         setMsgPage(1);
@@ -185,7 +198,7 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": isGlobalView ? "all" : activeAccount?._id }
       });
       const newData = res.data.conversations || [];
-      
+
       if (page === 1) {
         setConversations(newData);
         setConvPage(1);
@@ -207,25 +220,25 @@ const ChatModule = () => {
 
   const fetchMoreConversations = async () => {
     if (!hasMoreConvs || isFetchingConvs) return;
-    
+
     const nextPage = convPage + 1;
     console.log(`📜 Infinite Scroll: Loading page ${nextPage}...`);
-    
+
     // Set fetching flag IMMEDIATELY to prevent double-triggers
     setIsFetchingConvs(true);
-    
+
     try {
       const res = await api.get(`/conversations?page=${nextPage}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}${isGlobalView ? "&showAllAccounts=true" : ""}`, {
         headers: { "x-whatsapp-account-id": isGlobalView ? "all" : activeAccount?._id }
       });
       const newData = res.data.conversations || [];
-      
+
       setConversations(prev => {
         const existingIds = new Set(prev.map(c => c._id));
         const uniqueNew = newData.filter(c => !existingIds.has(c._id));
         return [...prev, ...uniqueNew];
       });
-      
+
       setConvPage(nextPage);
       setHasMoreConvs(res.data.hasMore);
     } catch (err) {
@@ -272,14 +285,6 @@ const ChatModule = () => {
   useEffect(() => {
     selectedChatRef.current = selectedChat;
     if (selectedChat) {
-      // SECURITY CHECK: If the selected chat belongs to a different account, clear it
-      // Bypassed if in 'All Accounts' mode (Global View)
-      if (activeAccount && !isGlobalView && selectedChat.whatsappAccountId && String(selectedChat.whatsappAccountId) !== String(activeAccount._id)) {
-        console.warn("🚫 Chat account mismatch! Redirecting...");
-        navigate("/chats");
-        return;
-      }
-
       // FETCH CONTACT INFO: Smart Lookup
       if (selectedChat.isNew || !selectedChat.contact) {
         const fetchContactByPhone = async () => {
@@ -287,11 +292,11 @@ const ChatModule = () => {
             // Get last 10 digits for fuzzy matching (to handle 91 or no 91)
             const cleanPhone = selectedChat.phone.replace(/[^0-9]/g, "");
             const last10 = cleanPhone.slice(-10);
-            
+
             const res = await api.get(`/contacts?search=${last10}`, {
               headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
             });
-            
+
             // Find best match (ending with the same 10 digits)
             const found = res.data.contacts.find(c => {
               const cPhone = (c.phone || "").replace(/[^0-9]/g, "");
@@ -315,7 +320,7 @@ const ChatModule = () => {
 
       fetchMessages(selectedChat.phone);
       // Reset unreadCount locally on select
-      setConversations(prev => prev.map(c => 
+      setConversations(prev => prev.map(c =>
         c.phone === selectedChat.phone ? { ...c, unreadCount: 0 } : c
       ));
     }
@@ -387,14 +392,14 @@ const ChatModule = () => {
       // Merge with existing custom fields from the active contact record
       const currentFields = activeContact?.customFields || {};
       const updatedFields = { ...currentFields, [fieldName]: value };
-      
+
       const res = await api.put(`/contacts/${contactId}`, {
         customFields: updatedFields
       });
-      
+
       // Update local state
       setActiveContact(res.data);
-      setConversations(prev => prev.map(c => 
+      setConversations(prev => prev.map(c =>
         (c.contact?._id === contactId || c.contact === contactId) ? { ...c, contact: res.data } : c
       ));
       console.log(`✅ Field ${fieldName} updated to: ${value}`);
@@ -435,25 +440,75 @@ const ChatModule = () => {
     fetchConversations(1);
   }, [statusFilter, userFilter, sectorFilter, activeAccount, isGlobalView]);
 
-  // Socket.io Real-time connection
+  // Click outside to close popovers
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target)) {
+        setShowEmojiPicker(false);
+      }
+      if (quickRepliesRef.current && !quickRepliesRef.current.contains(event.target)) {
+        setShowQuickReplies(false);
+      }
+    };
+    if (showEmojiPicker || showQuickReplies) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker, showQuickReplies]);
+
+  const handleCreateQuickReply = async (e) => {
+    e.preventDefault();
+    if (!newQR.name || (!newQR.content && !newQR.file)) return;
+
+    try {
+      setIsSavingQR(true);
+      let mediaUrl = "";
+      if (newQR.file) {
+        const formData = new FormData();
+        formData.append("file", newQR.file);
+        const uploadRes = await api.post("/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" }
+        });
+        mediaUrl = uploadRes.data.url;
+      }
+
+      const res = await api.post("/quick-replies", {
+        name: newQR.name,
+        content: newQR.content,
+        mediaUrl
+      });
+
+      setQuickReplies([res.data, ...quickReplies]);
+      setShowAddQuickReplyModal(false);
+      setNewQR({ name: "", content: "", file: null, preview: "" });
+    } catch (err) {
+      console.error("Error creating quick reply:", err);
+      alert("Error: " + (err.response?.data?.error || err.message));
+    } finally {
+      setIsSavingQR(false);
+    }
+  };
+
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        const [temps, pres, execs, stats, sects, cFields] = await Promise.all([
+        const [temps, pres, quicks, execs, stats, sects, cFields] = await Promise.all([
           api.get(`/templates`),
           api.get(`/presets`),
+          api.get(`/quick-replies`),
           api.get(`/users`).catch(() => ({ data: [] })),
           api.get(`/statuses`).catch(() => ({ data: [] })),
           api.get(`/sectors`).catch(() => ({ data: [] })),
           api.get(`/custom-fields`).catch(() => ({ data: [] }))
         ]);
-        
+
         setCustomStatuses(stats.data);
         setSectors(sects.data);
         setCustomFieldsDef(cFields.data);
-        
+
         setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
-        setPresets(Array.isArray(pres.data) ? pres.data : []);
+        setTemplatePresets(Array.isArray(pres.data) ? pres.data : []);
+        setQuickReplies(Array.isArray(quicks.data) ? quicks.data : []);
         if (currentUser.role !== "Executive") {
           setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager" || u.role === "Admin") : []);
         }
@@ -473,23 +528,23 @@ const ChatModule = () => {
       // 1. Update Conversations List (STRICT MATCH: Phone AND Account ID)
       // This ensures we only show the new message in the sidebar if it belongs to the exact account we are viewing.
       setConversations(prev => {
-        const index = prev.findIndex(c => 
-          c.phone === conversation.phone && 
+        const index = prev.findIndex(c =>
+          c.phone === conversation.phone &&
           String(c.whatsappAccountId) === String(conversation.whatsappAccountId)
         );
-        
+
         let updatedConvData = { ...conversation };
 
         // Reset unreadCount only if it's the EXACT active chat on the EXACT account
-        const isActive = selectedChatRef.current?.phone === conversation.phone && 
-                        String(selectedChatRef.current?.whatsappAccountId) === String(conversation.whatsappAccountId);
+        const isActive = selectedChatRef.current?.phone === conversation.phone &&
+          String(selectedChatRef.current?.whatsappAccountId) === String(conversation.whatsappAccountId);
 
         if (isActive) {
           updatedConvData.unreadCount = 0;
-          api.post("/conversations/mark-read", { 
-            phone: conversation.phone, 
-            whatsappAccountId: conversation.whatsappAccountId 
-          }).catch(() => {});
+          api.post("/conversations/mark-read", {
+            phone: conversation.phone,
+            whatsappAccountId: conversation.whatsappAccountId
+          }).catch(() => { });
         }
 
         if (index !== -1) {
@@ -501,13 +556,13 @@ const ChatModule = () => {
           return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
         } else {
           // IMPORTANT: Only add to sidebar if it matches the CURRENTLY VIEWED account
-          const matchesAccount = !activeAccount || (function(conv, active) {
+          const matchesAccount = !activeAccount || (function (conv, active) {
             const chatAccountId = conv.whatsappAccountId ? String(conv.whatsappAccountId) : null;
             const activeAccountId = String(active._id);
             if (!chatAccountId && active.name.toLowerCase().includes("primary")) return true;
             return chatAccountId === activeAccountId;
           })(conversation, activeAccount);
-          
+
           if (matchesAccount) {
             return [updatedConvData, ...prev];
           }
@@ -516,14 +571,11 @@ const ChatModule = () => {
       });
 
       // 2. Update Messages if current chat is open (Match by Phone AND Account)
-      console.log(`📩 Socket New Message: Phone ${conversation.phone} | Account ${conversation.whatsappAccountId}`);
-      
-      const isActiveChat = selectedChatRef.current && 
-                          selectedChatRef.current.phone === conversation.phone && 
-                          String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId);
+      const isActiveChat = selectedChatRef.current &&
+        selectedChatRef.current.phone === conversation.phone &&
+        String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId);
 
       if (isActiveChat) {
-        console.log("💎 Appending message to ACTIVE chat window");
         setMessages(prev => {
           const exists = prev.find(m => m._id === message._id || (m.messageId && m.messageId === message.messageId));
           if (exists) return prev;
@@ -559,7 +611,7 @@ const ChatModule = () => {
 
     socket.on("conversation_status_update", ({ phone, status }) => {
       console.log(`🔄 Conversation status sync: ${phone} -> ${status}`);
-      setConversations(prev => prev.map(c => 
+      setConversations(prev => prev.map(c =>
         c.phone === phone ? { ...c, status } : c
       ));
     });
@@ -572,12 +624,12 @@ const ChatModule = () => {
     const updateTimer = () => {
       // Find the latest inbound message from the current messages list
       const lastInbound = [...messages].reverse().find(m => m.direction === "inbound");
-      
+
       if (lastInbound) {
         const lastMsgTime = new Date(lastInbound.timestamp).getTime();
         const now = new Date().getTime();
         const diff = (24 * 60 * 60 * 1000) - (now - lastMsgTime);
-        
+
         if (diff > 0) {
           const h = Math.floor(diff / (1000 * 60 * 60));
           const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -627,7 +679,7 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
       // Update local state
-      setConversations(prev => prev.map(c => 
+      setConversations(prev => prev.map(c =>
         c.phone === selectedChat.phone ? { ...c, assignedTo: res.data.conversation.assignedTo, sector: res.data.conversation.sector } : c
       ));
       if (activeContact && (activeContact._id === res.data.conversation.contact?._id || activeContact._id === res.data.conversation.contact)) {
@@ -657,89 +709,103 @@ const ChatModule = () => {
   };
 
   const handleSend = async (e) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !selectedChat) return;
+    if (e) e.preventDefault();
+    if ((!newMessage.trim() && !pendingImage) || !selectedChat) return;
 
-    try {
-      const res = await api.post(`/messages/send`, {
+    if (pendingImage) {
+      // 🖼️ CASE 1: SEND IMAGE (WITH CAPTION)
+      const { file, previewUrl } = pendingImage;
+      const caption = newMessage.trim();
+      const tempId = "temp-" + Date.now();
+
+      const optimisticMsg = {
+        _id: tempId,
+        from: "me",
         to: selectedChat.phone,
-        body: newMessage
-      }, {
-        headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
-      });
+        body: caption || "Image",
+        type: "image",
+        mediaUrl: previewUrl,
+        direction: "outbound",
+        status: "sending",
+        timestamp: new Date()
+      };
 
-      setMessages([...messages, res.data.message]);
+      setMessages(prev => [...prev, optimisticMsg]);
       setNewMessage("");
+      setPendingImage(null); // Clear preview IMMEDIATELY
 
-      if (selectedChat.isNew) {
-        await fetchConversations();
-      } else {
+      try {
+        setIsUploading(true);
+        let imageUrl = "";
+
+        if (pendingImage.isRemote) {
+          imageUrl = pendingImage.remoteUrl;
+        } else {
+          const uploadData = new FormData();
+          uploadData.append("file", file);
+
+          // 1. Upload to Cloudinary
+          const uploadRes = await api.post(`/upload`, uploadData, {
+            headers: { "Content-Type": "multipart/form-data" }
+          });
+          imageUrl = uploadRes.data.url;
+        }
+
+        // 2. Send Image Message via WhatsApp
+        const res = await api.post("/messages/send-image", {
+          to: selectedChat.phone,
+          imageUrl: imageUrl,
+          caption: caption
+        });
+
+        // 3. Replace Temp Message with Real Message
+        setMessages(prev => prev.map(m => m._id === tempId ? res.data.message : m));
         fetchConversations();
+      } catch (err) {
+        console.error("Error sending image:", err);
+        setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
+        alert("Failed to send image: " + (err.response?.data?.error || err.message));
+      } finally {
+        setIsUploading(false);
       }
-    } catch (err) {
-      console.error("Error sending message:", err);
-      const errorMsg = err.response?.data?.error || "Failed to send message";
-      if (errorMsg.includes("24-hour") || err.response?.status === 400) {
-        alert("WhatsApp Rule: You can only send a Template message to this number right now (24-hour window closed).");
-      } else {
-        alert("Error: " + errorMsg);
+    } else {
+      // 💬 CASE 2: NORMAL TEXT SEND
+      try {
+        const res = await api.post(`/messages/send`, {
+          to: selectedChat.phone,
+          body: newMessage
+        }, {
+          headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
+        });
+
+        setMessages([...messages, res.data.message]);
+        setNewMessage("");
+
+        if (selectedChat.isNew) {
+          await fetchConversations();
+        } else {
+          fetchConversations();
+        }
+      } catch (err) {
+        console.error("Error sending message:", err);
+        const errorMsg = err.response?.data?.error || "Failed to send message";
+        if (errorMsg.includes("24-hour") || err.response?.status === 400) {
+          alert("WhatsApp Rule: You can only send a Template message to this number right now (24-hour window closed).");
+        } else {
+          alert("Error: " + errorMsg);
+        }
       }
     }
   };
 
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file || !selectedChat) return;
 
-    // 0. CREATE INSTANT PREVIEW (Optimistic UI)
+    // 0. Set Preview instead of sending immediately
     const previewUrl = URL.createObjectURL(file);
-    const tempId = "temp-" + Date.now();
-    const optimisticMsg = {
-      _id: tempId,
-      from: "me",
-      to: selectedChat.phone,
-      body: newMessage || "Image",
-      type: "image",
-      mediaUrl: previewUrl,
-      direction: "outbound",
-      status: "sending",
-      timestamp: new Date()
-    };
-    
-    setMessages(prev => [...prev, optimisticMsg]);
-    setNewMessage(""); // Clear text input immediately
-
-    try {
-      setIsUploading(true);
-      const uploadData = new FormData();
-      uploadData.append("file", file);
-
-      // 1. Upload to Cloudinary in background
-      const uploadRes = await api.post(`/upload`, uploadData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-
-      const imageUrl = uploadRes.data.url;
-
-      // 2. Send Image Message via WhatsApp
-      const res = await axios.post(`${API_BASE}/messages/send-image`, {
-        to: selectedChat.phone,
-        imageUrl: imageUrl,
-        caption: optimisticMsg.body
-      }, config);
-
-      // 3. Replace Temp Message with Real Message
-      setMessages(prev => prev.map(m => m._id === tempId ? res.data.message : m));
-      
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    } catch (err) {
-      console.error("Error uploading/sending image:", err);
-      // Mark as failed in UI
-      setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
-      alert("Failed to send image: " + (err.response?.data?.error || err.message));
-    } finally {
-      setIsUploading(false);
-    }
+    setPendingImage({ file, previewUrl });
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleUpdateStatus = async (status, fTime = null) => {
@@ -763,7 +829,7 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
       // Update local state instead of full fetch
-      setConversations(prev => prev.map(c => 
+      setConversations(prev => prev.map(c =>
         c.phone === selectedChat.phone ? { ...c, status, followUpTime: status.toLowerCase().includes("follow") ? fTime : null } : c
       ));
       setShowFollowUpModal(false);
@@ -836,7 +902,7 @@ const ChatModule = () => {
       alert("Error deleting timeline: " + err.message);
     }
   };
-  
+
   const handleTemplateImageUpload = async (e, key) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -990,7 +1056,11 @@ const ChatModule = () => {
   };
 
   const filteredConversations = useMemo(() => {
+    const seen = new Set();
     return conversations.filter(c => {
+      if (!c?._id || seen.has(c._id)) return false;
+      seen.add(c._id);
+      
       // ALWAYS include the currently open chat in the sidebar
       if (c._id === chatId) return true;
 
@@ -1012,7 +1082,7 @@ const ChatModule = () => {
           if (c.assignedTo) return false;
         } else if (assignedId !== userFilter) return false;
       }
-      
+
       // Sector Filter
       if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
 
@@ -1119,8 +1189,8 @@ const ChatModule = () => {
           {/* New Prominent Account Selector */}
           <div style={{ marginTop: "12px", background: "#ffffff", padding: "8px", borderRadius: "10px", border: "1px solid #e9edef" }}>
             <p style={{ fontSize: "0.65rem", color: "#667781", fontWeight: "bold", margin: "0 0 4px 4px", textTransform: "uppercase" }}>Active Number</p>
-            <select 
-              value={activeAccount?._id || ""} 
+            <select
+              value={activeAccount?._id || ""}
               onChange={(e) => {
                 const acc = accounts.find(a => a._id === e.target.value);
                 if (acc) switchAccount(acc);
@@ -1132,7 +1202,7 @@ const ChatModule = () => {
               ))}
             </select>
           </div>
-          
+
           {/* Global View Toggle Button */}
           <button
             onClick={() => {
@@ -1163,14 +1233,14 @@ const ChatModule = () => {
           </button>
 
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-            <button 
+            <button
               onClick={() => setFilter("all")}
-              style={{ 
-                padding: "6px 16px", 
-                borderRadius: "20px", 
-                background: filter === "all" ? "#e7fce3" : "#ffffff", 
-                color: filter === "all" ? "#008069" : "#667781", 
-                fontSize: "0.8rem", 
+              style={{
+                padding: "6px 16px",
+                borderRadius: "20px",
+                background: filter === "all" ? "#e7fce3" : "#ffffff",
+                color: filter === "all" ? "#008069" : "#667781",
+                fontSize: "0.8rem",
                 cursor: "pointer",
                 fontWeight: "600",
                 border: filter === "all" ? "1px solid #00a884" : "1px solid #e9edef"
@@ -1178,14 +1248,14 @@ const ChatModule = () => {
             >
               All
             </button>
-            <button 
+            <button
               onClick={() => setFilter("unread")}
-              style={{ 
-                padding: "6px 16px", 
-                borderRadius: "20px", 
-                background: filter === "unread" ? "#e7fce3" : "#ffffff", 
-                color: filter === "unread" ? "#008069" : "#667781", 
-                fontSize: "0.8rem", 
+              style={{
+                padding: "6px 16px",
+                borderRadius: "20px",
+                background: filter === "unread" ? "#e7fce3" : "#ffffff",
+                color: filter === "unread" ? "#008069" : "#667781",
+                fontSize: "0.8rem",
                 cursor: "pointer",
                 fontWeight: "600",
                 border: filter === "unread" ? "1px solid #00a884" : "1px solid #e9edef",
@@ -1196,14 +1266,14 @@ const ChatModule = () => {
             >
               Unread {unreadCountTotal > 0 && <span style={{ background: "#00a884", color: "#ffffff", borderRadius: "50%", padding: "1px 6px", fontSize: "0.7rem", fontWeight: "bold" }}>{unreadCountTotal}</span>}
             </button>
-            <button 
+            <button
               onClick={() => setFilter("window")}
-              style={{ 
-                padding: "6px 16px", 
-                borderRadius: "20px", 
-                background: filter === "window" ? "#e7fce3" : "#ffffff", 
-                color: filter === "window" ? "#008069" : "#667781", 
-                fontSize: "0.8rem", 
+              style={{
+                padding: "6px 16px",
+                borderRadius: "20px",
+                background: filter === "window" ? "#e7fce3" : "#ffffff",
+                color: filter === "window" ? "#008069" : "#667781",
+                fontSize: "0.8rem",
                 cursor: "pointer",
                 fontWeight: "600",
                 border: filter === "window" ? "1px solid #00a884" : "1px solid #e9edef",
@@ -1218,19 +1288,19 @@ const ChatModule = () => {
 
           {/* Filter Section - Compact One-Line Slider */}
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", padding: "0 4px" }}>
-            <div 
+            <div
               id="sidebar-filter-slider"
-              style={{ 
-                display: "flex", 
-                gap: "8px", 
-                overflowX: "auto", 
-                scrollbarWidth: "none", 
+              style={{
+                display: "flex",
+                gap: "8px",
+                overflowX: "auto",
+                scrollbarWidth: "none",
                 msOverflowStyle: "none",
                 flex: 1,
                 padding: "4px 0"
               }}
             >
-              <select 
+              <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
@@ -1243,7 +1313,7 @@ const ChatModule = () => {
 
               {currentUser.role !== "Executive" && (
                 <>
-                  <select 
+                  <select
                     value={userFilter}
                     onChange={(e) => setUserFilter(e.target.value)}
                     style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
@@ -1254,7 +1324,7 @@ const ChatModule = () => {
                     ))}
                   </select>
 
-                  <select 
+                  <select
                     value={sectorFilter}
                     onChange={(e) => setSectorFilter(e.target.value)}
                     style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
@@ -1269,18 +1339,29 @@ const ChatModule = () => {
             </div>
 
             {/* Unified Manage Button */}
-            <button 
+            <button
               onClick={() => setShowManageModal(true)}
-              style={{ background: "#00a884", color: "white", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+              style={{ background: "#f0f2f5", color: "#54656f", border: "1px solid #e9edef", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}
               title="Add Status or Sector"
             >
-              <Plus size={18} />
+              <Plus size={14} />
             </button>
+
+            {/* Keyword Rules Button */}
+            {currentUser?.role === "Admin" && (
+              <button
+                onClick={() => setShowKeywordModal(true)}
+                style={{ background: "#00a884", color: "white", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
+                title="Keyword Automations"
+              >
+                <Key size={14} />
+              </button>
+            )}
           </div>
         </div>
 
-        <div 
-          className="chat-scroll" 
+        <div
+          className="chat-scroll"
           onScroll={handleSidebarScroll}
           style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "block", background: "white" }}
         >
@@ -1291,12 +1372,12 @@ const ChatModule = () => {
                 key={chat._id}
                 className={`chat-item ${isActive ? "active" : ""}`}
                 onClick={() => navigate(`/chats/${chat._id}`)}
-                style={{ 
-                  padding: "12px 16px", 
-                  cursor: "pointer", 
-                  display: "flex", 
-                  gap: "14px", 
-                  alignItems: "center", 
+                style={{
+                  padding: "12px 16px",
+                  cursor: "pointer",
+                  display: "flex",
+                  gap: "14px",
+                  alignItems: "center",
                   background: isActive ? "#f0f2f5" : "transparent",
                   borderBottom: "1px solid #f5f6f6",
                   transition: "background 0.2s"
@@ -1304,14 +1385,14 @@ const ChatModule = () => {
                 onMouseOver={e => !isActive && (e.currentTarget.style.background = "#f5f6f6")}
                 onMouseOut={e => !isActive && (e.currentTarget.style.background = "transparent")}
               >
-                <div style={{ 
-                  width: "48px", 
-                  height: "48px", 
-                  borderRadius: "50%", 
-                  background: isActive ? "#d1d7db" : "#dfe5e7", 
-                  display: "flex", 
-                  alignItems: "center", 
-                  justifyContent: "center", 
+                <div style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: isActive ? "#d1d7db" : "#dfe5e7",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                   color: "#54656f",
                   fontWeight: "700",
                   fontSize: "1.1rem",
@@ -1336,25 +1417,25 @@ const ChatModule = () => {
                     </div>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <p style={{ 
-                      fontSize: "0.85rem", 
-                      color: "#667781", 
-                      margin: 0, 
-                      whiteSpace: "nowrap", 
-                      overflow: "hidden", 
-                      textOverflow: "ellipsis", 
+                    <p style={{
+                      fontSize: "0.85rem",
+                      color: "#667781",
+                      margin: 0,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                       flex: 1,
                       fontWeight: chat.unreadCount > 0 ? "700" : "400"
                     }}>
                       {chat.lastMessage || "No messages"}
                     </p>
                     {chat.unreadCount > 0 && (
-                      <span style={{ 
-                        background: "#25d366", 
-                        color: "white", 
-                        borderRadius: "50%", 
-                        padding: "2px 6px", 
-                        fontSize: "0.75rem", 
+                      <span style={{
+                        background: "#25d366",
+                        color: "white",
+                        borderRadius: "50%",
+                        padding: "2px 6px",
+                        fontSize: "0.75rem",
                         fontWeight: "800",
                         minWidth: "20px",
                         height: "20px",
@@ -1379,7 +1460,7 @@ const ChatModule = () => {
         {selectedChat ? (
           <>
             <div style={{ padding: "8px 16px", background: "#f0f2f5", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "52px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-              <div 
+              <div
                 style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
                 onClick={() => setShowContactInfo(!showContactInfo)}
               >
@@ -1409,7 +1490,7 @@ const ChatModule = () => {
               </div>
             </div>
 
-            <div 
+            <div
               ref={scrollRef}
               className="chat-scroll"
               onScroll={handleMessageScroll}
@@ -1423,11 +1504,11 @@ const ChatModule = () => {
                       {formatDateLabel(date)}
                     </div>
                   </div>
-                  {msgs.map((msg) => (
+                  {msgs.map((msg, idx) => (
                     <div
-                      key={msg._id}
+                      key={msg._id || `temp-${idx}`}
                       className={`msg-bubble ${msg.direction === "outbound" ? "msg-outbound" : "msg-inbound"}`}
-                      style={{ 
+                      style={{
                         opacity: msg.status === "sending" ? 0.6 : 1,
                         position: "relative"
                       }}
@@ -1441,14 +1522,14 @@ const ChatModule = () => {
                         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                           {/* Image rendering if available */}
                           {msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link && (
-                            <img 
-                              src={getProxiedUrl(msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link, msg.whatsappAccountId)} 
-                              alt="Template" 
-                              style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }} 
+                            <img
+                              src={getProxiedUrl(msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link, msg.whatsappAccountId)}
+                              alt="Template"
+                              style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }}
                             />
                           )}
-                          
-                          <div 
+
+                          <div
                             style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
                             dangerouslySetInnerHTML={{
                               __html: (() => {
@@ -1456,7 +1537,7 @@ const ChatModule = () => {
                                 let text = template?.components.find(c => c.type === "BODY")?.text || msg.body;
                                 const params = msg.templateData.components.find(c => c.type === "body")?.parameters || [];
                                 params.forEach((p, i) => {
-                                  text = text.replace(`{{${i+1}}}`, p.text || "");
+                                  text = text.replace(`{{${i + 1}}}`, p.text || "");
                                 });
                                 return formatWhatsAppText(text);
                               })()
@@ -1475,23 +1556,23 @@ const ChatModule = () => {
                           {msg.mediaUrl && (
                             <div style={{ marginBottom: "5px" }}>
                               {msg.type === "image" ? (
-                                <img 
-                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} 
-                                  alt="Received" 
-                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }} 
+                                <img
+                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
+                                  alt="Received"
+                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }}
                                   onDoubleClick={() => window.open(getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId), "_blank")}
                                 />
                               ) : msg.type === "video" ? (
-                                <video 
-                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} 
-                                  controls 
-                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px" }} 
+                                <video
+                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
+                                  controls
+                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px" }}
                                 />
                               ) : msg.type === "audio" ? (
-                                <audio 
-                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} 
-                                  controls 
-                                  style={{ width: "100%" }} 
+                                <audio
+                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
+                                  controls
+                                  style={{ width: "100%" }}
                                 />
                               ) : (
                                 <div style={{ background: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
@@ -1504,7 +1585,7 @@ const ChatModule = () => {
                               )}
                             </div>
                           )}
-                          <div 
+                          <div
                             style={{ whiteSpace: "pre-wrap" }}
                             dangerouslySetInnerHTML={{ __html: formatWhatsAppText(msg.body) }}
                           />
@@ -1540,96 +1621,224 @@ const ChatModule = () => {
             </div>
 
             {windowTimeLeft ? (
-              <form onSubmit={handleSend} style={{ padding: "10px 16px", background: "#f0f2f5", display: "flex", gap: "10px", alignItems: "center" }}>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleImageUpload} 
-                  accept="image/*" 
-                  style={{ display: "none" }} 
-                />
-                <button 
-                  type="button" 
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  style={{ background: "transparent", border: "none", color: "#667781", cursor: "pointer", padding: "5px" }}
-                >
-                  {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
-                </button>
+              <div style={{ background: "#f0f2f5", display: "flex", flexDirection: "column", position: "relative" }}>
                 
-                <textarea
-                  placeholder="Type a message"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend(e);
-                    }
-                    
-                    // Keyboard Shortcuts: Ctrl+B or Cmd+B for Bold
-                    if ((e.ctrlKey || e.metaKey) && e.key === "b") {
-                      e.preventDefault();
-                      const start = e.target.selectionStart;
-                      const end = e.target.selectionEnd;
-                      const text = newMessage;
-                      const selected = text.substring(start, end);
-                      const before = text.substring(0, start);
-                      const after = text.substring(end);
-                      setNewMessage(`${before}*${selected}*${after}`);
-                    }
-                    
-                    // Keyboard Shortcuts: Ctrl+I or Cmd+I for Italic
-                    if ((e.ctrlKey || e.metaKey) && e.key === "i") {
-                      e.preventDefault();
-                      const start = e.target.selectionStart;
-                      const end = e.target.selectionEnd;
-                      const text = newMessage;
-                      const selected = text.substring(start, end);
-                      const before = text.substring(0, start);
-                      const after = text.substring(end);
-                      setNewMessage(`${before}_${selected}_${after}`);
-                    }
+                {/* Emoji Picker Popover */}
+                {showEmojiPicker && (
+                  <div ref={emojiPickerRef} style={{ position: "absolute", bottom: "100%", left: "10px", background: "white", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px", boxShadow: "0 -4px 12px rgba(0,0,0,0.1)", width: "300px", zIndex: 1000 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", borderBottom: "1px solid #f0f2f5", paddingBottom: "5px" }}>
+                      <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#667781" }}>Emojis</span>
+                      <button onClick={() => setShowEmojiPicker(false)} style={{ background: "none", border: "none", color: "#667781", cursor: "pointer" }}><Plus size={18} style={{ transform: "rotate(45deg)" }} /></button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: "5px", maxHeight: "200px", overflowY: "auto" }}>
+                      {COMMON_EMOJIS.map(emoji => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => {
+                            setNewMessage(prev => prev + emoji);
+                          }}
+                          style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer", padding: "5px" }}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                    // Keyboard Shortcut: Ctrl+N for New Line
-                    if ((e.ctrlKey || e.metaKey) && e.key === "n") {
-                      e.preventDefault();
-                      const start = e.target.selectionStart;
-                      const end = e.target.selectionEnd;
-                      const text = newMessage;
-                      const before = text.substring(0, start);
-                      const after = text.substring(end);
-                      setNewMessage(`${before}\n${after}`);
-                    }
-                  }}
-                  rows="1"
-                  style={{ 
-                    flex: 1, 
-                    padding: "10px 12px", 
-                    background: "#ffffff", 
-                    border: "none", 
-                    color: "var(--text-primary)", 
-                    borderRadius: "8px", 
-                    outline: "none", 
-                    resize: "none",
-                    fontFamily: "inherit",
-                    fontSize: "0.9rem",
-                    lineHeight: "1.4",
-                    maxHeight: "100px",
-                    overflowY: "auto"
-                  }}
-                />
-                <button type="submit" style={{ background: "transparent", border: "none", color: "#00a884", cursor: "pointer", padding: "5px" }}>
-                  <Send size={24} />
-                </button>
-              </form>
+                {/* Quick Replies Popover */}
+                {showQuickReplies && (
+                  <div ref={quickRepliesRef} style={{ position: "absolute", bottom: "100%", left: "50px", background: "white", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px", boxShadow: "0 -4px 12px rgba(0,0,0,0.1)", width: "320px", maxHeight: "350px", overflowY: "auto", zIndex: 1000 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", borderBottom: "1px solid #f0f2f5", paddingBottom: "5px" }}>
+                      <h4 style={{ margin: 0, fontSize: "0.85rem", color: "#111b21" }}>Quick Replies</h4>
+                      <div style={{ display: "flex", gap: "10px" }}>
+                        <button onClick={() => setShowAddQuickReplyModal(true)} style={{ background: "#00a884", border: "none", color: "white", borderRadius: "4px", padding: "2px 8px", fontSize: "0.75rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}><Plus size={12} /> Add</button>
+                        <button onClick={() => setShowQuickReplies(false)} style={{ background: "none", border: "none", color: "#667781", cursor: "pointer" }}><Plus size={18} style={{ transform: "rotate(45deg)" }} /></button>
+                      </div>
+                    </div>
+                    {quickReplies.length === 0 ? (
+                      <p style={{ fontSize: "0.8rem", color: "#8696a0" }}>No quick replies found. You can add them to send Image + Text quickly.</p>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {quickReplies.map(p => (
+                          <button
+                            key={p._id}
+                            type="button"
+                            onClick={async () => {
+                              // If it has media, fetch/set it
+                              if (p.mediaUrl) {
+                                try {
+                                  // Clear any existing pending image
+                                  setPendingImage(null);
+                                  
+                                  // We can't directly use URL.createObjectURL on a remote URL easily without fetching
+                                  // So for now, we just set the mediaUrl and Type
+                                  // BUT the handleSend expects a 'file' object. 
+                                  // Let's modify handleSend later to accept either file or mediaUrl.
+                                  // FOR NOW: We'll set a special pending state
+                                  setPendingImage({ 
+                                    previewUrl: p.mediaUrl,
+                                    remoteUrl: p.mediaUrl, 
+                                    isRemote: true 
+                                  });
+                                } catch (err) {
+                                  console.error("Error loading quick reply media:", err);
+                                }
+                              }
+                              
+                              setNewMessage(p.content || "");
+                              setShowQuickReplies(false);
+                            }}
+                            style={{ textAlign: "left", background: "#f8f9fa", border: "1px solid #e9edef", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", display: "flex", gap: "10px", alignItems: "center" }}
+                          >
+                            {p.mediaUrl && (
+                              <img src={p.mediaUrl} alt="" style={{ width: "40px", height: "40px", borderRadius: "4px", objectFit: "cover" }} />
+                            )}
+                            <div style={{ flex: 1, overflow: "hidden" }}>
+                              <span style={{ fontWeight: "600", display: "block", fontSize: "0.85rem", color: "#111b21" }}>{p.name}</span>
+                              <span style={{ fontSize: "0.75rem", color: "#667781", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{p.content || "Image only"}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Image Preview Area */}
+                {pendingImage && (
+                  <div style={{ padding: "10px 16px", background: "#f0f2f5", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "15px" }}>
+                    <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "10px", overflow: "hidden", border: "2px solid #00a884", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
+                      <img src={pendingImage.previewUrl} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      <button
+                        onClick={() => setPendingImage(null)}
+                        style={{ position: "absolute", top: "2px", right: "2px", background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: "18px", height: "18px", cursor: "pointer", fontSize: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                      >✕</button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "700", color: "#111b21" }}>Image selected</p>
+                      <p style={{ margin: 0, fontSize: "0.75rem", color: "#667781" }}>Type a caption below and press send</p>
+                    </div>
+                  </div>
+                )}
+                <form onSubmit={handleSend} style={{ padding: "10px 16px", display: "flex", gap: "10px", alignItems: "center" }}>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                    accept="image/*"
+                    style={{ display: "none" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    style={{ background: "transparent", border: "none", color: "#667781", cursor: "pointer", padding: "5px" }}
+                  >
+                    {isUploading ? <Loader2 size={24} className="animate-spin" /> : <Paperclip size={24} />}
+                  </button>
+
+                  {/* Emoji Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEmojiPicker(!showEmojiPicker);
+                      setShowQuickReplies(false);
+                    }}
+                    style={{ background: "transparent", border: "none", color: showEmojiPicker ? "#00a884" : "#667781", cursor: "pointer", padding: "5px" }}
+                    title="Emojis"
+                  >
+                    <Smile size={24} />
+                  </button>
+
+                  {/* Quick Replies Button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickReplies(!showQuickReplies);
+                      setShowEmojiPicker(false);
+                    }}
+                    style={{ background: "transparent", border: "none", color: showQuickReplies ? "#00a884" : "#667781", cursor: "pointer", padding: "5px" }}
+                    title="Quick Replies"
+                  >
+                    <Zap size={24} />
+                  </button>
+
+                  <textarea
+                    placeholder={pendingImage ? "Add a caption..." : "Type a message"}
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend(e);
+                      }
+
+                      // Keyboard Shortcuts: Ctrl+B or Cmd+B for Bold
+                      if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+                        e.preventDefault();
+                        const start = e.target.selectionStart;
+                        const end = e.target.selectionEnd;
+                        const text = newMessage;
+                        const selected = text.substring(start, end);
+                        const before = text.substring(0, start);
+                        const after = text.substring(end);
+                        setNewMessage(`${before}*${selected}*${after}`);
+                      }
+
+                      // Keyboard Shortcuts: Ctrl+I or Cmd+I for Italic
+                      if ((e.ctrlKey || e.metaKey) && e.key === "i") {
+                        e.preventDefault();
+                        const start = e.target.selectionStart;
+                        const end = e.target.selectionEnd;
+                        const text = newMessage;
+                        const selected = text.substring(start, end);
+                        const before = text.substring(0, start);
+                        const after = text.substring(end);
+                        setNewMessage(`${before}_${selected}_${after}`);
+                      }
+
+                      // Keyboard Shortcut: Ctrl+N for New Line
+                      if ((e.ctrlKey || e.metaKey) && e.key === "n") {
+                        e.preventDefault();
+                        const start = e.target.selectionStart;
+                        const end = e.target.selectionEnd;
+                        const text = newMessage;
+                        const before = text.substring(0, start);
+                        const after = text.substring(end);
+                        setNewMessage(`${before}\n${after}`);
+                      }
+                    }}
+                    rows="1"
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      background: "#ffffff",
+                      border: "none",
+                      color: "var(--text-primary)",
+                      borderRadius: "8px",
+                      outline: "none",
+                      resize: "none",
+                      fontFamily: "inherit",
+                      fontSize: "0.9rem",
+                      lineHeight: "1.4",
+                      maxHeight: "100px",
+                      overflowY: "auto"
+                    }}
+                  />
+                  <button type="submit" disabled={isUploading} style={{ background: "transparent", border: "none", color: isUploading ? "#cbd5e1" : "#00a884", cursor: isUploading ? "not-allowed" : "pointer", padding: "5px" }}>
+                    <Send size={24} />
+                  </button>
+                </form>
+              </div>
             ) : (
               <div style={{ padding: "15px 20px", background: "#f0f2f5", display: "flex", flexDirection: "column", alignItems: "center", borderTop: "1px solid rgba(0,0,0,0.05)" }}>
                 <p style={{ fontSize: "0.85rem", color: "#667781", margin: "0 0 10px 0", textAlign: "center" }}>
                   <Clock size={14} style={{ verticalAlign: "middle", marginRight: "5px" }} />
                   The 24-hour service window is closed. You can only send Template Messages.
                 </p>
-                <button 
+                <button
                   onClick={() => setShowTemplateModal(true)}
                   style={{ background: "#00a884", border: "none", color: "white", padding: "8px 24px", borderRadius: "20px", fontSize: "0.85rem", fontWeight: "700", cursor: "pointer" }}
                 >
@@ -1658,13 +1867,13 @@ const ChatModule = () => {
 
       {/* Contact Info Sidebar */}
       {showContactInfo && selectedChat && (
-        <div style={{ 
-          background: "white", 
-          borderLeft: "1px solid #e2e8f0", 
-          display: "flex", 
-          flexDirection: "column", 
-          width: "350px", 
-          height: "100%", 
+        <div style={{
+          background: "white",
+          borderLeft: "1px solid #e2e8f0",
+          display: "flex",
+          flexDirection: "column",
+          width: "350px",
+          height: "100%",
           position: "relative",
           animation: "slideInRight 0.3s ease",
           zIndex: 50,
@@ -1675,22 +1884,22 @@ const ChatModule = () => {
             <button onClick={() => setShowContactInfo(false)} style={{ background: "transparent", border: "none", color: "#64748b", cursor: "pointer", fontSize: "1.2rem" }}>✕</button>
             <span style={{ color: "#1e293b", fontSize: "0.95rem", fontWeight: "700" }}>Contact Details</span>
           </div>
-          
+
           <div className="chat-scroll" style={{ flex: 1, overflowY: "scroll", overflowX: "hidden", padding: "24px", display: "flex", flexDirection: "column" }}>
             {/* Profile Header */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "30px" }}>
-              <div style={{ 
-                width: "110px", 
-                height: "110px", 
-                borderRadius: "35px", 
-                background: "linear-gradient(135deg, #00a884, #05cd99)", 
-                display: "flex", 
-                alignItems: "center", 
-                justifyContent: "center", 
-                color: "white", 
-                fontSize: "3rem", 
-                fontWeight: "800", 
-                marginBottom: "15px", 
+              <div style={{
+                width: "110px",
+                height: "110px",
+                borderRadius: "35px",
+                background: "linear-gradient(135deg, #00a884, #05cd99)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "white",
+                fontSize: "3rem",
+                fontWeight: "800",
+                marginBottom: "15px",
                 boxShadow: "0 10px 30px rgba(0,168,132,0.25)",
                 textShadow: "0 2px 4px rgba(0,0,0,0.1)"
               }}>
@@ -1702,20 +1911,20 @@ const ChatModule = () => {
               <p style={{ textAlign: "center", color: "#64748b", margin: "4px 0 15px 0", fontSize: "0.95rem", fontWeight: "600" }}>
                 {selectedChat.phone}
               </p>
-              
-              <button 
+
+              <button
                 onClick={() => {
                   setShowTimelineModal(true);
                   fetchTimelineEntries(activeContact?._id);
                 }}
-                style={{ 
-                  background: "rgba(0, 168, 132, 0.08)", 
-                  color: "#00a884", 
-                  border: "1.5px solid rgba(0, 168, 132, 0.2)", 
-                  borderRadius: "25px", 
-                  padding: "10px 24px", 
-                  fontSize: "0.85rem", 
-                  fontWeight: "700", 
+                style={{
+                  background: "rgba(0, 168, 132, 0.08)",
+                  color: "#00a884",
+                  border: "1.5px solid rgba(0, 168, 132, 0.2)",
+                  borderRadius: "25px",
+                  padding: "10px 24px",
+                  fontSize: "0.85rem",
+                  fontWeight: "700",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -1732,11 +1941,11 @@ const ChatModule = () => {
             {/* Basic Info Section */}
             <div style={{ marginBottom: "30px", background: "#f8fafc", borderRadius: "20px", padding: "20px", border: "1px solid #f1f5f9" }}>
               <p style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "16px", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>Status & Team</p>
-              
+
               <div style={{ marginBottom: "16px" }}>
                 <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Lead Status</label>
                 <div style={{ position: "relative" }}>
-                  <select 
+                  <select
                     style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
                     value={selectedChat.status || "New"}
                     onChange={(e) => handleUpdateStatus(e.target.value)}
@@ -1760,7 +1969,7 @@ const ChatModule = () => {
               <div style={{ marginBottom: "16px" }}>
                 <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Sector</label>
                 <div style={{ position: "relative" }}>
-                  <select 
+                  <select
                     style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
                     value={selectedChat.sector || "Unassigned"}
                     onChange={(e) => handleAssign(undefined, e.target.value)}
@@ -1779,7 +1988,7 @@ const ChatModule = () => {
                 <div style={{ position: "relative" }}>
                   {currentUser.role !== "Executive" ? (
                     <>
-                      <select 
+                      <select
                         style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
                         value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
                         onChange={(e) => handleAssign(e.target.value, undefined)}
@@ -1806,18 +2015,18 @@ const ChatModule = () => {
                 <p style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px", margin: 0 }}>Lead Intelligence</p>
                 <div style={{ height: "1px", flex: 1, background: "#e2e8f0", marginLeft: "12px" }}></div>
               </div>
-              
+
               <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                 {customFieldsDef.length === 0 ? (
                   <p style={{ fontSize: "0.8rem", color: "#94a3b8", textAlign: "center", fontStyle: "italic", background: "#f8fafc", padding: "20px", borderRadius: "15px" }}>No custom attributes found.</p>
                 ) : (
                   customFieldsDef.map(field => (
-                    <div key={field._id} style={{ 
-                      background: "#ffffff", 
-                      borderRadius: "16px", 
-                      padding: "16px", 
-                      border: "1.5px solid #e2e8f0", 
-                      position: "relative", 
+                    <div key={field._id} style={{
+                      background: "#ffffff",
+                      borderRadius: "16px",
+                      padding: "16px",
+                      border: "1.5px solid #e2e8f0",
+                      position: "relative",
                       transition: "all 0.3s ease",
                       boxShadow: isUpdatingField === field.name ? "0 4px 12px rgba(0,0,0,0.05)" : "none",
                       borderColor: isUpdatingField === field.name ? "#00a884" : "#e2e8f0"
@@ -1830,10 +2039,10 @@ const ChatModule = () => {
                           <Pencil size={11} color="#cbd5e1" />
                         )}
                       </div>
-                      
+
                       {field.type === "SELECT" ? (
                         <div style={{ position: "relative" }}>
-                          <select 
+                          <select
                             style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none", cursor: "pointer", appearance: "none" }}
                             value={activeContact?.customFields?.[field.name] || ""}
                             onChange={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
@@ -1846,7 +2055,7 @@ const ChatModule = () => {
                         </div>
                       ) : field.type === "COMBOBOX" ? (
                         <div style={{ position: "relative" }}>
-                          <input 
+                          <input
                             list={`list-${field._id}`}
                             style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none" }}
                             value={activeContact?.customFields?.[field.name] || ""}
@@ -1868,7 +2077,7 @@ const ChatModule = () => {
                           <ChevronDown size={14} style={{ position: "absolute", right: "0", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
                         </div>
                       ) : (
-                        <input 
+                        <input
                           type="text"
                           style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none" }}
                           placeholder={field.type === "DATE" ? "DD/MM/YYYY" : `Enter ${field.label.toLowerCase()}...`}
@@ -1892,7 +2101,7 @@ const ChatModule = () => {
             </div>
 
             <div style={{ marginTop: "auto", paddingTop: "20px" }}>
-              <button 
+              <button
                 onClick={() => alert("Notes feature coming soon!")}
                 style={{ width: "100%", padding: "12px", background: "#fff1f2", border: "1px solid #fee2e2", color: "#e11d48", borderRadius: "10px", cursor: "pointer", fontSize: "0.85rem", fontWeight: "700", transition: "all 0.2s" }}
                 onMouseOver={e => e.currentTarget.style.background = "#ffe4e6"}
@@ -1907,14 +2116,14 @@ const ChatModule = () => {
 
       {showTimelineModal && (
         <div style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", background: "rgba(11, 20, 26, 0.7)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, animation: "fadeIn 0.2s ease" }}>
-          <div style={{ 
-            background: "#ffffff", 
-            width: "550px", 
-            maxHeight: "85vh", 
-            display: "flex", 
-            flexDirection: "column", 
-            borderRadius: "28px", 
-            boxShadow: "0 25px 60px rgba(0,0,0,0.2)", 
+          <div style={{
+            background: "#ffffff",
+            width: "550px",
+            maxHeight: "85vh",
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: "28px",
+            boxShadow: "0 25px 60px rgba(0,0,0,0.2)",
             overflow: "hidden"
           }}>
             {/* Header */}
@@ -1928,8 +2137,8 @@ const ChatModule = () => {
                   <p style={{ margin: "2px 0 0 0", fontSize: "0.75rem", opacity: 0.85, fontWeight: "500" }}>Logging updates for {selectedChat?.contact?.name || selectedChat?.phone}</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setShowTimelineModal(false)} 
+              <button
+                onClick={() => setShowTimelineModal(false)}
                 style={{ position: "absolute", top: "24px", right: "24px", background: "rgba(0,0,0,0.1)", border: "none", width: "32px", height: "32px", borderRadius: "50%", color: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
               >✕</button>
             </div>
@@ -1945,16 +2154,16 @@ const ChatModule = () => {
                   onChange={(e) => setNewTimelineContent(e.target.value)}
                 />
                 <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "12px" }}>
-                  <button 
+                  <button
                     onClick={handleAddTimeline}
                     disabled={!newTimelineContent.trim()}
-                    style={{ 
-                      padding: "8px 24px", 
-                      background: "#00a884", 
-                      color: "white", 
-                      border: "none", 
-                      borderRadius: "10px", 
-                      fontWeight: "700", 
+                    style={{
+                      padding: "8px 24px",
+                      background: "#00a884",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "10px",
+                      fontWeight: "700",
                       fontSize: "0.85rem",
                       cursor: newTimelineContent.trim() ? "pointer" : "not-allowed",
                       boxShadow: "0 4px 10px rgba(0, 168, 132, 0.2)"
@@ -1985,7 +2194,7 @@ const ChatModule = () => {
                       <div key={entry._id} style={{ position: "relative" }}>
                         {/* Dot */}
                         <div style={{ position: "absolute", left: "-30px", top: "4px", width: "16px", height: "16px", borderRadius: "50%", background: "#ffffff", border: "3px solid #00a884", zIndex: 1 }}></div>
-                        
+
                         <div style={{ background: "#ffffff", padding: "16px", borderRadius: "18px", border: "1px solid #f1f5f9", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                             <div>
@@ -2159,11 +2368,11 @@ const ChatModule = () => {
         <div className="modal-overlay" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, backdropFilter: "blur(5px)" }}>
           <div className="glass-card" style={{ width: "400px", padding: "2rem", position: "relative" }}>
             <h3 style={{ marginBottom: "1.5rem" }}>Manage Statuses</h3>
-            
+
             <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
-              <input 
-                type="text" 
-                placeholder="New Status Name..." 
+              <input
+                type="text"
+                placeholder="New Status Name..."
                 value={newStatusName}
                 onChange={(e) => setNewStatusName(e.target.value)}
                 style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
@@ -2194,7 +2403,7 @@ const ChatModule = () => {
           <div className="glass-card" style={{ width: "450px", padding: "2rem", position: "relative" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
               <h3 style={{ margin: 0 }}>Global Management</h3>
-              <select 
+              <select
                 value={manageType}
                 onChange={(e) => setManageType(e.target.value)}
                 style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "0.9rem", fontWeight: "600", background: "#f0f2f5" }}
@@ -2203,13 +2412,13 @@ const ChatModule = () => {
                 <option value="sector">Manage Sectors</option>
               </select>
             </div>
-            
+
             {manageType === "status" ? (
               <>
                 <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
-                  <input 
-                    type="text" 
-                    placeholder="New Status Name..." 
+                  <input
+                    type="text"
+                    placeholder="New Status Name..."
                     value={newStatusName}
                     onChange={(e) => setNewStatusName(e.target.value)}
                     style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
@@ -2235,9 +2444,9 @@ const ChatModule = () => {
             ) : (
               <>
                 <div style={{ display: "flex", gap: "10px", marginBottom: "1.5rem" }}>
-                  <input 
-                    type="text" 
-                    placeholder="New Sector Name..." 
+                  <input
+                    type="text"
+                    placeholder="New Sector Name..."
                     value={newSectorName}
                     onChange={(e) => setNewSectorName(e.target.value)}
                     style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
@@ -2268,11 +2477,11 @@ const ChatModule = () => {
           <div className="glass-card" style={{ width: "400px", padding: "2rem" }}>
             <h3 style={{ marginBottom: "1rem" }}>Set Follow-up Reminder</h3>
             <p style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "1.5rem" }}>When should we remind you to follow up with this lead?</p>
-            
+
             <div style={{ marginBottom: "1.5rem" }}>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "800", color: "#94a3b8", marginBottom: "8px" }}>DATE</label>
-              <input 
-                type="date" 
+              <input
+                type="date"
                 value={followUpDate}
                 onChange={(e) => setFollowUpDate(e.target.value)}
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1.5px solid #e2e8f0" }}
@@ -2281,8 +2490,8 @@ const ChatModule = () => {
 
             <div style={{ marginBottom: "2rem" }}>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "800", color: "#94a3b8", marginBottom: "8px" }}>TIME</label>
-              <input 
-                type="time" 
+              <input
+                type="time"
                 value={followUpTime}
                 onChange={(e) => setFollowUpTime(e.target.value)}
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1.5px solid #e2e8f0" }}
@@ -2308,9 +2517,9 @@ const ChatModule = () => {
               </div>
               <h4 style={{ margin: "0 0 5px 0", fontSize: "1rem" }}>{rem.contact?.name || rem.phone}</h4>
               <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748b" }}>Status: {rem.status}</p>
-              
+
               <div style={{ marginTop: "15px", display: "flex", gap: "10px" }}>
-                <button 
+                <button
                   onClick={() => {
                     navigate(`/chats/${rem._id}`);
                     setActiveReminders(prev => prev.filter(r => r._id !== rem._id));
@@ -2319,7 +2528,7 @@ const ChatModule = () => {
                 >
                   Go to Chat
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     setActiveReminders(prev => prev.filter(r => r._id !== rem._id));
                   }}
@@ -2330,6 +2539,136 @@ const ChatModule = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Keyword Automation Modal */}
+      <KeywordRuleModal 
+        isOpen={showKeywordModal} 
+        onClose={() => setShowKeywordModal(false)}
+        users={executives}
+        statusOptions={customStatuses}
+      />
+      {/* Add Quick Reply Modal */}
+      {showAddQuickReplyModal && (
+        <div className="modal-overlay" style={{ zIndex: 10001 }}>
+          <div className="modal-content" style={{ width: "450px", padding: "30px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.2rem", color: "#111b21" }}>Add Quick Reply</h3>
+              <button onClick={() => setShowAddQuickReplyModal(false)} style={{ background: "none", border: "none", color: "#667781", cursor: "pointer" }}><Plus size={24} style={{ transform: "rotate(45deg)" }} /></button>
+            </div>
+            
+            <form onSubmit={handleCreateQuickReply}>
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", color: "#667781", marginBottom: "5px" }}>NAME / LABEL</label>
+                <input 
+                  type="text" 
+                  placeholder="e.g. Welcome Message"
+                  value={newQR.name}
+                  onChange={e => setNewQR({...newQR, name: e.target.value})}
+                  required
+                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
+                />
+              </div>
+
+              <div style={{ marginBottom: "15px" }}>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", color: "#667781", marginBottom: "5px" }}>IMAGE (OPTIONAL)</label>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  {newQR.preview && (
+                    <img src={newQR.preview} alt="Preview" style={{ width: "60px", height: "60px", borderRadius: "8px", objectFit: "cover", border: "1px solid #e2e8f0" }} />
+                  )}
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={e => {
+                      const file = e.target.files[0];
+                      if(file) {
+                        setNewQR({...newQR, file, preview: URL.createObjectURL(file)});
+                      }
+                    }}
+                    style={{ fontSize: "0.8rem" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginBottom: "20px" }}>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", color: "#667781", marginBottom: "5px" }}>MESSAGE TEXT</label>
+                
+                {/* Formatting Toolbar */}
+                <div style={{ display: "flex", gap: "5px", marginBottom: "5px", background: "#f8f9fa", padding: "5px", borderRadius: "5px" }}>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const textarea = document.getElementById("qr-content-area");
+                      if (!textarea) return;
+                      const start = textarea.selectionStart;
+                      const end = textarea.selectionEnd;
+                      const text = newQR.content;
+                      const selected = text.substring(start, end);
+                      const before = text.substring(0, start);
+                      const after = text.substring(end);
+                      
+                      if (selected) {
+                        setNewQR({...newQR, content: `${before}*${selected}*${after}`});
+                      } else {
+                        setNewQR({...newQR, content: text + "*bold* "});
+                      }
+                    }} 
+                    style={{ padding: "2px 12px", fontSize: "0.85rem", fontWeight: "bold", border: "1px solid #e2e8f0", background: "white", borderRadius: "4px", cursor: "pointer" }}
+                  >B</button>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const textarea = document.getElementById("qr-content-area");
+                      if (!textarea) return;
+                      const start = textarea.selectionStart;
+                      const end = textarea.selectionEnd;
+                      const text = newQR.content || "";
+                      const selected = text.substring(start, end);
+                      const before = text.substring(0, start);
+                      const after = text.substring(end);
+                      
+                      if (selected) {
+                        setNewQR({...newQR, content: `${before}_${selected}_${after}`});
+                      } else {
+                        setNewQR({...newQR, content: text + "_italic_ "});
+                      }
+                    }} 
+                    style={{ padding: "2px 12px", fontSize: "0.85rem", fontStyle: "italic", border: "1px solid #e2e8f0", background: "white", borderRadius: "4px", cursor: "pointer" }}
+                  >I</button>
+                  <button type="button" onClick={() => setNewQR({...newQR, content: newQR.content + "\n"})} style={{ padding: "2px 8px", fontSize: "0.75rem", border: "1px solid #e2e8f0", background: "white", borderRadius: "4px", cursor: "pointer" }}>New Line ↵</button>
+                </div>
+
+                <textarea 
+                  id="qr-content-area"
+                  rows="5"
+                  placeholder="Type the message here... Use *bold* for Bold and _italic_ for Italic"
+                  value={newQR.content}
+                  onChange={e => setNewQR({...newQR, content: e.target.value})}
+                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none", resize: "none", fontSize: "0.9rem" }}
+                />
+
+                {/* Live Preview */}
+                {newQR.content && (
+                  <div style={{ marginTop: "10px", padding: "10px", background: "#dcf8c6", borderRadius: "8px", fontSize: "0.85rem", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.05)" }}>
+                    <p style={{ margin: "0 0 5px 0", fontSize: "0.65rem", fontWeight: "700", color: "#075e54", textTransform: "uppercase" }}>WhatsApp Preview</p>
+                    <div style={{ whiteSpace: "pre-wrap" }} dangerouslySetInnerHTML={{ __html: formatWhatsAppText(newQR.content) }} />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button type="button" onClick={() => setShowAddQuickReplyModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", background: "white", cursor: "pointer" }}>Cancel</button>
+                <button 
+                  type="submit" 
+                  disabled={isSavingQR || !newQR.name}
+                  style={{ flex: 2, padding: "12px", borderRadius: "8px", border: "none", background: "#00a884", color: "white", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+                >
+                  {isSavingQR ? <Loader2 size={20} className="animate-spin" /> : "Save Quick Reply"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
