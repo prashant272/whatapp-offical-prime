@@ -433,7 +433,11 @@ const CampaignManager = () => {
         return c;
       }));
     } catch (err) {
-      alert("Failed to update status");
+      if (err.response?.data?.error === "MISSING_PARAMETERS") {
+        alert(err.response.data.message);
+      } else {
+        alert("Failed to update status");
+      }
     }
   };
 

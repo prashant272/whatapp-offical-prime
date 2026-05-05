@@ -28,7 +28,8 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
 
   const initialSent = campaign.sentCount || 0;
   const initialFailed = campaign.failedCount || 0;
-  const initialLogs = campaign.logs || [];
+  let lastReportedSuccess = 0;
+  let lastReportedFailure = 0;
 
   try {
     await throttleCampaign(
@@ -37,6 +38,12 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
       template.name,
       sendTemplateMessage,
       async (currentSuccess, currentFailure, currentLogs, latestLog) => {
+        const deltaSuccess = currentSuccess - lastReportedSuccess;
+        const deltaFailure = currentFailure - lastReportedFailure;
+        
+        lastReportedSuccess = currentSuccess;
+        lastReportedFailure = currentFailure;
+
         if (latestLog && latestLog.status === "sent") {
           let messageBody = `Campaign [${campaign.name}]: ${template.name}`;
           
@@ -125,29 +132,38 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
         }
 
-        const totalSent = initialSent + currentSuccess;
-        const totalFailed = initialFailed + currentFailure;
+        const initialLogs = campaign.logs || [];
         const allLogs = [...initialLogs, ...currentLogs];
-        const isFinished = (totalSent + totalFailed) >= campaign.totalContacts;
+        const totalSentCount = initialSent + currentSuccess;
+        const totalFailedCount = initialFailed + currentFailure;
+        const isFinished = (totalSentCount + totalFailedCount) >= campaign.totalContacts;
         
-        const updateData = {
-          sentCount: totalSent,
-          failedCount: totalFailed,
-          logs: allLogs
-        };
-        if (isFinished) {
-          updateData.status = "COMPLETED";
-          updateData.completedAt = new Date();
-        }
+        // Use atomic increments to avoid race conditions with webhooks
+        const updatedCampaign = await Campaign.findByIdAndUpdate(
+          campaign._id,
+          {
+            $inc: { 
+              sentCount: deltaSuccess, 
+              failedCount: deltaFailure 
+            },
+            $set: { 
+              logs: allLogs,
+              status: isFinished ? "COMPLETED" : "RUNNING",
+              ...(isFinished ? { completedAt: new Date() } : {})
+            }
+          },
+          { new: true }
+        );
 
-        const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateData, { new: true });
         const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
+        const finalSent = updatedCampaign?.sentCount || totalSentCount;
+        const finalFailed = updatedCampaign?.failedCount || totalFailedCount;
 
         const io = getIO();
         io.emit("campaign_progress", {
           campaignId: campaign._id,
-          sentCount: totalSent,
-          failedCount: totalFailed,
+          sentCount: finalSent,
+          failedCount: finalFailed,
           status: currentStatus,
           logs: allLogs,
           whatsappAccountId: account._id
@@ -224,8 +240,32 @@ export const updateCampaignStatus = async (req, res) => {
     if (status === "RUNNING" && !activeThrottlers.has(id.toString())) {
       const account = await WhatsAppAccount.findById(campaign.whatsappAccountId);
       
-      const templateComponents = campaign.templateComponents || [];
+      let templateComponents = campaign.templateComponents || [];
 
+      // FALLBACK for old campaigns: Try to recover variables from a previous message
+      if (templateComponents.length === 0 || templateComponents.every(c => c.parameters && c.parameters.length === 0)) {
+        console.log(`🔍 Attempting to recover parameters for campaign: ${campaign.name}`);
+        const samplePhones = (campaign.logs || []).slice(0, 10).map(l => l.phone);
+        const prevMsg = await Message.findOne({ 
+          to: { $in: samplePhones },
+          whatsappAccountId: account._id,
+          type: "template",
+          "templateData.name": campaign.template?.name
+        }).sort({ createdAt: -1 });
+
+        if (prevMsg && prevMsg.templateData?.components?.length > 0) {
+          templateComponents = prevMsg.templateData.components;
+          campaign.templateComponents = templateComponents;
+          await campaign.save();
+        } else {
+          // Instead of empty fallback, return error so user can re-assign
+          return res.status(422).json({ 
+            error: "MISSING_PARAMETERS", 
+            message: "This old campaign is missing variable data. Please use the 'Re-campaign' button to restart it with correct variables." 
+          });
+        }
+      }
+      
       // Find remaining contacts (not in logs)
       const attemptedPhones = new Set(campaign.logs.map(l => l.phone));
       const remainingContacts = (campaign.contacts || []).filter(c => !attemptedPhones.has(c.phone));
