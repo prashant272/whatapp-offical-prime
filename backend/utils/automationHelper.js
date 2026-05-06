@@ -59,16 +59,20 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       let currentScore = 0;
       const keyword = ar.keyword.toLowerCase();
 
-      // 1. Check Exact or Contains (High weights)
+      // 1. Check Exact or Word Match
       if (text === keyword) {
         currentScore = 1.0;
-      } else if (text.includes(keyword)) {
-        currentScore = Math.max(0.8, keyword.length / text.length);
       } else {
-        // 2. Fuzzy Match
-        const words = text.split(/\s+/);
-        const wordScores = words.map(word => getSimilarity(word, keyword));
-        currentScore = Math.max(...wordScores);
+        // Only allow 'contains' if the keyword is a distinct word in the message
+        const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
+        if (wordRegex.test(text)) {
+          currentScore = 0.9;
+        } else {
+          // 2. Fuzzy Match (Levenshtein)
+          const words = text.split(/\s+/);
+          const wordScores = words.map(word => getSimilarity(word, keyword));
+          currentScore = Math.max(...wordScores);
+        }
       }
 
       if (currentScore > highestScore) {
@@ -77,14 +81,8 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       }
     }
 
-    // --- 1. IF ALREADY IN A FLOW, PROCESS THE STEP FIRST ---
-    if (contact && contact.activeFlowId) {
-      console.log(`🔄 Processing active flow step for ${phone}`);
-      const flowResult = await processDynamicFlow(account, phone, text, contact);
-      if (flowResult) return true;
-    }
-
-    // --- 2. CHECK DYNAMIC FLOW TRIGGERS (Fuzzy Match 60%) ---
+    // --- 1. CHECK DYNAMIC FLOW TRIGGERS (Threshold 80%) ---
+    // Moved this ABOVE active flow processing so a user can restart a flow by typing the trigger again
     const allFlows = await Flow.find({
       isActive: true,
       $or: [
@@ -103,10 +101,10 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       }
     }
 
-    if (bestFlowMatch && highestFlowScore >= 0.6) {
-      console.log(`🚀 Starting Flow: ${bestFlowMatch.name} (Score: ${highestFlowScore}) for ${phone}`);
+    if (bestFlowMatch && highestFlowScore >= 0.8) {
+      console.log(`🚀 Triggering Flow: ${bestFlowMatch.name} (Score: ${highestFlowScore}) for ${phone}`);
       contact.activeFlowId = bestFlowMatch._id;
-      contact.currentStepIndex = 0;
+      contact.currentStepIndex = 0; // ALWAYS START FROM BEGINNING
       contact.chatData = new Map(); // Reset data for new flow
       await contact.save();
 
@@ -115,7 +113,14 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       return await sendDelayedMessage(account, phone, firstQuestion, contact, firstDelay);
     }
 
-    if (!bestMatch || highestScore < 0.5) {
+    // --- 2. IF ALREADY IN A FLOW AND NO NEW TRIGGER MATCHED, PROCESS THE STEP ---
+    if (contact && contact.activeFlowId) {
+      console.log(`🔄 Processing active flow step for ${phone}`);
+      const flowResult = await processDynamicFlow(account, phone, text, contact);
+      if (flowResult) return true;
+    }
+
+    if (!bestMatch || highestScore < 0.8) {
       return false;
     }
 
