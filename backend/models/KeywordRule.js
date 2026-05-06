@@ -4,10 +4,13 @@ const keywordRuleSchema = new mongoose.Schema({
   keyword: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
     trim: true
   },
+  whatsappAccountIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "WhatsAppAccount"
+  }],
   targetStatus: {
     type: String,
     required: true

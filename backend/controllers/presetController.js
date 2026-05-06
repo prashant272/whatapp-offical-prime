@@ -10,7 +10,7 @@ export const createPreset = async (req, res) => {
       name,
       template,
       config,
-      whatsappAccountId: account?._id,
+      whatsappAccountId: account?.isAll ? null : account?._id,
       createdBy: req.user._id
     });
 
@@ -27,7 +27,17 @@ export const getPresets = async (req, res) => {
     const account = req.whatsappAccount;
     if (!account) return res.status(400).json({ error: "No active account selected" });
 
-    const presets = await TemplatePreset.find({ whatsappAccountId: account._id }).populate("template");
+    let query = {};
+    if (!account.isAll) {
+      query = { 
+        $or: [
+          { whatsappAccountId: account._id },
+          { whatsappAccountId: null }
+        ]
+      };
+    }
+
+    const presets = await TemplatePreset.find(query).populate("template");
     res.json(presets);
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -18,5 +18,9 @@ const messageSchema = new mongoose.Schema({
   status: { type: String, default: "sent" }
 }, { timestamps: true });
 
+messageSchema.index({ whatsappAccountId: 1, timestamp: -1 });
+messageSchema.index({ to: 1, timestamp: -1 });
+messageSchema.index({ direction: 1, timestamp: -1 });
+
 const Message = mongoose.model("Message", messageSchema);
 export default Message;

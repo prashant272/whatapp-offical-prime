@@ -6,7 +6,6 @@ import {
   Plus, Paperclip, Loader2, Trash2, Pencil, Key, Smile, Zap
 } from "lucide-react";
 import { io } from "socket.io-client";
-import KeywordRuleModal from "./KeywordRuleModal";
 
 import { useParams, useNavigate } from "react-router-dom";
 import api, { API_BASE } from "../api";
@@ -104,7 +103,9 @@ const ChatModule = () => {
 
   const [activeReminders, setActiveReminders] = useState([]);
   const [shownReminders, setShownReminders] = useState(new Set());
-  const [isGlobalView, setIsGlobalView] = useState(false);
+  const [selectedAccountIds, setSelectedAccountIds] = useState([]);
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const accountDropdownRef = useRef(null);
   const alarmRef = useRef(null);
 
   const allStatusOptions = useMemo(() => {
@@ -140,9 +141,6 @@ const ChatModule = () => {
   const [pendingImage, setPendingImage] = useState(null); // { file, previewUrl }
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
-  const [showAddQuickReplyModal, setShowAddQuickReplyModal] = useState(false);
-  const [newQR, setNewQR] = useState({ name: "", content: "", file: null, preview: "" });
-  const [isSavingQR, setIsSavingQR] = useState(false);
   const fileInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const quickRepliesRef = useRef(null);
@@ -152,6 +150,12 @@ const ChatModule = () => {
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
+
+  useEffect(() => {
+    if (activeAccount?._id && selectedAccountIds.length === 0) {
+      setSelectedAccountIds([activeAccount._id]);
+    }
+  }, [activeAccount]);
 
   useEffect(() => {
     if (Notification.permission === "default") {
@@ -164,7 +168,7 @@ const ChatModule = () => {
       if (page === 1) setLoading(true);
       // Pass the specific account ID for this chat to ensure we get the right messages
       const res = await api.get(`/messages/${phone}?page=${page}&limit=50`, {
-        headers: { "x-whatsapp-account-id": isGlobalView ? "all" : (selectedChat?.whatsappAccountId || activeAccount?._id) }
+        headers: { "x-whatsapp-account-id": (selectedChat?.whatsappAccountId || selectedAccountIds.join(",") || activeAccount?._id) }
       });
       const newMsgs = res.data.messages || [];
 
@@ -194,10 +198,21 @@ const ChatModule = () => {
   const fetchConversations = useCallback(async (page = 1) => {
     try {
       setIsFetchingConvs(true);
-      const res = await api.get(`/conversations?page=${page}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}${isGlobalView ? "&showAllAccounts=true" : ""}`, {
-        headers: { "x-whatsapp-account-id": isGlobalView ? "all" : activeAccount?._id }
+      const accIds = Array.isArray(selectedAccountIds) ? selectedAccountIds.join(",") : "";
+      const effectiveId = accIds || activeAccount?._id;
+      
+      if (!effectiveId) {
+        console.log("⏳ Skipping fetch: No account selected yet.");
+        setIsFetchingConvs(false);
+        return;
+      }
+
+      console.log("🌐 Fetching conversations for accounts:", effectiveId);
+      const res = await api.get(`/conversations?page=${page}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`, {
+        headers: { "x-whatsapp-account-id": effectiveId }
       });
       const newData = res.data.conversations || [];
+      console.log(`📥 Received ${newData.length} conversations from backend.`);
 
       if (page === 1) {
         setConversations(newData);
@@ -216,7 +231,7 @@ const ChatModule = () => {
     } finally {
       setIsFetchingConvs(false);
     }
-  }, [statusFilter, userFilter, sectorFilter, activeAccount, isGlobalView]);
+  }, [statusFilter, userFilter, sectorFilter, activeAccount, selectedAccountIds]);
 
   const fetchMoreConversations = async () => {
     if (!hasMoreConvs || isFetchingConvs) return;
@@ -228,8 +243,9 @@ const ChatModule = () => {
     setIsFetchingConvs(true);
 
     try {
-      const res = await api.get(`/conversations?page=${nextPage}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}${isGlobalView ? "&showAllAccounts=true" : ""}`, {
-        headers: { "x-whatsapp-account-id": isGlobalView ? "all" : activeAccount?._id }
+      const accIds = selectedAccountIds.join(",");
+      const res = await api.get(`/conversations?page=${nextPage}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`, {
+        headers: { "x-whatsapp-account-id": accIds || activeAccount?._id }
       });
       const newData = res.data.conversations || [];
 
@@ -438,7 +454,7 @@ const ChatModule = () => {
     setConversations([]); // Clear list for fresh start
     setConvPage(1);
     fetchConversations(1);
-  }, [statusFilter, userFilter, sectorFilter, activeAccount, isGlobalView]);
+  }, [statusFilter, userFilter, sectorFilter, activeAccount, selectedAccountIds]);
 
   // Click outside to close popovers
   useEffect(() => {
@@ -449,53 +465,23 @@ const ChatModule = () => {
       if (quickRepliesRef.current && !quickRepliesRef.current.contains(event.target)) {
         setShowQuickReplies(false);
       }
+      if (accountDropdownRef.current && !accountDropdownRef.current.contains(event.target)) {
+        setShowAccountDropdown(false);
+      }
     };
-    if (showEmojiPicker || showQuickReplies) {
+    if (showEmojiPicker || showQuickReplies || showAccountDropdown) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [showEmojiPicker, showQuickReplies]);
+  }, [showEmojiPicker, showQuickReplies, showAccountDropdown]);
 
-  const handleCreateQuickReply = async (e) => {
-    e.preventDefault();
-    if (!newQR.name || (!newQR.content && !newQR.file)) return;
 
-    try {
-      setIsSavingQR(true);
-      let mediaUrl = "";
-      if (newQR.file) {
-        const formData = new FormData();
-        formData.append("file", newQR.file);
-        const uploadRes = await api.post("/upload", formData, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
-        mediaUrl = uploadRes.data.url;
-      }
 
-      const res = await api.post("/quick-replies", {
-        name: newQR.name,
-        content: newQR.content,
-        mediaUrl
-      });
-
-      setQuickReplies([res.data, ...quickReplies]);
-      setShowAddQuickReplyModal(false);
-      setNewQR({ name: "", content: "", file: null, preview: "" });
-    } catch (err) {
-      console.error("Error creating quick reply:", err);
-      alert("Error: " + (err.response?.data?.error || err.message));
-    } finally {
-      setIsSavingQR(false);
-    }
-  };
-
+  // 1. Fetch truly global data (on mount)
   useEffect(() => {
-    const fetchInitialData = async () => {
+    const fetchGlobalData = async () => {
       try {
-        const [temps, pres, quicks, execs, stats, sects, cFields] = await Promise.all([
-          api.get(`/templates`),
-          api.get(`/presets`),
-          api.get(`/quick-replies`),
+        const [execs, stats, sects, cFields] = await Promise.all([
           api.get(`/users`).catch(() => ({ data: [] })),
           api.get(`/statuses`).catch(() => ({ data: [] })),
           api.get(`/sectors`).catch(() => ({ data: [] })),
@@ -505,20 +491,35 @@ const ChatModule = () => {
         setCustomStatuses(stats.data);
         setSectors(sects.data);
         setCustomFieldsDef(cFields.data);
+        setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager" || u.role === "Admin") : []);
+      } catch (err) {
+        console.error("Global data fetch error:", err);
+      }
+    };
+    fetchGlobalData();
+  }, []);
+
+  // 2. Fetch account-specific data (whenever activeAccount changes)
+  useEffect(() => {
+    const fetchAccountData = async () => {
+      try {
+        const [temps, pres, quicks] = await Promise.all([
+          api.get(`/templates`),
+          api.get(`/presets`),
+          api.get(`/quick-replies`)
+        ]);
 
         setTemplates(Array.isArray(temps.data) ? temps.data.filter(t => t.status === "APPROVED") : []);
         setTemplatePresets(Array.isArray(pres.data) ? pres.data : []);
         setQuickReplies(Array.isArray(quicks.data) ? quicks.data : []);
-        if (currentUser.role !== "Executive") {
-          setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager" || u.role === "Admin") : []);
-        }
       } catch (err) {
-        console.error("Initial fetch error:", err);
+        console.error("Account data fetch error:", err);
       }
     };
+    fetchAccountData();
+  }, [activeAccount]);
 
-    fetchInitialData();
-
+  useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
     const socket = io(socketUrl, {
       query: { userId: currentUser._id, role: currentUser.role }
@@ -708,93 +709,136 @@ const ChatModule = () => {
     setNewChatPhone("");
   };
 
+  const [isSendingMsg, setIsSendingMsg] = useState(false);
+
   const handleSend = async (e) => {
     if (e) e.preventDefault();
-    if ((!newMessage.trim() && !pendingImage) || !selectedChat) return;
+    if (isSendingMsg || (!newMessage.trim() && !pendingImage) || !selectedChat) return;
 
-    if (pendingImage) {
-      // 🖼️ CASE 1: SEND IMAGE (WITH CAPTION)
-      const { file, previewUrl } = pendingImage;
-      const caption = newMessage.trim();
-      const tempId = "temp-" + Date.now();
+    setIsSendingMsg(true);
+    try {
+      if (pendingImage) {
+        // 🖼️ CASE 1: SEND IMAGE (WITH CAPTION)
+        const { file, previewUrl } = pendingImage;
+        const caption = newMessage.trim();
+        const tempId = "temp-" + Date.now();
 
-      const optimisticMsg = {
-        _id: tempId,
-        from: "me",
-        to: selectedChat.phone,
-        body: caption || "Image",
-        type: "image",
-        mediaUrl: previewUrl,
-        direction: "outbound",
-        status: "sending",
-        timestamp: new Date()
-      };
+        const optimisticMsg = {
+          _id: tempId,
+          from: "me",
+          to: selectedChat.phone,
+          body: caption || "Image",
+          type: "image",
+          mediaUrl: previewUrl,
+          direction: "outbound",
+          status: "sending",
+          timestamp: new Date()
+        };
 
-      setMessages(prev => [...prev, optimisticMsg]);
-      setNewMessage("");
-      setPendingImage(null); // Clear preview IMMEDIATELY
+        setMessages(prev => [...prev, optimisticMsg]);
+        setNewMessage("");
+        setPendingImage(null); // Clear preview IMMEDIATELY
 
-      try {
-        setIsUploading(true);
-        let imageUrl = "";
+        try {
+          setIsUploading(true);
+          let imageUrl = "";
 
-        if (pendingImage.isRemote) {
-          imageUrl = pendingImage.remoteUrl;
-        } else {
-          const uploadData = new FormData();
-          uploadData.append("file", file);
+          if (pendingImage.isRemote) {
+            imageUrl = pendingImage.remoteUrl;
+          } else {
+            const uploadData = new FormData();
+            uploadData.append("file", file);
 
-          // 1. Upload to Cloudinary
-          const uploadRes = await api.post(`/upload`, uploadData, {
-            headers: { "Content-Type": "multipart/form-data" }
+            // 1. Upload to Cloudinary
+            const uploadRes = await api.post(`/upload`, uploadData, {
+              headers: { "Content-Type": "multipart/form-data" }
+            });
+            imageUrl = uploadRes.data.url;
+          }
+
+          // 2. Send Image Message via WhatsApp
+          const res = await api.post("/messages/send-image", {
+            to: selectedChat.phone,
+            imageUrl: imageUrl,
+            caption: caption
           });
-          imageUrl = uploadRes.data.url;
+
+          // 3. Replace Temp Message with Real Message (if not already added by socket)
+          setMessages(prev => {
+            const realMsg = res.data.message;
+            const alreadyExists = prev.find(m => m._id === realMsg._id || (m.messageId && m.messageId === realMsg.messageId));
+            if (alreadyExists) {
+              return prev.filter(m => m._id !== tempId);
+            }
+            return prev.map(m => m._id === tempId ? realMsg : m);
+          });
+          
+          fetchConversations();
+        } catch (err) {
+          console.error("Error sending image:", err);
+          setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
+          alert("Failed to send image: " + (err.response?.data?.error || err.message));
+        } finally {
+          setIsUploading(false);
         }
-
-        // 2. Send Image Message via WhatsApp
-        const res = await api.post("/messages/send-image", {
+      } else {
+        // 💬 CASE 2: NORMAL TEXT SEND
+        const text = newMessage.trim();
+        const tempId = "temp-" + Date.now();
+        
+        // Optimistic Update
+        const optimisticMsg = {
+          _id: tempId,
+          from: "me",
           to: selectedChat.phone,
-          imageUrl: imageUrl,
-          caption: caption
-        });
-
-        // 3. Replace Temp Message with Real Message
-        setMessages(prev => prev.map(m => m._id === tempId ? res.data.message : m));
-        fetchConversations();
-      } catch (err) {
-        console.error("Error sending image:", err);
-        setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
-        alert("Failed to send image: " + (err.response?.data?.error || err.message));
-      } finally {
-        setIsUploading(false);
-      }
-    } else {
-      // 💬 CASE 2: NORMAL TEXT SEND
-      try {
-        const res = await api.post(`/messages/send`, {
-          to: selectedChat.phone,
-          body: newMessage
-        }, {
-          headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
-        });
-
-        setMessages([...messages, res.data.message]);
+          body: text,
+          type: "text",
+          direction: "outbound",
+          status: "sending",
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, optimisticMsg]);
         setNewMessage("");
 
-        if (selectedChat.isNew) {
-          await fetchConversations();
-        } else {
-          fetchConversations();
-        }
-      } catch (err) {
-        console.error("Error sending message:", err);
-        const errorMsg = err.response?.data?.error || "Failed to send message";
-        if (errorMsg.includes("24-hour") || err.response?.status === 400) {
-          alert("WhatsApp Rule: You can only send a Template message to this number right now (24-hour window closed).");
-        } else {
-          alert("Error: " + errorMsg);
+        try {
+          const res = await api.post(`/messages/send`, {
+            to: selectedChat.phone,
+            body: text
+          }, {
+            headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
+          });
+
+          // Replace optimistic message
+          setMessages(prev => {
+            const realMsg = res.data.message;
+            const alreadyExists = prev.find(m => m._id === realMsg._id || (m.messageId && m.messageId === realMsg.messageId));
+            if (alreadyExists) {
+              return prev.filter(m => m._id !== tempId);
+            }
+            return prev.map(m => m._id === tempId ? realMsg : m);
+          });
+
+          if (selectedChat.isNew) {
+            await fetchConversations();
+          } else {
+            fetchConversations();
+          }
+        } catch (err) {
+          console.error("Error sending message:", err);
+          setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
+          const errorMsg = err.response?.data?.error || "Failed to send message";
+          if (errorMsg.includes("24-hour") || err.response?.status === 400) {
+            alert("WhatsApp Rule: You can only send a Template message to this number right now (24-hour window closed).");
+          } else {
+            alert("Error: " + errorMsg);
+          }
         }
       }
+    } catch (err) {
+      console.error("Critical handleSend error:", err);
+    } finally {
+      setIsSendingMsg(false);
     }
   };
 
@@ -940,7 +984,7 @@ const ChatModule = () => {
   };
 
   const handlePresetSelect = (pId) => {
-    const preset = presets.find(p => p._id === pId);
+    const preset = templatePresets.find(p => p._id === pId);
     if (!preset) return;
 
     setSelectedPreset(pId);
@@ -1062,7 +1106,10 @@ const ChatModule = () => {
       seen.add(c._id);
       
       // ALWAYS include the currently open chat in the sidebar
-      if (c._id === chatId) return true;
+      if (c._id === chatId) {
+        seen.add(c._id);
+        return true;
+      }
 
       // 1. Unread/Window Filter
       if (filter === "unread" && !(c.unreadCount > 0)) return false;
@@ -1186,51 +1233,124 @@ const ChatModule = () => {
             />
           </div>
 
-          {/* New Prominent Account Selector */}
-          <div style={{ marginTop: "12px", background: "#ffffff", padding: "8px", borderRadius: "10px", border: "1px solid #e9edef" }}>
-            <p style={{ fontSize: "0.65rem", color: "#667781", fontWeight: "bold", margin: "0 0 4px 4px", textTransform: "uppercase" }}>Active Number</p>
-            <select
-              value={activeAccount?._id || ""}
-              onChange={(e) => {
-                const acc = accounts.find(a => a._id === e.target.value);
-                if (acc) switchAccount(acc);
+          {/* Multi-Account Selector Dropdown */}
+          <div style={{ marginTop: "12px", position: "relative" }} ref={accountDropdownRef}>
+            <p style={{ fontSize: "0.65rem", color: "#667781", fontWeight: "bold", margin: "0 0 6px 4px", textTransform: "uppercase" }}>Active Accounts</p>
+            <div 
+              onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+              style={{
+                background: "#ffffff",
+                padding: "10px 12px",
+                borderRadius: "10px",
+                border: "1.5px solid #e9edef",
+                cursor: "pointer",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                transition: "all 0.2s"
               }}
-              style={{ width: "100%", padding: "8px", border: "none", background: "none", outline: "none", fontWeight: "700", color: "#111b21", cursor: "pointer", fontSize: "0.9rem" }}
+              onMouseOver={e => e.currentTarget.style.borderColor = "#00a884"}
+              onMouseOut={e => e.currentTarget.style.borderColor = "#e9edef"}
             >
-              {accounts.map(acc => (
-                <option key={acc._id} value={acc._id}>{acc.name} ({acc.phoneNumberId})</option>
-              ))}
-            </select>
-          </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", overflow: "hidden" }}>
+                <div style={{ background: "#00a884", color: "white", borderRadius: "50%", width: "18px", height: "18px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem", fontWeight: "bold" }}>
+                  {selectedAccountIds.length}
+                </div>
+                <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "#111b21", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {selectedAccountIds.length === accounts.length 
+                    ? "All Accounts" 
+                    : selectedAccountIds.length === 1 
+                      ? accounts.find(a => a._id === selectedAccountIds[0])?.name || "Selected Account"
+                      : `${selectedAccountIds.length} Accounts Selected`}
+                </span>
+              </div>
+              <ChevronDown size={16} style={{ color: "#667781", transform: showAccountDropdown ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+            </div>
 
-          {/* Global View Toggle Button */}
-          <button
-            onClick={() => {
-              const newState = !isGlobalView;
-              console.log("🌐 Toggling Global View to:", newState);
-              setIsGlobalView(newState);
-            }}
-            style={{
-              width: "100%",
-              marginTop: "8px",
-              padding: "10px",
-              borderRadius: "8px",
-              border: "1px solid #e2e8f0",
-              background: isGlobalView ? "#00a884" : "white",
-              color: isGlobalView ? "white" : "#111b21",
-              fontWeight: "600",
-              fontSize: "0.85rem",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              cursor: "pointer",
-              transition: "all 0.2s"
-            }}
-          >
-            <Search size={16} />
-            {isGlobalView ? "Showing All Accounts" : "View All Accounts"}
-          </button>
+            {showAccountDropdown && (
+              <div style={{
+                position: "absolute",
+                top: "100%",
+                left: 0,
+                right: 0,
+                marginTop: "6px",
+                background: "white",
+                borderRadius: "12px",
+                boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                border: "1px solid #e9edef",
+                zIndex: 1000,
+                maxHeight: "300px",
+                overflowY: "auto",
+                padding: "8px"
+              }}>
+                <div 
+                  onClick={() => {
+                    const allIds = accounts.map(a => a._id);
+                    setSelectedAccountIds(selectedAccountIds.length === accounts.length ? [accounts[0]._id] : allIds);
+                  }}
+                  style={{ padding: "8px 12px", borderRadius: "8px", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px", background: "#f8fafc" }}
+                >
+                  <div style={{ width: "16px", height: "16px", border: "2px solid #00a884", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", background: selectedAccountIds.length === accounts.length ? "#00a884" : "transparent" }}>
+                    {selectedAccountIds.length === accounts.length && <Check size={12} color="white" />}
+                  </div>
+                  <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#00a884" }}>Select All Accounts</span>
+                </div>
+                
+                <div style={{ height: "1px", background: "#f1f5f9", margin: "4px 0" }} />
+
+                {accounts.map(acc => {
+                  const isSelected = selectedAccountIds.includes(acc._id);
+                  return (
+                    <div
+                      key={acc._id}
+                      onClick={() => {
+                        let newIds;
+                        if (isSelected) {
+                          newIds = selectedAccountIds.filter(id => id !== acc._id);
+                        } else {
+                          newIds = [...selectedAccountIds, acc._id];
+                        }
+                        if (newIds.length === 0) return;
+                        setSelectedAccountIds(newIds);
+                        const firstAcc = accounts.find(a => a._id === newIds[0]);
+                        if (firstAcc) switchAccount(firstAcc);
+                      }}
+                      style={{
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        background: isSelected ? "#f0fdf4" : "transparent",
+                        transition: "background 0.2s"
+                      }}
+                      onMouseOver={e => !isSelected && (e.currentTarget.style.background = "#f8fafc")}
+                      onMouseOut={e => !isSelected && (e.currentTarget.style.background = "transparent")}
+                    >
+                      <div style={{ 
+                        width: "16px", 
+                        height: "16px", 
+                        border: "2px solid", 
+                        borderColor: isSelected ? "#00a884" : "#cbd5e1", 
+                        borderRadius: "4px", 
+                        display: "flex", 
+                        alignItems: "center", 
+                        justifyContent: "center", 
+                        background: isSelected ? "#00a884" : "transparent" 
+                      }}>
+                        {isSelected && <Check size={12} color="white" />}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
+                        <span style={{ fontSize: "0.85rem", fontWeight: isSelected ? "600" : "500", color: isSelected ? "#111b21" : "#64748b" }}>{acc.name}</span>
+                        <span style={{ fontSize: "0.65rem", color: "#94a3b8" }}>{acc.phoneNumberId}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
             <button
@@ -1347,16 +1467,7 @@ const ChatModule = () => {
               <Plus size={14} />
             </button>
 
-            {/* Keyword Rules Button */}
-            {currentUser?.role === "Admin" && (
-              <button
-                onClick={() => setShowKeywordModal(true)}
-                style={{ background: "#00a884", color: "white", border: "none", borderRadius: "50%", width: "28px", height: "28px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}
-                title="Keyword Automations"
-              >
-                <Key size={14} />
-              </button>
-            )}
+            
           </div>
         </div>
 
@@ -1402,14 +1513,21 @@ const ChatModule = () => {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-                    <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem" }}>{chat.contact?.name || chat.phone}</span>
+                    <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                      {chat.contact?.name || chat.phone}
+                      {selectedAccountIds.length > 1 && (
+                        <span style={{ fontSize: "0.55rem", background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: "10px", fontWeight: "800", textTransform: "uppercase", border: "1px solid #e2e8f0" }}>
+                          {accounts.find(a => a._id === chat.whatsappAccountId)?.name || "Primary"}
+                        </span>
+                      )}
+                    </span>
                     <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
                       {chat.lastMessageTime ? (
                         <>
-                          <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#008069" : "#667781" }}>
+                          <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#010f0dff" : "#00a2ffff" }}>
                             {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
-                          <span style={{ fontSize: "0.62rem", color: "#8696a0", fontWeight: "600", textTransform: "uppercase" }}>
+                          <span style={{ fontSize: "0.62rem", color: "#ff0000ff", fontWeight: "600", textTransform: "uppercase" }}>
                             {new Date(chat.lastMessageTime).toLocaleDateString([], { day: '2-digit', month: 'short' })}
                           </span>
                         </>
@@ -1459,7 +1577,19 @@ const ChatModule = () => {
       <div className="chat-area-container" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
         {selectedChat ? (
           <>
-            <div style={{ padding: "8px 16px", background: "#f0f2f5", display: "flex", justifyContent: "space-between", alignItems: "center", zIndex: 10, flexShrink: 0, height: "52px", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
+            {/* Floating Window Timer - Centered in Header */}
+            <div style={{ 
+              padding: "8px 16px", 
+              background: "#f0f2f5", 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
+              zIndex: 10, 
+              flexShrink: 0, 
+              height: "52px", 
+              borderBottom: "1px solid rgba(0,0,0,0.05)",
+              position: "relative" 
+            }}>
               <div
                 style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
                 onClick={() => setShowContactInfo(!showContactInfo)}
@@ -1468,19 +1598,43 @@ const ChatModule = () => {
                   {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: "700", color: "#111b21" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
-                    {windowTimeLeft && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "4px", background: "rgba(0, 128, 105, 0.1)", padding: "2px 8px", borderRadius: "10px", fontSize: "0.65rem", color: "#008069", fontWeight: "700" }}>
-                        <Clock size={10} /> {windowTimeLeft}
-                      </div>
-                    )}
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: "700", color: "#111b21" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
+                      <span style={{ fontSize: "0.6rem", color: "#00a884", fontWeight: "800", background: "#e7fce3", padding: "2px 8px", borderRadius: "10px", border: "1px solid #00a88433", textTransform: "uppercase" }}>
+                        {accounts.find(a => a._id === selectedChat.whatsappAccountId)?.name || "Primary Account"}
+                      </span>
+                    </div>
                   </div>
                   <span style={{ fontSize: "0.68rem", color: "#667781" }}>
                     {selectedChat.contact?.name ? selectedChat.phone : "Online"}
                   </span>
                 </div>
               </div>
+
+              {/* Centered Session Timer */}
+              {windowTimeLeft && (
+                <div style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "50%",
+                  transform: "translate(-50%, -50%)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  background: "#e7fce3",
+                  color: "#008069",
+                  padding: "4px 12px",
+                  borderRadius: "20px",
+                  fontSize: "0.75rem",
+                  fontWeight: "700",
+                  border: "1px solid #00a88433"
+                }}>
+                  <Clock size={12} />
+                  <span>Session: {windowTimeLeft}</span>
+                </div>
+              )}
+
               <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                 {/* Send Template Button */}
                 <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#ffffff", padding: "6px 14px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700", cursor: "pointer", boxShadow: "0 2px 4px rgba(0, 168, 132, 0.2)", transition: "0.2s" }} onMouseOver={e => e.currentTarget.style.transform = "translateY(-1px)"} onMouseOut={e => e.currentTarget.style.transform = "translateY(0)"}>
@@ -1500,7 +1654,7 @@ const ChatModule = () => {
               {Object.entries(messageGroups).map(([date, msgs]) => (
                 <div key={date} style={{ display: "flex", flexDirection: "column" }}>
                   <div style={{ display: "flex", justifyContent: "center", margin: "15px 0" }}>
-                    <div style={{ background: "#182229", padding: "4px 10px", borderRadius: "6px", fontSize: "0.7rem", color: "#8696a0" }}>
+                    <div style={{ background: "#ffe600", padding: "6px 14px", borderRadius: "8px", fontSize: "0.75rem", color: "#000000", fontWeight: "700", boxShadow: "0 2px 5px rgba(0,0,0,0.1)", border: "1px solid rgba(0,0,0,0.05)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                       {formatDateLabel(date)}
                     </div>
                   </div>
@@ -1593,7 +1747,7 @@ const ChatModule = () => {
                       )}
 
                       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", gap: "2px", alignItems: "center" }}>
-                        <span style={{ fontSize: "0.6rem", opacity: 0.6 }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span style={{ fontSize: "0.65rem", color: "#0c08ffff", fontWeight: "800", letterSpacing: "0.3px" }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         {msg.direction === "outbound" && (
                           <div style={{ display: "flex", marginLeft: "2px" }}>
                             {msg.status === "read" ? (
@@ -1653,7 +1807,6 @@ const ChatModule = () => {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", borderBottom: "1px solid #f0f2f5", paddingBottom: "5px" }}>
                       <h4 style={{ margin: 0, fontSize: "0.85rem", color: "#111b21" }}>Quick Replies</h4>
                       <div style={{ display: "flex", gap: "10px" }}>
-                        <button onClick={() => setShowAddQuickReplyModal(true)} style={{ background: "#00a884", border: "none", color: "white", borderRadius: "4px", padding: "2px 8px", fontSize: "0.75rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}><Plus size={12} /> Add</button>
                         <button onClick={() => setShowQuickReplies(false)} style={{ background: "none", border: "none", color: "#667781", cursor: "pointer" }}><Plus size={18} style={{ transform: "rotate(45deg)" }} /></button>
                       </div>
                     </div>
@@ -1770,9 +1923,11 @@ const ChatModule = () => {
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
+                      // Enter to send (Shift+Enter for newline)
+                      if ((e.key === "Enter" || e.keyCode === 13) && !e.shiftKey) {
                         e.preventDefault();
-                        handleSend(e);
+                        e.stopPropagation();
+                        handleSend();
                       }
 
                       // Keyboard Shortcuts: Ctrl+B or Cmd+B for Bold
@@ -1986,25 +2141,17 @@ const ChatModule = () => {
               <div>
                 <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Assigned Specialist</label>
                 <div style={{ position: "relative" }}>
-                  {currentUser.role !== "Executive" ? (
-                    <>
-                      <select
-                        style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
-                        value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
-                        onChange={(e) => handleAssign(e.target.value, undefined)}
-                      >
-                        <option value="">Nil (Unassigned)</option>
-                        {executives.map(ex => (
-                          <option key={ex._id} value={ex._id}>{ex.name} ({ex.role})</option>
-                        ))}
-                      </select>
-                      <User size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
-                    </>
-                  ) : (
-                    <div style={{ background: "#ffffff", padding: "10px 12px", borderRadius: "12px", border: "1.5px solid #e2e8f0", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-                      <User size={14} color="#00a884" /> {selectedChat.assignedTo?.name || "Unassigned"}
-                    </div>
-                  )}
+                  <select
+                    style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
+                    value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
+                    onChange={(e) => handleAssign(e.target.value, undefined)}
+                  >
+                    <option value="">Nil (Unassigned)</option>
+                    {executives.map(ex => (
+                      <option key={ex._id} value={ex._id}>{ex.name} ({ex.role})</option>
+                    ))}
+                  </select>
+                  <User size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
                 </div>
               </div>
             </div>
@@ -2198,8 +2345,8 @@ const ChatModule = () => {
                         <div style={{ background: "#ffffff", padding: "16px", borderRadius: "18px", border: "1px solid #f1f5f9", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                             <div>
-                              <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#1e293b" }}>{entry.createdBy?.name}</span>
-                              <p style={{ margin: 0, fontSize: "0.7rem", color: "#64748b", fontWeight: "500" }}>
+                              <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#000000ff" }}>{entry.createdBy?.name}</span>
+                              <p style={{ margin: 0, fontSize: "0.7rem", color: "#ffffffff", fontWeight: "500" }}>
                                 {new Date(entry.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} at {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
                             </div>
@@ -2255,7 +2402,7 @@ const ChatModule = () => {
                   value={selectedPreset}
                 >
                   <option value="">-- Choose a Saved Preset --</option>
-                  {presets.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                  {templatePresets.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
                 </select>
               </div>
 
@@ -2542,135 +2689,6 @@ const ChatModule = () => {
         </div>
       )}
 
-      {/* Keyword Automation Modal */}
-      <KeywordRuleModal 
-        isOpen={showKeywordModal} 
-        onClose={() => setShowKeywordModal(false)}
-        users={executives}
-        statusOptions={customStatuses}
-      />
-      {/* Add Quick Reply Modal */}
-      {showAddQuickReplyModal && (
-        <div className="modal-overlay" style={{ zIndex: 10001 }}>
-          <div className="modal-content" style={{ width: "450px", padding: "30px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
-              <h3 style={{ margin: 0, fontSize: "1.2rem", color: "#111b21" }}>Add Quick Reply</h3>
-              <button onClick={() => setShowAddQuickReplyModal(false)} style={{ background: "none", border: "none", color: "#667781", cursor: "pointer" }}><Plus size={24} style={{ transform: "rotate(45deg)" }} /></button>
-            </div>
-            
-            <form onSubmit={handleCreateQuickReply}>
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", color: "#667781", marginBottom: "5px" }}>NAME / LABEL</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. Welcome Message"
-                  value={newQR.name}
-                  onChange={e => setNewQR({...newQR, name: e.target.value})}
-                  required
-                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
-                />
-              </div>
-
-              <div style={{ marginBottom: "15px" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", color: "#667781", marginBottom: "5px" }}>IMAGE (OPTIONAL)</label>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-                  {newQR.preview && (
-                    <img src={newQR.preview} alt="Preview" style={{ width: "60px", height: "60px", borderRadius: "8px", objectFit: "cover", border: "1px solid #e2e8f0" }} />
-                  )}
-                  <input 
-                    type="file" 
-                    accept="image/*"
-                    onChange={e => {
-                      const file = e.target.files[0];
-                      if(file) {
-                        setNewQR({...newQR, file, preview: URL.createObjectURL(file)});
-                      }
-                    }}
-                    style={{ fontSize: "0.8rem" }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ marginBottom: "20px" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", color: "#667781", marginBottom: "5px" }}>MESSAGE TEXT</label>
-                
-                {/* Formatting Toolbar */}
-                <div style={{ display: "flex", gap: "5px", marginBottom: "5px", background: "#f8f9fa", padding: "5px", borderRadius: "5px" }}>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      const textarea = document.getElementById("qr-content-area");
-                      if (!textarea) return;
-                      const start = textarea.selectionStart;
-                      const end = textarea.selectionEnd;
-                      const text = newQR.content;
-                      const selected = text.substring(start, end);
-                      const before = text.substring(0, start);
-                      const after = text.substring(end);
-                      
-                      if (selected) {
-                        setNewQR({...newQR, content: `${before}*${selected}*${after}`});
-                      } else {
-                        setNewQR({...newQR, content: text + "*bold* "});
-                      }
-                    }} 
-                    style={{ padding: "2px 12px", fontSize: "0.85rem", fontWeight: "bold", border: "1px solid #e2e8f0", background: "white", borderRadius: "4px", cursor: "pointer" }}
-                  >B</button>
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      const textarea = document.getElementById("qr-content-area");
-                      if (!textarea) return;
-                      const start = textarea.selectionStart;
-                      const end = textarea.selectionEnd;
-                      const text = newQR.content || "";
-                      const selected = text.substring(start, end);
-                      const before = text.substring(0, start);
-                      const after = text.substring(end);
-                      
-                      if (selected) {
-                        setNewQR({...newQR, content: `${before}_${selected}_${after}`});
-                      } else {
-                        setNewQR({...newQR, content: text + "_italic_ "});
-                      }
-                    }} 
-                    style={{ padding: "2px 12px", fontSize: "0.85rem", fontStyle: "italic", border: "1px solid #e2e8f0", background: "white", borderRadius: "4px", cursor: "pointer" }}
-                  >I</button>
-                  <button type="button" onClick={() => setNewQR({...newQR, content: newQR.content + "\n"})} style={{ padding: "2px 8px", fontSize: "0.75rem", border: "1px solid #e2e8f0", background: "white", borderRadius: "4px", cursor: "pointer" }}>New Line ↵</button>
-                </div>
-
-                <textarea 
-                  id="qr-content-area"
-                  rows="5"
-                  placeholder="Type the message here... Use *bold* for Bold and _italic_ for Italic"
-                  value={newQR.content}
-                  onChange={e => setNewQR({...newQR, content: e.target.value})}
-                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none", resize: "none", fontSize: "0.9rem" }}
-                />
-
-                {/* Live Preview */}
-                {newQR.content && (
-                  <div style={{ marginTop: "10px", padding: "10px", background: "#dcf8c6", borderRadius: "8px", fontSize: "0.85rem", boxShadow: "inset 0 1px 3px rgba(0,0,0,0.05)" }}>
-                    <p style={{ margin: "0 0 5px 0", fontSize: "0.65rem", fontWeight: "700", color: "#075e54", textTransform: "uppercase" }}>WhatsApp Preview</p>
-                    <div style={{ whiteSpace: "pre-wrap" }} dangerouslySetInnerHTML={{ __html: formatWhatsAppText(newQR.content) }} />
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button type="button" onClick={() => setShowAddQuickReplyModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", background: "white", cursor: "pointer" }}>Cancel</button>
-                <button 
-                  type="submit" 
-                  disabled={isSavingQR || !newQR.name}
-                  style={{ flex: 2, padding: "12px", borderRadius: "8px", border: "none", background: "#00a884", color: "white", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
-                >
-                  {isSavingQR ? <Loader2 size={20} className="animate-spin" /> : "Save Quick Reply"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

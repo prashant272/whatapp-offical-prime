@@ -10,7 +10,7 @@ router.post("/messages/send", protect, sendMessage);
 router.post("/messages/send-image", protect, sendChatImageMessage);
 router.post("/conversations/status", protect, updateConversationStatus);
 router.post("/messages/send-template", protect, sendChatTemplateMessage);
-router.post("/conversations/assign", protect, restrictTo("Admin", "Manager"), assignConversation);
+router.post("/conversations/assign", protect, restrictTo("Admin", "Manager", "Executive"), assignConversation);
 router.post("/conversations/mark-read", protect, markAsRead);
 
 export default router;

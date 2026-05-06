@@ -38,6 +38,10 @@ const contactSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 contactSchema.index({ phone: 1, whatsappAccountId: 1 }, { unique: true });
+contactSchema.index({ whatsappAccountId: 1, createdAt: -1 });
+contactSchema.index({ sector: 1 });
+contactSchema.index({ status: 1 });
+contactSchema.index({ assignedTo: 1 });
 
 const Contact = mongoose.model("Contact", contactSchema);
 export default Contact;

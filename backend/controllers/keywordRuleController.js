@@ -2,7 +2,20 @@ import KeywordRule from "../models/KeywordRule.js";
 
 export const getKeywordRules = async (req, res) => {
   try {
-    const rules = await KeywordRule.find().populate("assignedTo", "name email");
+    const accountId = req.headers["x-whatsapp-account-id"];
+    
+    let filter = {};
+    if (accountId && accountId !== "all") {
+      filter = {
+        $or: [
+          { whatsappAccountIds: accountId },
+          { whatsappAccountIds: { $size: 0 } },
+          { whatsappAccountIds: { $exists: false } }
+        ]
+      };
+    }
+
+    const rules = await KeywordRule.find(filter).populate("assignedTo", "name email");
     res.json(rules);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -11,12 +24,13 @@ export const getKeywordRules = async (req, res) => {
 
 export const createKeywordRule = async (req, res) => {
   try {
-    const { keyword, targetStatus, assignedTo, active } = req.body;
+    const { keyword, targetStatus, assignedTo, active, whatsappAccountIds } = req.body;
     const rule = new KeywordRule({
       keyword,
       targetStatus,
       assignedTo: assignedTo || null,
-      active: active !== undefined ? active : true
+      active: active !== undefined ? active : true,
+      whatsappAccountIds: whatsappAccountIds || []
     });
     await rule.save();
     res.status(201).json(rule);

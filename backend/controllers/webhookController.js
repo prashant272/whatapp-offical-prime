@@ -186,7 +186,17 @@ export const handleWebhook = async (req, res) => {
         // Step 3: Check dynamic Keyword Rules for automation
         const textContent = bodyContent.trim().toLowerCase();
         const KeywordRule = (await import("../models/KeywordRule.js")).default;
-        const matchingRule = await KeywordRule.findOne({ keyword: textContent, active: true });
+        
+        // Match rule if keyword matches AND (account matches OR global)
+        const matchingRule = await KeywordRule.findOne({ 
+          keyword: textContent, 
+          active: true,
+          $or: [
+            { whatsappAccountIds: account._id },
+            { whatsappAccountIds: { $size: 0 } },
+            { whatsappAccountIds: { $exists: false } }
+          ]
+        });
         
         let statusUpdated = false;
         if (matchingRule) {

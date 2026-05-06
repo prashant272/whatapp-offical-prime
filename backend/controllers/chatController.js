@@ -2,6 +2,7 @@ import Conversation from "../models/Conversation.js";
 import Template from "../models/Template.js";
 import Message from "../models/Message.js";
 import Contact from "../models/Contact.js";
+import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import { sendTextMessage, sendTemplateMessage, sendImageMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
@@ -9,26 +10,27 @@ import { getIO, smartEmit } from "../utils/socket.js";
 
 export const getConversations = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, assignedTo, sector, showAllAccounts } = req.query;
+    const { page = 1, limit = 20, status, assignedTo, sector } = req.query;
     const account = req.whatsappAccount;
-    const accountId = account?._id;
+    const accountIds = req.whatsappAccountIds;
+    console.log("🔍 Backend accountIds:", accountIds, "IsArray:", Array.isArray(accountIds));
 
     let filter = {};
 
-    if (showAllAccounts === "true" || (account && account.isAll)) {
-      // Show all accounts - no base filter needed
-    } else {
-      // Filter by current account (including legacy null/undefined for primary)
-      const isPrimary = account?.isDefault || account?.name?.toLowerCase().includes("primary");
-      if (isPrimary) {
+    if (Array.isArray(accountIds)) {
+      // Filter by multiple specific accounts
+      if (req.includesDefaultAccount) {
         filter.$or = [
-          { whatsappAccountId: accountId },
+          { whatsappAccountId: { $in: accountIds } },
           { whatsappAccountId: { $exists: false } },
           { whatsappAccountId: null }
         ];
       } else {
-        filter.whatsappAccountId = accountId;
+        filter.whatsappAccountId = { $in: accountIds };
       }
+    } else {
+      // Single account (fallback)
+      filter.whatsappAccountId = account?._id;
     }
 
     // Apply additional filters
@@ -46,12 +48,12 @@ export const getConversations = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await Conversation.countDocuments(filter);
     const conversations = await Conversation.find(filter)
-      .populate("contact")
+      .populate("contact", "name phone sector")
       .sort({ lastMessageTime: -1 })
       .skip(skip)
       .limit(Number(limit));
 
-    console.log(`📂 API: Found ${conversations.length} conversations for account ${accountId} (Total matches: ${total})`);
+    console.log(`📂 API: Found ${conversations.length} conversations for account ${account?._id} (Total matches: ${total})`);
 
     res.json({
       conversations,
@@ -61,6 +63,7 @@ export const getConversations = async (req, res) => {
       hasMore: skip + conversations.length < total
     });
   } catch (error) {
+    console.error("❌ getConversations Error:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -69,29 +72,31 @@ export const getMessages = async (req, res) => {
   try {
     const { phone } = req.params;
     const account = req.whatsappAccount;
-    const accountId = account?._id;
+    const accountIds = req.whatsappAccountIds;
 
-    // SMART FILTER: Include legacy messages for default account
-    let filter = {
-      $or: [{ from: phone }, { to: phone }]
-    };
-
-    if (account?.isDefault) {
-      filter = {
-        $and: [
-          { $or: [{ from: phone }, { to: phone }] },
-          {
-            $or: [
-              { whatsappAccountId: accountId },
-              { whatsappAccountId: { $exists: false } },
-              { whatsappAccountId: null }
-            ]
-          }
-        ]
-      };
+    let accountFilter = {};
+    if (Array.isArray(accountIds)) {
+      if (req.includesDefaultAccount) {
+        accountFilter = {
+          $or: [
+            { whatsappAccountId: { $in: accountIds } },
+            { whatsappAccountId: { $exists: false } },
+            { whatsappAccountId: null }
+          ]
+        };
+      } else {
+        accountFilter = { whatsappAccountId: { $in: accountIds } };
+      }
     } else {
-      filter.whatsappAccountId = accountId;
+      accountFilter = { whatsappAccountId: req.whatsappAccount?._id };
     }
+
+    const filter = {
+      $and: [
+        { $or: [{ from: phone }, { to: phone }] },
+        accountFilter
+      ]
+    };
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
@@ -106,7 +111,7 @@ export const getMessages = async (req, res) => {
 
     // Update unread count only for current account context
     await Conversation.findOneAndUpdate(
-      { phone, whatsappAccountId: accountId },
+      { phone, whatsappAccountId: account?._id },
       { unreadCount: 0 }
     );
 

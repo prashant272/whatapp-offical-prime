@@ -3,14 +3,14 @@ import { logActivity } from "../utils/activityLogger.js";
 
 export const createQuickReply = async (req, res) => {
   try {
-    const { name, content, mediaUrl } = req.body;
+    const { name, content, mediaUrl, whatsappAccountIds } = req.body;
     const account = req.whatsappAccount;
     
     const reply = await QuickReply.create({
       name,
       content,
       mediaUrl,
-      whatsappAccountId: account?._id,
+      whatsappAccountIds: whatsappAccountIds || (account?.isAll ? [] : [account?._id]),
       createdBy: req.user._id
     });
 
@@ -27,7 +27,19 @@ export const getQuickReplies = async (req, res) => {
     const account = req.whatsappAccount;
     if (!account) return res.status(400).json({ error: "No active account selected" });
 
-    const replies = await QuickReply.find({ whatsappAccountId: account._id }).sort({ createdAt: -1 });
+    let query = {};
+    if (!account.isAll) {
+      // Return quick replies for this account OR global ones (empty array or missing)
+      query = { 
+        $or: [
+          { whatsappAccountIds: account._id },
+          { whatsappAccountIds: { $size: 0 } },
+          { whatsappAccountIds: { $exists: false } }
+        ]
+      };
+    }
+
+    const replies = await QuickReply.find(query).sort({ createdAt: -1 });
     res.json(replies);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -51,7 +63,7 @@ export const deleteQuickReply = async (req, res) => {
 
 export const updateQuickReply = async (req, res) => {
   try {
-    const { name, content, mediaUrl } = req.body;
+    const { name, content, mediaUrl, whatsappAccountIds } = req.body;
     const reply = await QuickReply.findById(req.params.id);
     
     if (!reply) {
@@ -61,6 +73,7 @@ export const updateQuickReply = async (req, res) => {
     reply.name = name || reply.name;
     reply.content = content !== undefined ? content : reply.content;
     reply.mediaUrl = mediaUrl !== undefined ? mediaUrl : reply.mediaUrl;
+    reply.whatsappAccountIds = whatsappAccountIds !== undefined ? whatsappAccountIds : reply.whatsappAccountIds;
     
     const updatedReply = await reply.save();
     await logActivity(req.user._id, "UPDATE_QUICK_REPLY", `Updated quick reply: ${reply.name}`, reply.name);

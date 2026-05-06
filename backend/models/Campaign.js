@@ -23,5 +23,8 @@ const campaignSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
+campaignSchema.index({ whatsappAccountId: 1, createdAt: -1 });
+campaignSchema.index({ status: 1 });
+
 const Campaign = mongoose.model("Campaign", campaignSchema);
 export default Campaign;

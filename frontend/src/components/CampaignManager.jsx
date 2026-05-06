@@ -123,9 +123,28 @@ const CampaignManager = () => {
     }
   };
 
-  const handleRecampaign = (camp) => {
-    setRecampaignSource(camp);
-    setShowRecampaignModal(true);
+  const fetchFullCampaign = async (id) => {
+    try {
+      const res = await api.get(`/campaigns/${id}`);
+      setCampaigns(prev => prev.map(c => c._id === id ? res.data : c));
+      return res.data;
+    } catch (err) {
+      alert("Failed to fetch campaign details");
+      return null;
+    }
+  };
+
+  const handleRecampaign = async (camp) => {
+    let fullCamp = camp;
+    if (!camp.contacts || camp.contacts.length === 0) {
+      setLoading(true);
+      fullCamp = await fetchFullCampaign(camp._id);
+      setLoading(false);
+    }
+    if (fullCamp) {
+      setRecampaignSource(fullCamp);
+      setShowRecampaignModal(true);
+    }
   };
 
   const handleRecampaignSelection = (filterType) => {
@@ -885,7 +904,23 @@ const CampaignManager = () => {
                 {camp.status === "RUNNING" && isNightTime() && !camp.allowOutsideHours && (
                   <button onClick={() => handleUpdateStatus(camp._id, "RUNNING", true)} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#339af0", color: "white", border: "none", cursor: "pointer" }}>Force Send</button>
                 )}
-                <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#f0f2f5", color: "#667781", border: "1px solid #ddd", cursor: "pointer", marginLeft: "auto" }}>View Logs</button>
+                <button 
+                  onClick={async () => { 
+                    let fullCamp = camp;
+                    if (!camp.logs || camp.logs.length === 0) {
+                      setLoading(true);
+                      fullCamp = await fetchFullCampaign(camp._id);
+                      setLoading(false);
+                    }
+                    if (fullCamp) {
+                      setSelectedLogs(fullCamp.logs || []); 
+                      setShowLogsModal(true); 
+                    }
+                  }} 
+                  style={{ fontSize: "0.75rem", padding: "6px 12px", borderRadius: "6px", background: "#f0f2f5", color: "#667781", border: "1px solid #ddd", cursor: "pointer", marginLeft: "auto" }}
+                >
+                  View Logs
+                </button>
 
                 <button 
                   onClick={() => handleRecampaign(camp)} 
@@ -958,7 +993,23 @@ const CampaignManager = () => {
                 <div>Total: {camp.totalContacts}</div>
                 <div>Sent: {camp.sentCount}</div>
                 <div>Failed: {camp.failedCount}</div>
-                <button onClick={() => { setSelectedLogs(camp.logs || []); setShowLogsModal(true); }} style={{ marginLeft: "auto", background: "none", border: "none", color: "#339af0", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline" }}>Logs</button>
+                <button 
+                  onClick={async () => { 
+                    let fullCamp = camp;
+                    if (!camp.logs || camp.logs.length === 0) {
+                      setLoading(true);
+                      fullCamp = await fetchFullCampaign(camp._id);
+                      setLoading(false);
+                    }
+                    if (fullCamp) {
+                      setSelectedLogs(fullCamp.logs || []); 
+                      setShowLogsModal(true); 
+                    }
+                  }} 
+                  style={{ marginLeft: "auto", background: "none", border: "none", color: "#339af0", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline" }}
+                >
+                  Logs
+                </button>
                 <button 
                   onClick={() => handleRecampaign(camp)} 
                   style={{ marginLeft: "10px", background: "none", border: "none", color: "#00a884", cursor: "pointer", fontSize: "0.8rem", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "3px" }}

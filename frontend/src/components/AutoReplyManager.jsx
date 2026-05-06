@@ -11,10 +11,12 @@ import {
   XCircle,
   MessageSquare,
   AlertCircle,
-  Hash,
-  Clock
+  Clock,
+  Key
 } from "lucide-react";
 import FollowUpAutomation from "./FollowUpAutomation";
+import QuickReplyManager from "./QuickReplyManager";
+import KeywordStatusAutomation from "./KeywordStatusAutomation";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -26,6 +28,9 @@ const AutoReplyManager = () => {
   const [showModal, setShowModal] = useState(false);
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("keywords");
+  
+  const [executives, setExecutives] = useState([]);
+  const [customStatuses, setCustomStatuses] = useState([]);
 
   const [formData, setFormData] = useState({
     keyword: "",
@@ -42,7 +47,23 @@ const AutoReplyManager = () => {
 
   useEffect(() => {
     fetchReplies();
+    fetchExecutives();
+    fetchCustomStatuses();
   }, []);
+
+  const fetchExecutives = async () => {
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/users`, config);
+      setExecutives(data.filter(u => u.role === "Executive" || u.role === "Admin"));
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchCustomStatuses = async () => {
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/statuses`, config);
+      setCustomStatuses(data);
+    } catch (err) { console.error(err); }
+  };
 
   const fetchReplies = async () => {
     try {
@@ -193,6 +214,42 @@ const AutoReplyManager = () => {
             <Clock size={18} />
             Follow-ups
           </button>
+          <button
+            onClick={() => setActiveTab("quickreplies")}
+            style={{
+              background: activeTab === "quickreplies" ? "#00a884" : "transparent",
+              color: activeTab === "quickreplies" ? "white" : "#54656f",
+              border: "none",
+              padding: "10px 20px",
+              borderRadius: "20px",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            <Zap size={18} />
+            Quick Replies
+          </button>
+          <button
+            onClick={() => setActiveTab("status_automation")}
+            style={{
+              background: activeTab === "status_automation" ? "#00a884" : "transparent",
+              color: activeTab === "status_automation" ? "white" : "#54656f",
+              border: "none",
+              padding: "10px 20px",
+              borderRadius: "20px",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            <Key size={18} />
+            Status Automations
+          </button>
         </div>
 
         {activeTab === "keywords" ? (
@@ -309,8 +366,12 @@ const AutoReplyManager = () => {
               </table>
             </div>
           </>
-        ) : (
+        ) : activeTab === "followups" ? (
           <FollowUpAutomation />
+        ) : activeTab === "status_automation" ? (
+          <KeywordStatusAutomation users={executives} statusOptions={customStatuses} />
+        ) : (
+          <QuickReplyManager />
         )}
       </div>
 
