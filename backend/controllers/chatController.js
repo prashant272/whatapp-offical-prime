@@ -48,7 +48,7 @@ export const getConversations = async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await Conversation.countDocuments(filter);
     const conversations = await Conversation.find(filter)
-      .populate("contact", "name phone sector")
+      .populate("contact", "_id name phone sector")
       .sort({ lastMessageTime: -1 })
       .skip(skip)
       .limit(Number(limit));
@@ -179,7 +179,7 @@ export const sendMessage = async (req, res) => {
 
 export const updateConversationStatus = async (req, res) => {
   try {
-    const { phone, status, followUpTime } = req.body;
+    const { phone, status, followUpTime, followUpActivity } = req.body;
     const account = req.whatsappAccount; // The account currently selected in the UI
 
     // Step 1: Update the Status in the Conversation (so it shows in the Chat List).
@@ -189,6 +189,7 @@ export const updateConversationStatus = async (req, res) => {
       {
         status, // Set the new status (e.g. "Interested")
         followUpTime: followUpTime || null, // Set follow-up reminder time
+        followUpActivity: followUpActivity || null, // Activity/Note
         followUpNotified: false, // Reset notification status
         whatsappAccountId: account?._id // Claim it for this account
       },

@@ -99,6 +99,7 @@ const ChatModule = () => {
   const [showFollowUpModal, setShowFollowUpModal] = useState(false);
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpTime, setFollowUpTime] = useState("");
+  const [followUpActivity, setFollowUpActivity] = useState("");
   const [pendingStatus, setPendingStatus] = useState("");
 
   const [activeReminders, setActiveReminders] = useState([]);
@@ -623,12 +624,18 @@ const ChatModule = () => {
   // 24-Hour Window Timer Logic - Simple & Reliable (Derived from messages)
   useEffect(() => {
     const updateTimer = () => {
-      // Find the latest inbound message from the current messages list
-      const lastInbound = [...messages].reverse().find(m => m.direction === "inbound");
+      // Optimized: find last inbound without copying/reversing the whole array
+      let lastInbound = null;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].direction === "inbound") {
+          lastInbound = messages[i];
+          break;
+        }
+      }
 
       if (lastInbound) {
         const lastMsgTime = new Date(lastInbound.timestamp).getTime();
-        const now = new Date().getTime();
+        const now = Date.now();
         const diff = (24 * 60 * 60 * 1000) - (now - lastMsgTime);
 
         if (diff > 0) {
@@ -868,13 +875,14 @@ const ChatModule = () => {
       await api.post(`/conversations/status`, {
         phone: selectedChat.phone,
         status,
-        followUpTime: status.toLowerCase().includes("follow") ? fTime : null
+        followUpTime: status.toLowerCase().includes("follow") ? fTime : null,
+        followUpActivity: status.toLowerCase().includes("follow") ? (fTime ? followUpActivity : null) : null
       }, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
       // Update local state instead of full fetch
       setConversations(prev => prev.map(c =>
-        c.phone === selectedChat.phone ? { ...c, status, followUpTime: status.toLowerCase().includes("follow") ? fTime : null } : c
+        c.phone === selectedChat.phone ? { ...c, status, followUpTime: status.toLowerCase().includes("follow") ? fTime : null, followUpActivity: status.toLowerCase().includes("follow") ? followUpActivity : null } : c
       ));
       setShowFollowUpModal(false);
     } catch (err) {
@@ -1142,6 +1150,12 @@ const ChatModule = () => {
       return true;
     });
   }, [conversations, filter, statusFilter, sectorFilter, userFilter, searchQuery, chatId]);
+
+  const accountNameMap = useMemo(() => {
+    const map = {};
+    accounts.forEach(a => { map[a._id] = a.name; });
+    return map;
+  }, [accounts]);
 
   return (
     <div className="chat-container" style={{
@@ -1517,7 +1531,7 @@ const ChatModule = () => {
                       {chat.contact?.name || chat.phone}
                       {selectedAccountIds.length > 1 && (
                         <span style={{ fontSize: "0.55rem", background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: "10px", fontWeight: "800", textTransform: "uppercase", border: "1px solid #e2e8f0" }}>
-                          {accounts.find(a => a._id === chat.whatsappAccountId)?.name || "Primary"}
+                          {accountNameMap[chat.whatsappAccountId] || "Primary"}
                         </span>
                       )}
                     </span>
@@ -2111,11 +2125,12 @@ const ChatModule = () => {
                   </select>
                   <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
                 </div>
-                {selectedChat.status?.toLowerCase().includes("follow") && selectedChat.followUpTime && (
+                {(selectedChat.followUpTime || (selectedChat.status && selectedChat.status.toLowerCase().includes("follow"))) && (
                   <div style={{ marginTop: "8px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fef3c7", borderRadius: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
                     <Clock size={12} color="#d97706" />
                     <span style={{ fontSize: "0.7rem", color: "#d97706", fontWeight: "700" }}>
                       Due: {new Date(selectedChat.followUpTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {selectedChat.followUpActivity && ` - ${selectedChat.followUpActivity}`}
                     </span>
                   </div>
                 )}
@@ -2345,8 +2360,8 @@ const ChatModule = () => {
                         <div style={{ background: "#ffffff", padding: "16px", borderRadius: "18px", border: "1px solid #f1f5f9", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
                             <div>
-                              <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#000000ff" }}>{entry.createdBy?.name}</span>
-                              <p style={{ margin: 0, fontSize: "0.7rem", color: "#ffffffff", fontWeight: "500" }}>
+                              <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#111b21" }}>{entry.createdBy?.name}</span>
+                              <p style={{ margin: 0, fontSize: "0.7rem", color: "#64748b", fontWeight: "500" }}>
                                 {new Date(entry.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} at {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
                             </div>
@@ -2636,6 +2651,16 @@ const ChatModule = () => {
             </div>
 
             <div style={{ marginBottom: "2rem" }}>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "800", color: "#94a3b8", marginBottom: "8px" }}>ACTIVITY / NOTE</label>
+              <input
+                type="text"
+                placeholder="What needs to be done? (e.g. Call for payment)"
+                value={followUpActivity}
+                onChange={(e) => setFollowUpActivity(e.target.value)}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1.5px solid #e2e8f0", outline: "none" }}
+              />
+            </div>
+            <div style={{ marginBottom: "2rem" }}>
               <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "800", color: "#94a3b8", marginBottom: "8px" }}>TIME</label>
               <input
                 type="time"
@@ -2664,6 +2689,9 @@ const ChatModule = () => {
               </div>
               <h4 style={{ margin: "0 0 5px 0", fontSize: "1rem" }}>{rem.contact?.name || rem.phone}</h4>
               <p style={{ margin: 0, fontSize: "0.8rem", color: "#64748b" }}>Status: {rem.status}</p>
+              {rem.followUpActivity && (
+                <p style={{ margin: "5px 0 0 0", fontSize: "0.8rem", color: "#d97706", fontWeight: "600" }}>Task: {rem.followUpActivity}</p>
+              )}
 
               <div style={{ marginTop: "15px", display: "flex", gap: "10px" }}>
                 <button

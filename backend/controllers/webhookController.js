@@ -186,10 +186,10 @@ export const handleWebhook = async (req, res) => {
         // Step 3: Check dynamic Keyword Rules for automation
         const textContent = bodyContent.trim().toLowerCase();
         const KeywordRule = (await import("../models/KeywordRule.js")).default;
+        const { getSimilarity } = await import("../utils/automationHelper.js");
         
-        // Match rule if keyword matches AND (account matches OR global)
-        const matchingRule = await KeywordRule.findOne({ 
-          keyword: textContent, 
+        // Fetch all active rules for this account or global
+        const allRules = await KeywordRule.find({ 
           active: true,
           $or: [
             { whatsappAccountIds: account._id },
@@ -197,10 +197,36 @@ export const handleWebhook = async (req, res) => {
             { whatsappAccountIds: { $exists: false } }
           ]
         });
+
+        let matchingRule = null;
+        let highestRuleScore = 0;
+
+        for (const rule of allRules) {
+          let currentScore = 0;
+          const keyword = rule.keyword.toLowerCase();
+
+          if (textContent === keyword) {
+            currentScore = 1.0;
+          } else {
+            const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
+            if (wordRegex.test(textContent)) {
+              currentScore = 0.9;
+            } else {
+              const words = textContent.split(/\s+/);
+              const wordScores = words.map(word => getSimilarity(word, keyword));
+              currentScore = Math.max(...wordScores);
+            }
+          }
+
+          if (currentScore > highestRuleScore) {
+            highestRuleScore = currentScore;
+            matchingRule = rule;
+          }
+        }
         
         let statusUpdated = false;
-        if (matchingRule) {
-          console.log(`🤖 Keyword Rule matched: "${textContent}" -> ${matchingRule.targetStatus}`);
+        if (matchingRule && highestRuleScore >= 0.8) {
+          console.log(`🤖 Keyword Rule matched: "${textContent}" -> ${matchingRule.targetStatus} (Score: ${highestRuleScore})`);
           contact.status = matchingRule.targetStatus;
           contact.statusUpdatedAt = new Date();
           statusUpdated = true;

@@ -12,6 +12,7 @@ const conversationSchema = new mongoose.Schema({
   status: { type: String, default: "New" },
   sector: { type: String, default: "Unassigned" },
   followUpTime: { type: Date },
+  followUpActivity: { type: String },
   followUpNotified: { type: Boolean, default: false }
 }, { timestamps: true });
 
