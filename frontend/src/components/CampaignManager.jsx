@@ -263,12 +263,12 @@ const CampaignManager = () => {
     if (!preset) return;
 
     // Find the full template object from the templates list
-    const templateName = preset.template?.name || preset.templateName;
-    const fullTemplate = templates.find(t => t.name === templateName || t._id === preset.template);
+    const templateName = preset.templateName || (preset.template && typeof preset.template === 'object' ? preset.template.name : null);
+    const fullTemplate = templates.find(t => t.name === templateName || t._id === (preset.template?._id || preset.template));
 
     setSelectedPreset(pId);
-    setSelectedTemplate(fullTemplate || preset.template);
-    setNewCampaign({ ...newCampaign, templateName: templateName || (fullTemplate?.name) });
+    setSelectedTemplate(fullTemplate);
+    setNewCampaign(prev => ({ ...prev, templateName: fullTemplate?.name || templateName }));
 
     // Initialize all variables the template expects
     const vars = {};

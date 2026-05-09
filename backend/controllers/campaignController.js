@@ -50,6 +50,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         lastReportedFailure = currentFailure;
 
         if (latestLog) {
+          let contactObj = null;
           const SUCCESS_STATUSES = ["sent", "delivered", "read"];
           const isSent = SUCCESS_STATUSES.includes(latestLog.status);
           const isFailed = latestLog.status === "failed";
@@ -60,13 +61,13 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             const withCode = logPhone.startsWith("91") ? logPhone : `91${logPhone}`;
 
             // Try to find contact with any of the formats
-            let contact = await Contact.findOne({ 
+            contactObj = await Contact.findOne({ 
               phone: { $in: [logPhone, stripped, withCode] }, 
               whatsappAccountId: account._id 
             });
 
-            if (!contact) {
-              contact = new Contact({ 
+            if (!contactObj) {
+              contactObj = new Contact({ 
                 name: `User ${logPhone}`, 
                 phone: logPhone, 
                 whatsappAccountId: account._id,
@@ -75,18 +76,16 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
                 isCampaignSent: isSent,
                 isCampaignFailed: isFailed
               });
-              await contact.save();
+              await contactObj.save();
             } else {
               // ALWAYS update to LATEST status — overwrite previous result
-              // So if it was failed before but succeeded now → isCampaignFailed = false
-              // If it was sent before but failed now → isCampaignSent = false
-              contact.isCampaignSent = isSent;
-              contact.isCampaignFailed = isFailed;
+              contactObj.isCampaignSent = isSent;
+              contactObj.isCampaignFailed = isFailed;
               
-              if (!contact.sourceCampaign) contact.sourceCampaign = campaign.name;
-              if (sectorName && contact.sector !== sectorName) contact.sector = sectorName;
+              if (!contactObj.sourceCampaign) contactObj.sourceCampaign = campaign.name;
+              if (sectorName && contactObj.sector !== sectorName) contactObj.sector = sectorName;
               
-              await contact.save();
+              await contactObj.save();
             }
           }
 
@@ -138,7 +137,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             const updatedConv = await Conversation.findOneAndUpdate(
               convFilter,
               { 
-                contact: contact._id,
+                contact: contactObj?._id || null,
                 whatsappAccountId: account._id,
                 lastMessage: newMessage.body, 
                 lastMessageTime: new Date(),
