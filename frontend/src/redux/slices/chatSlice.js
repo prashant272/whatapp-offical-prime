@@ -126,8 +126,18 @@ const chatSlice = createSlice({
     updateMessageStatus: (state, action) => {
       const { tempId, realMsg, messageId, status } = action.payload;
       if (tempId) {
-        const index = state.messages.findIndex(m => m._id === tempId);
-        if (index !== -1) state.messages[index] = realMsg;
+        const existingRealMsgIndex = state.messages.findIndex(m => m._id === realMsg._id || (m.messageId && m.messageId === realMsg.messageId));
+        const tempIndex = state.messages.findIndex(m => m._id === tempId);
+        
+        if (existingRealMsgIndex !== -1 && existingRealMsgIndex !== tempIndex) {
+          // The socket already added the real message, so just remove the temp one
+          if (tempIndex !== -1) {
+            state.messages.splice(tempIndex, 1);
+          }
+        } else if (tempIndex !== -1) {
+          // Replace temp with real
+          state.messages[tempIndex] = realMsg;
+        }
       } else if (messageId) {
         const index = state.messages.findIndex(m => m.messageId === messageId);
         if (index !== -1) {

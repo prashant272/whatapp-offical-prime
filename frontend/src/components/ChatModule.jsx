@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import axios from "axios";
 import {
   Send, User, Search, MoreVertical, MessageSquare, Clock,
@@ -9,11 +9,11 @@ import { io } from "socket.io-client";
 
 import { useParams, useNavigate } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
-import { 
+import {
   setFilter as setReduxFilter,
-  setStatusFilter as setReduxStatusFilter, 
-  setSectorFilter as setReduxSectorFilter, 
-  setUserFilter as setReduxUserFilter, 
+  setStatusFilter as setReduxStatusFilter,
+  setSectorFilter as setReduxSectorFilter,
+  setUserFilter as setReduxUserFilter,
   setSearchQuery as setReduxSearchQuery,
   setSelectedAccountIds as setReduxSelectedAccountIds,
   setActiveChat,
@@ -26,8 +26,7 @@ import {
   updateConversationStatus as updateReduxStatus
 } from "../redux/slices/chatSlice";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import * as ReactWindow from "react-window";
-const List = ReactWindow.List || ReactWindow.FixedSizeList || (ReactWindow.default && (ReactWindow.default.List || ReactWindow.default.FixedSizeList));
+import { List } from "react-window";
 import api, { API_BASE } from "../api";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 import { startFollowUpAlarm } from "../utils/beep_sound";
@@ -35,6 +34,238 @@ import { startFollowUpAlarm } from "../utils/beep_sound";
 const COMMON_EMOJIS = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🤲", "👐", "🙌", "👏", "🤝", "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘", "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐", "🖖", "👋", "🤙", "💪", "🦾", "🖕", "✍️", "🙏", "🦶", "🦵", "🦿", "💄", "💋", "👄", "🦷", "👅", "👂", "🦻", "👃", "👣", "👁", "👀", "🧠", "🫀", "🫁", "🦴", "💩", "🔥", "✨", "🌟", "⭐", "🌈", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"];
 
 const STATUS_OPTIONS = ["New", "Interested", "Not Interested", "Follow-up", "Missed Follow-up", "Closed"];
+
+const ChatRow = memo(({ index, style, conversations, selectedId, selectedPhone, navigate, accountNameMap, selectedAccountIds }) => {
+  const chat = conversations?.[index];
+  if (!chat) return null;
+
+  // Handle Loader Item
+  if (chat.isLoader) {
+    return (
+      <div style={{ ...style, display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", color: "#64748b", fontSize: "0.8rem", background: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
+        <Loader2 size={16} className="animate-spin" />
+        <span>Loading more...</span>
+      </div>
+    );
+  }
+
+  const isActive = (selectedId === chat._id || selectedPhone === chat.phone);
+
+  return (
+    <div style={{ ...style, borderBottom: "1px solid #f5f6f6" }}>
+      <div
+        className={`chat-item ${isActive ? "active" : ""}`}
+        onClick={() => navigate(`/chats/${chat._id}`)}
+        style={{
+          padding: "12px 16px",
+          cursor: "pointer",
+          display: "flex",
+          gap: "14px",
+          alignItems: "center",
+          height: "100%",
+          background: isActive ? "#f0f2f5" : "transparent",
+          transition: "background 0.2s"
+        }}
+      >
+        <div style={{
+          width: "48px",
+          height: "48px",
+          borderRadius: "50%",
+          background: isActive ? "#d1d7db" : "#dfe5e7",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#54656f",
+          fontWeight: "700",
+          fontSize: "1.1rem",
+          flexShrink: 0
+        }}>
+          {(chat.contact?.name || chat.phone || "U").charAt(0).toUpperCase()}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+            <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem", display: "flex", alignItems: "center", gap: "6px" }}>
+              {chat.contact?.name || chat.phone}
+              {selectedAccountIds.length > 1 && (
+                <span style={{ fontSize: "0.55rem", background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: "10px", fontWeight: "800", textTransform: "uppercase", border: "1px solid #e2e8f0" }}>
+                  {accountNameMap[chat.whatsappAccountId] || "Primary"}
+                </span>
+              )}
+            </span>
+            <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+              {chat.lastMessageTime ? (
+                <>
+                  <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#010f0dff" : "#00a2ffff" }}>
+                    {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span style={{ fontSize: "0.62rem", color: "#ff0000ff", fontWeight: "600", textTransform: "uppercase" }}>
+                    {new Date(chat.lastMessageTime).toLocaleDateString([], { day: '2-digit', month: 'short' })}
+                  </span>
+                </>
+              ) : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <p style={{
+              fontSize: "0.85rem",
+              color: "#667781",
+              margin: 0,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              flex: 1,
+              fontWeight: chat.unreadCount > 0 ? "700" : "400"
+            }}>
+              {chat.lastMessage || "No messages"}
+            </p>
+            {chat.unreadCount > 0 && (
+              <span style={{
+                background: "#25d366",
+                color: "white",
+                borderRadius: "50%",
+                padding: "2px 6px",
+                fontSize: "0.75rem",
+                fontWeight: "800",
+                minWidth: "20px",
+                height: "20px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginLeft: "8px"
+              }}>
+                {chat.unreadCount}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+// Separate SidebarList component to isolate re-renders
+const SidebarList = memo(({ listData, selectedId, selectedPhone, navigate, accountNameMap, selectedAccountIds, hasNextPage, isFetchingNextPage, fetchNextPage }) => {
+  const stableRowProps = useMemo(() => ({
+    conversations: listData,
+    selectedId,
+    selectedPhone,
+    navigate,
+    accountNameMap,
+    selectedAccountIds
+  }), [listData, selectedId, selectedPhone, navigate, accountNameMap, selectedAccountIds]);
+
+  return (
+    <List
+      className="chat-scroll"
+      rowCount={listData?.length || 0}
+      rowHeight={72}
+      style={{ height: window.innerHeight ? window.innerHeight - 150 : 500 }}
+      rowComponent={ChatRow}
+      rowProps={stableRowProps}
+      onRowsRendered={({ stopIndex }) => {
+        if (stopIndex >= (listData?.length || 0) - 5 && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      }}
+    />
+  );
+});
+
+const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUrl, templates }) => {
+  return (
+    <div
+      className={`msg-bubble ${msg.direction === "outbound" ? "msg-outbound" : "msg-inbound"}`}
+      style={{
+        opacity: msg.status === "sending" ? 0.6 : 1,
+        position: "relative"
+      }}
+    >
+      {msg.status === "sending" && (
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10 }}>
+          <Loader2 className="animate-spin" size={24} color="#00a884" />
+        </div>
+      )}
+      {msg.type === "template" && msg.templateData ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {msg.templateData.components?.find(c => c.type === "header")?.parameters?.[0]?.image?.link && (
+            <img
+              src={getProxiedUrl(msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link, msg.whatsappAccountId)}
+              alt="Template"
+              style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }}
+            />
+          )}
+
+          <div
+            style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
+            dangerouslySetInnerHTML={{
+              __html: (() => {
+                const template = templateMap[msg.templateData.name];
+                let text = template?.components.find(c => c.type === "BODY")?.text || msg.body;
+                const params = msg.templateData.components.find(c => c.type === "body")?.parameters || [];
+                params.forEach((p, i) => {
+                  text = text.replace(`{{${i + 1}}}`, p.text || "");
+                });
+                return formatWhatsAppText(text);
+              })()
+            }}
+          />
+
+          {templateMap[msg.templateData.name]?.components.find(c => c.type === "BUTTONS")?.buttons?.map((btn, i) => (
+            <div key={i} style={{ padding: "8px", background: "rgba(255,255,255,0.05)", borderRadius: "6px", textAlign: "center", fontSize: "0.75rem", border: "1px solid rgba(255,255,255,0.1)", marginTop: "2px", color: "#53bdeb" }}>
+              {btn.text}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+          {msg.mediaUrl && (
+            <div style={{ marginBottom: "5px" }}>
+              {msg.type === "image" ? (
+                <img
+                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
+                  alt="Received"
+                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }}
+                  onDoubleClick={() => window.open(getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId), "_blank")}
+                />
+              ) : msg.type === "video" ? (
+                <video
+                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
+                  controls
+                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px" }}
+                />
+              ) : msg.type === "audio" ? (
+                <audio
+                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
+                  controls
+                  style={{ width: "100%" }}
+                />
+              ) : (
+                <div style={{ background: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
+                  <FileText size={24} color="#8696a0" />
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <p style={{ margin: 0, fontSize: "0.85rem", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.body || "Document"}</p>
+                    <a href={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download File</a>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {msg.body && msg.type !== "template" && (
+            <div style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }} dangerouslySetInnerHTML={{ __html: formatWhatsAppText(msg.body) }} />
+          )}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px", marginTop: "2px" }}>
+            <span style={{ fontSize: "0.65rem", color: "#667781" }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+            {msg.direction === "outbound" && (
+              <span style={{ color: msg.status === "read" ? "#53bdeb" : "#8696a0" }}>
+                {msg.status === "sent" ? <Check size={14} /> : msg.status === "delivered" ? <Check size={14} /> : msg.status === "read" ? <Check size={14} /> : msg.status === "failed" ? <AlertCircle size={14} color="#f15c5c" /> : null}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
 
 const ChatModule = () => {
   const { chatId } = useParams();
@@ -73,12 +304,12 @@ const ChatModule = () => {
   const [manageType, setManageType] = useState("status"); // 'status' or 'sector'
 
   const dispatch = useDispatch();
-  const { 
-    filter, 
-    statusFilter, 
-    sectorFilter, 
-    userFilter, 
-    searchQuery, 
+  const {
+    filter,
+    statusFilter,
+    sectorFilter,
+    userFilter,
+    searchQuery,
     selectedAccountIds,
     messages,
     hasMoreMsgs,
@@ -94,7 +325,7 @@ const ChatModule = () => {
   const setSelectedAccountIds = (val) => dispatch(setReduxSelectedAccountIds(val));
 
   // Transitioning back to Redux for everything as requested
-   const [conversations, setConversations] = useState([]);
+  const [conversations, setConversations] = useState([]);
   const [hasNextPage, setHasNextPage] = useState(true);
   const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
   const [nextCursor, setNextCursor] = useState(null);
@@ -109,16 +340,16 @@ const ChatModule = () => {
   const loadConversations = useCallback(async (cursor = null) => {
     setIsFetchingNextPage(true);
     const accIds = selectedAccountIds.length > 0 ? selectedAccountIds.join(",") : activeAccount?._id;
-    const resultAction = await dispatch(fetchReduxConversations({ 
-      cursor, 
-      status: statusFilter, 
-      assignedTo: userFilter, 
-      sector: sectorFilter, 
+    const resultAction = await dispatch(fetchReduxConversations({
+      cursor,
+      status: statusFilter,
+      assignedTo: userFilter,
+      sector: sectorFilter,
       search: debouncedSearch,
       accountIds: accIds,
-      filter: filter 
+      filter: filter
     }));
-    
+
     if (fetchReduxConversations.fulfilled.match(resultAction)) {
       const { conversations: newConvs, nextCursor: nCursor, hasMore } = resultAction.payload;
       if (!cursor) {
@@ -130,13 +361,13 @@ const ChatModule = () => {
       setHasNextPage(hasMore);
     }
     setIsFetchingNextPage(false);
-  }, [dispatch, selectedAccountIds, activeAccount, statusFilter, userFilter, sectorFilter, debouncedSearch]);
+  }, [dispatch, selectedAccountIds, activeAccount, statusFilter, userFilter, sectorFilter, debouncedSearch, filter]);
 
   useEffect(() => {
     if (activeAccount?._id || selectedAccountIds.length > 0) {
       loadConversations();
     }
-  }, [loadConversations, activeAccount?._id, selectedAccountIds, statusFilter, userFilter, sectorFilter, debouncedSearch]);
+  }, [loadConversations, activeAccount?._id, selectedAccountIds, statusFilter, userFilter, sectorFilter, debouncedSearch, filter]);
 
   const fetchNextPage = () => {
     if (hasNextPage && !isFetchingNextPage) {
@@ -146,17 +377,19 @@ const ChatModule = () => {
 
   const refetchConvs = () => loadConversations();
 
-  // Derived active chat
   const selectedChat = useMemo(() => {
     if (!chatId) return null;
     if (chatId.startsWith("new:")) {
       const phone = chatId.split(":")[1];
       return { phone, status: "New", isNew: true, whatsappAccountId: activeAccount?._id };
     }
-    return conversations.find(c => c._id === chatId) || null;
+    const found = conversations.find(c => c._id === chatId);
+    if (found) return found;
+
+    return { _id: chatId, isPlaceholder: true };
   }, [chatId, conversations, activeAccount]);
 
-   const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const [showTimelineModal, setShowTimelineModal] = useState(false);
   const [timelineEntries, setTimelineEntries] = useState([]);
   const [newTimelineContent, setNewTimelineContent] = useState("");
   const [isTimelineLoading, setIsTimelineLoading] = useState(false);
@@ -190,13 +423,17 @@ const ChatModule = () => {
   }, [customStatuses]);
 
   useEffect(() => {
-    if (scrollRef.current && messages.length > prevMsgCount) {
-      const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
-
-      // Scroll to bottom ONLY if it's the first load of THIS chat or user is already at bottom
-      if (prevMsgCount === 0 || isAtBottom) {
-        scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (scrollRef.current && messages.length > 0) {
+      const scrollContainer = scrollRef.current;
+      // If it's a fresh chat load (prevMsgCount === 0), scroll to bottom immediately
+      if (prevMsgCount === 0) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      } else {
+        // If appending new messages, only scroll if user was already near bottom
+        const isAtBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 200;
+        if (isAtBottom) {
+          scrollContainer.scrollTo({ top: scrollContainer.scrollHeight, behavior: 'smooth' });
+        }
       }
       setPrevMsgCount(messages.length);
     }
@@ -300,8 +537,13 @@ const ChatModule = () => {
 
       // Always fetch messages on select
       fetchMessages(selectedChat.phone);
-      // Reset unreadCount locally on select
-      refetchConvs();
+      
+      // Update unread count locally instead of full refetch
+      setConversations(prev => prev.map(c => 
+        (c._id === selectedChat._id || c.phone === selectedChat.phone) 
+          ? { ...c, unreadCount: 0 } 
+          : c
+      ));
     }
   }, [selectedChat?.phone, selectedChat?._id, activeAccount]);
 
@@ -516,17 +758,17 @@ const ChatModule = () => {
         if (index > -1) {
           const updated = [...prev];
           // Deep merge: keep existing contact/name but update with new message info
-          const item = { 
-            ...updated[index], 
+          const item = {
+            ...updated[index],
             ...conversation,
             lastMessage: message.body,
             lastMessageTime: message.timestamp
           };
-          
+
           if (!isActiveChat && message.direction === "inbound") {
             item.unreadCount = (item.unreadCount || 0) + 1;
           }
-          
+
           updated.splice(index, 1);
           return [item, ...updated];
         } else {
@@ -544,9 +786,9 @@ const ChatModule = () => {
         dispatch(addMessage(message));
         // If it's inbound and we are looking at it, mark it read on server too
         if (message.direction === "inbound") {
-          api.post("/conversations/mark-read", { 
-            phone: message.from, 
-            whatsappAccountId: conversation.whatsappAccountId 
+          api.post("/conversations/mark-read", {
+            phone: message.from,
+            whatsappAccountId: conversation.whatsappAccountId
           }).catch(console.error);
         }
       }
@@ -704,7 +946,7 @@ const ChatModule = () => {
           timestamp: new Date()
         };
 
-      dispatch(addMessage(optimisticMsg));
+        dispatch(addMessage(optimisticMsg));
         setNewMessage("");
         setPendingImage(null); // Clear preview IMMEDIATELY
 
@@ -736,7 +978,6 @@ const ChatModule = () => {
           if (sendReduxImage.fulfilled.match(resultAction)) {
             const realMsg = resultAction.payload;
             dispatch(updateMessageStatus({ tempId, realMsg }));
-            dispatch(addMessage(realMsg));
             refetchConvs();
           } else {
             throw new Error(resultAction.payload || "Failed to send image");
@@ -752,7 +993,7 @@ const ChatModule = () => {
         // 💬 CASE 2: NORMAL TEXT SEND
         const text = newMessage.trim();
         const tempId = "temp-" + Date.now();
-        
+
         // Optimistic Update
         const optimisticMsg = {
           _id: tempId,
@@ -764,8 +1005,8 @@ const ChatModule = () => {
           status: "sending",
           timestamp: new Date()
         };
-        
-      dispatch(addMessage(optimisticMsg));
+
+        dispatch(addMessage(optimisticMsg));
         setNewMessage("");
 
         try {
@@ -778,7 +1019,6 @@ const ChatModule = () => {
           if (sendReduxMessage.fulfilled.match(resultAction)) {
             const realMsg = resultAction.payload;
             dispatch(updateMessageStatus({ tempId, realMsg }));
-            dispatch(addMessage(realMsg));
 
             if (selectedChat.isNew) {
               await refetchConvs();
@@ -841,7 +1081,7 @@ const ChatModule = () => {
         // Update local state immediately for snappy UI
         const updatedConversation = resultAction.payload;
         setConversations(prev => prev.map(c => c._id === updatedConversation._id ? { ...c, ...updatedConversation } : c));
-        
+
         setShowFollowUpModal(false);
         // Still refetch to ensure everything else is in sync
         refetchConvs();
@@ -1015,17 +1255,17 @@ const ChatModule = () => {
     return groups;
   };
 
-  const formatDateLabel = (dateStr) => {
+  const formatDateLabel = useCallback((dateStr) => {
     const today = new Date().toLocaleDateString();
     const yesterday = new Date(Date.now() - 86400000).toLocaleDateString();
     if (dateStr === today) return "Today";
     if (dateStr === yesterday) return "Yesterday";
     return dateStr;
-  };
+  }, []);
 
   const messageGroups = useMemo(() => groupMessagesByDate(messages), [messages]);
 
-  const formatWhatsAppText = (text) => {
+  const formatWhatsAppText = useCallback((text) => {
     if (!text) return "";
     // Escaping HTML to prevent XSS
     let formatted = text
@@ -1045,7 +1285,7 @@ const ChatModule = () => {
     formatted = formatted.replace(/\n/g, "<br />");
 
     return formatted;
-  };
+  }, []);
 
   const getStatusColor = (status) => {
     const custom = customStatuses.find(s => s.name === status);
@@ -1063,36 +1303,42 @@ const ChatModule = () => {
 
   const unreadCountTotal = useMemo(() => conversations.filter(c => c.unreadCount > 0).length, [conversations]);
 
-  const getProxiedUrl = (url, accountId) => {
+  const getProxiedUrl = useCallback((url, accountId) => {
     if (!url) return "";
     if (url.includes("cloudinary.com") || url.startsWith("blob:")) return url;
     const accountParam = accountId ? `&accountId=${accountId}` : "";
     return `${API_BASE}/media/proxy?url=${encodeURIComponent(url)}${accountParam}`;
-  };
+  }, []);
+
+  const templateMap = useMemo(() => {
+    const map = {};
+    templates.forEach(t => { map[t.name] = t; });
+    return map;
+  }, [templates]);
 
   const filteredConversations = useMemo(() => {
     const seen = new Set();
+    const now = Date.now();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const query = searchQuery.trim().toLowerCase();
+
     return conversations.filter(c => {
       if (!c?._id || seen.has(c._id)) return false;
       seen.add(c._id);
-      
-      // ALWAYS include the currently open chat in the sidebar
-      if (c._id === chatId) {
-        seen.add(c._id);
-        return true;
-      }
+
+      if (c._id === chatId) return true;
 
       // 1. Unread/Window Filter
       if (filter === "unread" && !(c.unreadCount > 0)) return false;
       if (filter === "window") {
-        const now = new Date().getTime();
-        const twentyFourHours = 24 * 60 * 60 * 1000;
-        if (!c.lastCustomerMessageAt || (now - new Date(c.lastCustomerMessageAt).getTime()) >= twentyFourHours) return false;
+        if (!c.lastCustomerMessageAt) return false;
+        const lastMsgTime = typeof c.lastCustomerMessageAt === 'number' ? c.lastCustomerMessageAt : new Date(c.lastCustomerMessageAt).getTime();
+        if ((now - lastMsgTime) >= twentyFourHours) return false;
       }
 
       // 2. Status Filter
       if (statusFilter && statusFilter.toLowerCase() !== "all" && c.status !== statusFilter) return false;
-
+      
       // 3. User Filter
       if (userFilter && userFilter.toLowerCase() !== "all") {
         const assignedId = typeof c.assignedTo === 'object' ? c.assignedTo?._id : c.assignedTo;
@@ -1105,121 +1351,37 @@ const ChatModule = () => {
       if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
 
       // 4. Search Query
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        if (!((c.contact?.name || "").toLowerCase().includes(q) || c.phone.includes(q) || (c.lastMessage || "").toLowerCase().includes(q))) return false;
+      if (query) {
+        if (!((c.contact?.name || "").toLowerCase().includes(query) || c.phone.includes(query) || (c.lastMessage || "").toLowerCase().includes(query))) return false;
       }
 
       return true;
     });
   }, [conversations, filter, statusFilter, sectorFilter, userFilter, searchQuery, chatId]);
-
   const accountNameMap = useMemo(() => {
     const map = {};
-    accounts.forEach(a => { map[a._id] = a.name; });
+    if (accounts && Array.isArray(accounts)) {
+      accounts.forEach(a => { if (a?._id) map[a._id] = a.name; });
+    }
     return map;
   }, [accounts]);
 
-  const Row = useCallback(({ index, style }) => {
-    const chat = filteredConversations[index];
-    if (!chat) return null;
-    const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);
-
-    if (index === filteredConversations.length - 1 && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+  const listData = useMemo(() => {
+    const filtered = filteredConversations || [];
+    if (hasNextPage) {
+      return [...filtered, { _id: "loader-placeholder", isLoader: true }];
     }
+    return filtered;
+  }, [filteredConversations, hasNextPage]);
 
-    return (
-      <div style={{ ...style, borderBottom: "1px solid #f5f6f6" }}>
-        <div
-          className={`chat-item ${isActive ? "active" : ""}`}
-          onClick={() => navigate(`/chats/${chat._id}`)}
-          style={{
-            padding: "12px 16px",
-            cursor: "pointer",
-            display: "flex",
-            gap: "14px",
-            alignItems: "center",
-            height: "100%",
-            background: isActive ? "#f0f2f5" : "transparent",
-            transition: "background 0.2s"
-          }}
-        >
-          <div style={{
-            width: "48px",
-            height: "48px",
-            borderRadius: "50%",
-            background: isActive ? "#d1d7db" : "#dfe5e7",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "#54656f",
-            fontWeight: "700",
-            fontSize: "1.1rem",
-            flexShrink: 0
-          }}>
-            {(chat.contact?.name || chat.phone).charAt(0).toUpperCase()}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-              <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem", display: "flex", alignItems: "center", gap: "6px" }}>
-                {chat.contact?.name || chat.phone}
-                {selectedAccountIds.length > 1 && (
-                  <span style={{ fontSize: "0.55rem", background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: "10px", fontWeight: "800", textTransform: "uppercase", border: "1px solid #e2e8f0" }}>
-                    {accountNameMap[chat.whatsappAccountId] || "Primary"}
-                  </span>
-                )}
-              </span>
-              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
-                {chat.lastMessageTime ? (
-                  <>
-                    <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#010f0dff" : "#00a2ffff" }}>
-                      {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                    <span style={{ fontSize: "0.62rem", color: "#ff0000ff", fontWeight: "600", textTransform: "uppercase" }}>
-                      {new Date(chat.lastMessageTime).toLocaleDateString([], { day: '2-digit', month: 'short' })}
-                    </span>
-                  </>
-                ) : ""}
-              </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <p style={{
-                fontSize: "0.85rem",
-                color: "#667781",
-                margin: 0,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                flex: 1,
-                fontWeight: chat.unreadCount > 0 ? "700" : "400"
-              }}>
-                {chat.lastMessage || "No messages"}
-              </p>
-              {chat.unreadCount > 0 && (
-                <span style={{
-                  background: "#25d366",
-                  color: "white",
-                  borderRadius: "50%",
-                  padding: "2px 6px",
-                  fontSize: "0.75rem",
-                  fontWeight: "800",
-                  minWidth: "20px",
-                  height: "20px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginLeft: "8px"
-                }}>
-                  {chat.unreadCount}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }, [filteredConversations, selectedChat, navigate, hasNextPage, isFetchingNextPage, fetchNextPage, accountNameMap, selectedAccountIds]);
+  const stableRowProps = useMemo(() => ({
+    conversations: listData,
+    selectedId: selectedChat?._id || null,
+    selectedPhone: selectedChat?.phone || null,
+    navigate,
+    accountNameMap,
+    selectedAccountIds: selectedAccountIds || []
+  }), [listData, selectedChat?._id, selectedChat?.phone, navigate, accountNameMap, selectedAccountIds]);
 
   return (
     <div className="chat-container" style={{
@@ -1312,7 +1474,7 @@ const ChatModule = () => {
           {/* Multi-Account Selector Dropdown */}
           <div style={{ marginTop: "12px", position: "relative" }} ref={accountDropdownRef}>
             <p style={{ fontSize: "0.65rem", color: "#667781", fontWeight: "bold", margin: "0 0 6px 4px", textTransform: "uppercase" }}>Active Accounts</p>
-            <div 
+            <div
               onClick={() => setShowAccountDropdown(!showAccountDropdown)}
               style={{
                 background: "#ffffff",
@@ -1333,9 +1495,9 @@ const ChatModule = () => {
                   {selectedAccountIds.length}
                 </div>
                 <span style={{ fontSize: "0.85rem", fontWeight: "600", color: "#111b21", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {selectedAccountIds.length === accounts.length 
-                    ? "All Accounts" 
-                    : selectedAccountIds.length === 1 
+                  {selectedAccountIds.length === accounts.length
+                    ? "All Accounts"
+                    : selectedAccountIds.length === 1
                       ? accounts.find(a => a._id === selectedAccountIds[0])?.name || "Selected Account"
                       : `${selectedAccountIds.length} Accounts Selected`}
                 </span>
@@ -1359,7 +1521,7 @@ const ChatModule = () => {
                 overflowY: "auto",
                 padding: "8px"
               }}>
-                <div 
+                <div
                   onClick={() => {
                     const allIds = accounts.map(a => a._id);
                     setSelectedAccountIds(selectedAccountIds.length === accounts.length ? [accounts[0]._id] : allIds);
@@ -1371,7 +1533,7 @@ const ChatModule = () => {
                   </div>
                   <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#00a884" }}>Select All Accounts</span>
                 </div>
-                
+
                 <div style={{ height: "1px", background: "#f1f5f9", margin: "4px 0" }} />
 
                 {accounts.map(acc => {
@@ -1404,16 +1566,16 @@ const ChatModule = () => {
                       onMouseOver={e => !isSelected && (e.currentTarget.style.background = "#f8fafc")}
                       onMouseOut={e => !isSelected && (e.currentTarget.style.background = "transparent")}
                     >
-                      <div style={{ 
-                        width: "16px", 
-                        height: "16px", 
-                        border: "2px solid", 
-                        borderColor: isSelected ? "#00a884" : "#cbd5e1", 
-                        borderRadius: "4px", 
-                        display: "flex", 
-                        alignItems: "center", 
-                        justifyContent: "center", 
-                        background: isSelected ? "#00a884" : "transparent" 
+                      <div style={{
+                        width: "16px",
+                        height: "16px",
+                        border: "2px solid",
+                        borderColor: isSelected ? "#00a884" : "#cbd5e1",
+                        borderRadius: "4px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: isSelected ? "#00a884" : "transparent"
                       }}>
                         {isSelected && <Check size={12} color="white" />}
                       </div>
@@ -1543,7 +1705,7 @@ const ChatModule = () => {
               <Plus size={14} />
             </button>
 
-            
+
           </div>
         </div>
 
@@ -1557,13 +1719,16 @@ const ChatModule = () => {
               <p style={{ fontSize: "0.8rem" }}>Try a different search or filter</p>
             </div>
           ) : (
-            <List
-              className="chat-scroll"
-              rowCount={filteredConversations.length}
-              rowHeight={72}
-              rowComponent={Row}
-              rowProps={{}}
-              style={{ height: window.innerHeight - 150, width: "100%" }}
+            <SidebarList
+              listData={listData}
+              selectedId={selectedChat?._id}
+              selectedPhone={selectedChat?.phone}
+              navigate={navigate}
+              accountNameMap={accountNameMap}
+              selectedAccountIds={selectedAccountIds}
+              hasNextPage={hasNextPage}
+              isFetchingNextPage={isFetchingNextPage}
+              fetchNextPage={fetchNextPage}
             />
           )}
         </div>
@@ -1574,24 +1739,24 @@ const ChatModule = () => {
         {selectedChat ? (
           <>
             {/* Floating Window Timer - Centered in Header */}
-            <div style={{ 
-              padding: "8px 16px", 
-              background: "#f0f2f5", 
-              display: "flex", 
-              justifyContent: "space-between", 
-              alignItems: "center", 
-              zIndex: 10, 
-              flexShrink: 0, 
-              height: "52px", 
+            <div style={{
+              padding: "8px 16px",
+              background: "#f0f2f5",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              zIndex: 10,
+              flexShrink: 0,
+              height: "52px",
               borderBottom: "1px solid rgba(0,0,0,0.05)",
-              position: "relative" 
+              position: "relative"
             }}>
               <div
                 style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
                 onClick={() => setShowContactInfo(!showContactInfo)}
               >
                 <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: "#dfe5e7", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696a0", fontSize: "1.1rem", fontWeight: "bold" }}>
-                  {(selectedChat.contact?.name || selectedChat.phone).charAt(0).toUpperCase()}
+                  {(selectedChat?.contact?.name || selectedChat?.phone || "U").charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <div style={{ display: "flex", flexDirection: "column" }}>
@@ -1655,116 +1820,14 @@ const ChatModule = () => {
                     </div>
                   </div>
                   {msgs.map((msg, idx) => (
-                    <div
+                    <MessageBubble
                       key={msg._id || `temp-${idx}`}
-                      className={`msg-bubble ${msg.direction === "outbound" ? "msg-outbound" : "msg-inbound"}`}
-                      style={{
-                        opacity: msg.status === "sending" ? 0.6 : 1,
-                        position: "relative"
-                      }}
-                    >
-                      {msg.status === "sending" && (
-                        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10 }}>
-                          <Loader2 className="animate-spin" size={24} color="#00a884" />
-                        </div>
-                      )}
-                      {msg.type === "template" && msg.templateData ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                          {/* Image rendering if available */}
-                          {msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link && (
-                            <img
-                              src={getProxiedUrl(msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link, msg.whatsappAccountId)}
-                              alt="Template"
-                              style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }}
-                            />
-                          )}
-
-                          <div
-                            style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
-                            dangerouslySetInnerHTML={{
-                              __html: (() => {
-                                const template = templates.find(t => t.name === msg.templateData.name);
-                                let text = template?.components.find(c => c.type === "BODY")?.text || msg.body;
-                                const params = msg.templateData.components.find(c => c.type === "body")?.parameters || [];
-                                params.forEach((p, i) => {
-                                  text = text.replace(`{{${i + 1}}}`, p.text || "");
-                                });
-                                return formatWhatsAppText(text);
-                              })()
-                            }}
-                          />
-
-                          {/* Rendering Buttons from the template structure in DB */}
-                          {templates.find(t => t.name === msg.templateData.name)?.components.find(c => c.type === "BUTTONS")?.buttons?.map((btn, i) => (
-                            <div key={i} style={{ padding: "8px", background: "rgba(255,255,255,0.05)", borderRadius: "6px", textAlign: "center", fontSize: "0.75rem", border: "1px solid rgba(255,255,255,0.1)", marginTop: "2px", color: "#53bdeb" }}>
-                              {btn.text}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                          {msg.mediaUrl && (
-                            <div style={{ marginBottom: "5px" }}>
-                              {msg.type === "image" ? (
-                                <img
-                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
-                                  alt="Received"
-                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }}
-                                  onDoubleClick={() => window.open(getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId), "_blank")}
-                                />
-                              ) : msg.type === "video" ? (
-                                <video
-                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
-                                  controls
-                                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px" }}
-                                />
-                              ) : msg.type === "audio" ? (
-                                <audio
-                                  src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
-                                  controls
-                                  style={{ width: "100%" }}
-                                />
-                              ) : (
-                                <div style={{ background: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
-                                  <FileText size={24} color="#8696a0" />
-                                  <div style={{ flex: 1, overflow: "hidden" }}>
-                                    <p style={{ margin: 0, fontSize: "0.85rem", textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{msg.body || "Document"}</p>
-                                    <a href={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download File</a>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                          <div
-                            style={{ whiteSpace: "pre-wrap" }}
-                            dangerouslySetInnerHTML={{ __html: formatWhatsAppText(msg.body) }}
-                          />
-                        </div>
-                      )}
-
-                      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "2px", gap: "2px", alignItems: "center" }}>
-                        <span style={{ fontSize: "0.65rem", color: "#0c08ffff", fontWeight: "800", letterSpacing: "0.3px" }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        {msg.direction === "outbound" && (
-                          <div style={{ display: "flex", marginLeft: "2px" }}>
-                            {msg.status === "read" ? (
-                              <div style={{ display: "flex" }}>
-                                <Check size={15} style={{ color: "#53bdeb" }} />
-                                <Check size={15} style={{ color: "#53bdeb", marginLeft: "-11px" }} />
-                              </div>
-                            ) : msg.status === "delivered" ? (
-                              <div style={{ display: "flex" }}>
-                                <Check size={15} style={{ color: "#8696a0" }} />
-                                <Check size={15} style={{ color: "#8696a0", marginLeft: "-11px" }} />
-                              </div>
-                            ) : msg.status === "failed" ? (
-                              <AlertCircle size={14} style={{ color: "#ff4757" }} />
-                            ) : (
-                              <Check size={15} style={{ color: "#8696a0" }} />
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                      msg={msg}
+                      templateMap={templateMap}
+                      formatWhatsAppText={formatWhatsAppText}
+                      getProxiedUrl={getProxiedUrl}
+                      templates={templates}
+                    />
                   ))}
                 </div>
               ))}
@@ -1772,7 +1835,7 @@ const ChatModule = () => {
 
             {windowTimeLeft ? (
               <div style={{ background: "#f0f2f5", display: "flex", flexDirection: "column", position: "relative" }}>
-                
+
                 {/* Emoji Picker Popover */}
                 {showEmojiPicker && (
                   <div ref={emojiPickerRef} style={{ position: "absolute", bottom: "100%", left: "10px", background: "white", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px", boxShadow: "0 -4px 12px rgba(0,0,0,0.1)", width: "300px", zIndex: 1000 }}>
@@ -1820,22 +1883,22 @@ const ChatModule = () => {
                                 try {
                                   // Clear any existing pending image
                                   setPendingImage(null);
-                                  
+
                                   // We can't directly use URL.createObjectURL on a remote URL easily without fetching
                                   // So for now, we just set the mediaUrl and Type
                                   // BUT the handleSend expects a 'file' object. 
                                   // Let's modify handleSend later to accept either file or mediaUrl.
                                   // FOR NOW: We'll set a special pending state
-                                  setPendingImage({ 
+                                  setPendingImage({
                                     previewUrl: p.mediaUrl,
-                                    remoteUrl: p.mediaUrl, 
-                                    isRemote: true 
+                                    remoteUrl: p.mediaUrl,
+                                    isRemote: true
                                   });
                                 } catch (err) {
                                   console.error("Error loading quick reply media:", err);
                                 }
                               }
-                              
+
                               setNewMessage(p.content || "");
                               setShowQuickReplies(false);
                             }}

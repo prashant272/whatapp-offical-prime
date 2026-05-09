@@ -102,7 +102,7 @@ export const getConversations = async (req, res) => {
     const total = await Conversation.countDocuments(filter);
     let conversations = await Conversation.find(filter)
       .populate("contact", "_id name phone sector")
-      .select("phone lastMessage lastMessageTime unreadCount status contact whatsappAccountId assignedTo sector followUpTime followUpActivity")
+      .select("phone lastMessage lastMessageTime unreadCount status contact whatsappAccountId assignedTo sector followUpTime followUpActivity lastCustomerMessageAt")
       .sort({ lastMessageTime: -1 })
       .skip(skip)
       .limit(Number(limit));
