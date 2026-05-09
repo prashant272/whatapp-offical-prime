@@ -34,16 +34,20 @@ export const verifyNumbers = async (req, res, next) => {
 export const getContacts = async (req, res, next) => {
   try {
     const accountId = req.headers["x-whatsapp-account-id"];
-    const { search, status, tag, sector, showAllAccounts, page = 1, limit = 50, skip: skipParam } = req.query;
+    const { 
+      search, status, tag, sector, showAllAccounts, 
+      page = 1, limit = 50, skip: skipParam, onlyPhones, 
+      assignedUsers, excludeUsers,
+      statuses, excludeStatuses,
+      campaignStatus, excludeCampaignStatus 
+    } = req.query;
 
     let query = {};
     const isAll = showAllAccounts === "true" || accountId === "all";
 
     if (isAll || !accountId) {
-      // Global search - no account filter
       query = {};
     } else {
-      // Filter by specific account or unassigned
       query.$or = [
         { whatsappAccountId: accountId },
         { whatsappAccountId: null },
@@ -52,9 +56,15 @@ export const getContacts = async (req, res, next) => {
     }
 
     if (search) {
+      const searchClean = search.toString().trim();
+      const searchWithout91 = searchClean.replace(/^91/, "");
+      const searchWith91 = searchClean.startsWith("91") ? searchClean : `91${searchClean}`;
+
       const searchFilter = [
-        { name: { $regex: search, $options: "i" } },
-        { phone: { $regex: search, $options: "i" } }
+        { name: { $regex: searchClean, $options: "i" } },
+        { phone: { $regex: searchClean, $options: "i" } },
+        { phone: { $regex: searchWithout91, $options: "i" } },
+        { phone: { $regex: searchWith91, $options: "i" } }
       ];
 
       if (query.$or) {
@@ -65,15 +75,67 @@ export const getContacts = async (req, res, next) => {
     }
 
     if (status) query.status = status;
+    
+    if (statuses) {
+      const statusArr = Array.isArray(statuses) ? statuses : statuses.split(',');
+      query.status = excludeStatuses === 'true' ? { $nin: statusArr } : { $in: statusArr };
+    }
+
+    if (assignedUsers) {
+      const userArr = Array.isArray(assignedUsers) ? assignedUsers : assignedUsers.split(',');
+      query.assignedTo = excludeUsers === 'true' ? { $nin: userArr } : { $in: userArr };
+    }
+
     if (tag) query.tags = { $in: [tag] };
     if (sector) query.sector = sector;
-    if (req.query.isCampaignSent !== undefined) {
+
+    if (campaignStatus) {
+      const statusArr = Array.isArray(campaignStatus) ? campaignStatus : campaignStatus.split(',');
+      const orConditions = [];
+
+      if (statusArr.includes('sent')) orConditions.push({ isCampaignSent: true });
+      if (statusArr.includes('failed')) orConditions.push({ isCampaignFailed: true });
+      if (statusArr.includes('unsent')) orConditions.push({ isCampaignSent: false, isCampaignFailed: false });
+
+      if (orConditions.length > 0) {
+        const campaignQuery = excludeCampaignStatus === 'true' ? { $and: orConditions.map(c => ({ $nor: [c] })) } : { $or: orConditions };
+        
+        if (query.$and) {
+          query.$and.push(campaignQuery);
+        } else {
+          // Special case for $nor if excluding
+          if (excludeCampaignStatus === 'true') {
+            query.$and = [campaignQuery];
+          } else {
+            query.$or = query.$or ? [...query.$or, ...orConditions] : orConditions;
+          }
+        }
+      }
+    } else if (req.query.isCampaignSent !== undefined) {
       query.isCampaignSent = req.query.isCampaignSent === "true";
     }
 
     const limitInt = parseInt(limit);
     const skip = skipParam ? parseInt(skipParam) : (parseInt(page) - 1) * limitInt;
     const total = await Contact.countDocuments(query);
+
+    // HIGH SPEED MODE for Campaign Manager loading
+    if (onlyPhones === 'true') {
+      const rawContacts = await Contact.find(query)
+        .select("phone")
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limitInt)
+        .lean();
+      
+      return res.json({
+        contacts: rawContacts,
+        total,
+        hasMore: total > skip + rawContacts.length,
+        currentPage: parseInt(page)
+      });
+    }
+
     const rawContacts = await Contact.find(query)
       .populate("assignedTo", "name")
       .populate("whatsappAccountId", "name")

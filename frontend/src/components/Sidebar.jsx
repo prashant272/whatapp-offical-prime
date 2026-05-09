@@ -8,13 +8,17 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
   const isChatTab = location.pathname.startsWith("/chats");
   const { accounts, activeAccount, switchAccount } = useWhatsAppAccount();
   const [showAccountSwitcher, setShowAccountSwitcher] = React.useState(false);
+  const accountSwitcherRef = React.useRef(null);
 
-  // Auto-expand when leaving chats
   React.useEffect(() => {
-    if (!isChatTab && isCollapsed) {
-      setIsCollapsed(false);
-    }
-  }, [isChatTab]);
+    const handleClickOutside = (event) => {
+      if (accountSwitcherRef.current && !accountSwitcherRef.current.contains(event.target)) {
+        setShowAccountSwitcher(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const visibleMenu = user ? menuItems.filter(item => item.roles.includes(user.role)) : [];
 
@@ -92,7 +96,7 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
           </h2>
         </div>
 
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative" }} ref={accountSwitcherRef}>
           {activeAccount && !isCollapsed && (
             <div 
               onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}

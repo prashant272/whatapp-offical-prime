@@ -49,93 +49,107 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         lastReportedSuccess = currentSuccess;
         lastReportedFailure = currentFailure;
 
-        if (latestLog && latestLog.status === "sent") {
-          let messageBody = `Campaign [${campaign.name}]: ${template.name}`;
-          
-          const bodyComp = template.components.find(c => c.type === "BODY");
-          if (bodyComp && bodyComp.text) {
-            let text = bodyComp.text;
-            if (templateComponents) {
-              const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
-              bodyParams.forEach((p, idx) => {
-                text = text.replace(`{{${idx + 1}}}`, p.text || "");
-              });
-            }
-            messageBody = text;
-          }
+        if (latestLog) {
+          const SUCCESS_STATUSES = ["sent", "delivered", "read"];
+          const isSent = SUCCESS_STATUSES.includes(latestLog.status);
+          const isFailed = latestLog.status === "failed";
 
-          let contact = await Contact.findOne({ phone: latestLog.phone, whatsappAccountId: account._id });
-          if (!contact) {
-            contact = new Contact({ 
-              name: `User ${latestLog.phone}`, 
-              phone: latestLog.phone, 
-              whatsappAccountId: account._id,
-              sourceCampaign: campaign.name,
-              sector: sectorName || "Unassigned",
-              isCampaignSent: true
+          if (isSent || isFailed) {
+            const logPhone = latestLog.phone;
+            const stripped = logPhone.replace(/^91/, "");
+            const withCode = logPhone.startsWith("91") ? logPhone : `91${logPhone}`;
+
+            // Try to find contact with any of the formats
+            let contact = await Contact.findOne({ 
+              phone: { $in: [logPhone, stripped, withCode] }, 
+              whatsappAccountId: account._id 
             });
-            await contact.save();
-          } else {
-            let needsUpdate = false;
-            if (!contact.sourceCampaign) {
-              contact.sourceCampaign = campaign.name;
-              needsUpdate = true;
+
+            if (!contact) {
+              contact = new Contact({ 
+                name: `User ${logPhone}`, 
+                phone: logPhone, 
+                whatsappAccountId: account._id,
+                sourceCampaign: campaign.name,
+                sector: sectorName || "Unassigned",
+                isCampaignSent: isSent,
+                isCampaignFailed: isFailed
+              });
+              await contact.save();
+            } else {
+              // ALWAYS update to LATEST status — overwrite previous result
+              // So if it was failed before but succeeded now → isCampaignFailed = false
+              // If it was sent before but failed now → isCampaignSent = false
+              contact.isCampaignSent = isSent;
+              contact.isCampaignFailed = isFailed;
+              
+              if (!contact.sourceCampaign) contact.sourceCampaign = campaign.name;
+              if (sectorName && contact.sector !== sectorName) contact.sector = sectorName;
+              
+              await contact.save();
             }
-            if (sectorName && contact.sector !== sectorName) {
-              contact.sector = sectorName;
-              needsUpdate = true;
-            }
-            if (!contact.isCampaignSent) {
-              contact.isCampaignSent = true;
-              needsUpdate = true;
-            }
-            if (needsUpdate) await contact.save();
           }
 
-          let mediaUrl = null;
-          if (templateComponents) {
-            const headerComp = templateComponents.find(c => c.type === "header");
-            if (headerComp && headerComp.parameters) {
-              const imgParam = headerComp.parameters.find(p => p.type === "image");
-              if (imgParam) mediaUrl = imgParam.image?.link;
+          if (isSent) {
+            let messageBody = `Campaign [${campaign.name}]: ${template.name}`;
+            
+            const bodyComp = template.components.find(c => c.type === "BODY");
+            if (bodyComp && bodyComp.text) {
+              let text = bodyComp.text;
+              if (templateComponents) {
+                const bodyParams = templateComponents.find(c => c.type === "body")?.parameters || [];
+                bodyParams.forEach((p, idx) => {
+                  text = text.replace(`{{${idx + 1}}}`, p.text || "");
+                });
+              }
+              messageBody = text;
             }
-          }
 
-          const newMessage = new Message({
-            messageId: latestLog.messageId,
-            from: "me",
-            to: latestLog.phone,
-            body: messageBody,
-            type: "template",
-            whatsappAccountId: account._id,
-            campaignId: campaign._id,
-            templateData: { name: template.name, components: templateComponents },
-            mediaUrl: mediaUrl,
-            direction: "outbound",
-            status: "sent"
-          });
-          await newMessage.save();
+            let mediaUrl = null;
+            if (templateComponents) {
+              const headerComp = templateComponents.find(c => c.type === "header");
+              if (headerComp && headerComp.parameters) {
+                const imgParam = headerComp.parameters.find(p => p.type === "image");
+                if (imgParam) mediaUrl = imgParam.image?.link;
+              }
+            }
 
-          const normalizedPhone = latestLog.phone.toString().replace(/\D/g, "");
-          const convFilter = { phone: normalizedPhone };
-          if (account._id.toString() !== "all") {
-            convFilter.$or = [{ whatsappAccountId: account._id }, { whatsappAccountId: null }];
-          }
-
-          const updatedConv = await Conversation.findOneAndUpdate(
-            convFilter,
-            { 
-              contact: contact._id,
+            const newMessage = new Message({
+              messageId: latestLog.messageId,
+              from: "me",
+              to: latestLog.phone,
+              body: messageBody,
+              type: "template",
               whatsappAccountId: account._id,
-              lastMessage: newMessage.body, 
-              lastMessageTime: new Date(),
-              unreadCount: 0
-            },
-            { upsert: true, new: true }
-          ).populate("contact");
+              campaignId: campaign._id,
+              templateData: { name: template.name, components: templateComponents },
+              mediaUrl: mediaUrl,
+              direction: "outbound",
+              status: "sent"
+            });
+            await newMessage.save();
 
-          smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
-        }
+            const normalizedPhone = latestLog.phone.toString().replace(/\D/g, "");
+            const convFilter = { phone: normalizedPhone };
+            if (account._id.toString() !== "all") {
+              convFilter.$or = [{ whatsappAccountId: account._id }, { whatsappAccountId: null }];
+            }
+
+            const updatedConv = await Conversation.findOneAndUpdate(
+              convFilter,
+              { 
+                contact: contact._id,
+                whatsappAccountId: account._id,
+                lastMessage: newMessage.body, 
+                lastMessageTime: new Date(),
+                unreadCount: 0
+              },
+              { upsert: true, new: true }
+            ).populate("contact");
+
+            smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
+          }
+        } // end if (latestLog)
 
         const totalSentCount = initialSent + currentSuccess;
         const totalFailedCount = initialFailed + currentFailure;

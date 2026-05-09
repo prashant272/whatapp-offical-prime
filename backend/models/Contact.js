@@ -34,7 +34,8 @@ const contactSchema = new mongoose.Schema({
     ruleId: { type: mongoose.Schema.Types.ObjectId, ref: "FollowUpRule" },
     lastSentAt: { type: Date, default: Date.now }
   }],
-  isCampaignSent: { type: Boolean, default: false }
+  isCampaignSent: { type: Boolean, default: false },
+  isCampaignFailed: { type: Boolean, default: false }
 }, { timestamps: true });
 
 contactSchema.index({ phone: 1, whatsappAccountId: 1 }, { unique: true });
@@ -42,6 +43,17 @@ contactSchema.index({ whatsappAccountId: 1, createdAt: -1 });
 contactSchema.index({ sector: 1 });
 contactSchema.index({ status: 1 });
 contactSchema.index({ assignedTo: 1 });
+contactSchema.index({ isCampaignSent: 1, isCampaignFailed: 1 });
+
+// Normalize phone to 12 digits (with 91) before saving
+contactSchema.pre("save", function(next) {
+  if (this.phone) {
+    let clean = this.phone.toString().replace(/\D/g, ""); // Remove non-digits
+    if (clean.length === 10) clean = "91" + clean;
+    this.phone = clean;
+  }
+  next();
+});
 
 const Contact = mongoose.model("Contact", contactSchema);
 export default Contact;

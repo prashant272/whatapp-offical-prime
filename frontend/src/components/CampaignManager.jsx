@@ -40,13 +40,43 @@ const CampaignManager = () => {
   const [loadLimit, setLoadLimit] = useState(100);
   const [loadSkip, setLoadSkip] = useState(0);
   const [loadFromAllAccounts, setLoadFromAllAccounts] = useState(false);
-  const [loadCampaignStatus, setLoadCampaignStatus] = useState("all");
+  const [loadCampaignStatus, setLoadCampaignStatus] = useState([]); // Array: "sent", "failed", "unsent"
   const [customStatuses, setCustomStatuses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [selectedStatuses, setSelectedStatuses] = useState([]);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showCampaignStatusDropdown, setShowCampaignStatusDropdown] = useState(false);
+  const [excludeStatuses, setExcludeStatuses] = useState(false);
+  const [excludeUsers, setExcludeUsers] = useState(false);
+  const [excludeCampaignStatus, setExcludeCampaignStatus] = useState(false);
   const [existingNumbers, setExistingNumbers] = useState([]); // Array of { phone, sector }
   const [bulkSector, setBulkSector] = useState("");
   const [showRecampaignModal, setShowRecampaignModal] = useState(false);
   const [recampaignSource, setRecampaignSource] = useState(null);
   const fileInputRef = useRef(null);
+  
+  // Refs for click outside to close
+  const statusDropdownRef = useRef(null);
+  const userDropdownRef = useRef(null);
+  const campaignStatusDropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target)) {
+        setShowStatusDropdown(false);
+      }
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target)) {
+        setShowUserDropdown(false);
+      }
+      if (campaignStatusDropdownRef.current && !campaignStatusDropdownRef.current.contains(event.target)) {
+        setShowCampaignStatusDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchData = async () => {
     if (!activeAccount) return;
@@ -59,9 +89,10 @@ const CampaignManager = () => {
         api.get("/contacts/tags").catch(e => ({ data: [] }))
       ]);
 
-      const [sectorRes, statusRes] = await Promise.all([
+      const [sectorRes, statusRes, userRes] = await Promise.all([
         api.get("/sectors").catch(e => ({ data: [] })),
-        api.get("/statuses").catch(e => ({ data: [] }))
+        api.get("/statuses").catch(e => ({ data: [] })),
+        api.get("/users").catch(e => ({ data: [] }))
       ]);
 
       setCampaigns(Array.isArray(campRes.data) ? campRes.data : []);
@@ -71,6 +102,7 @@ const CampaignManager = () => {
       setTags(Array.isArray(tagRes.data) ? tagRes.data : []);
       setSectors(Array.isArray(sectorRes.data) ? sectorRes.data : []);
       setCustomStatuses(Array.isArray(statusRes.data) ? statusRes.data : []);
+      setUsers(Array.isArray(userRes.data) ? userRes.data : []);
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
@@ -640,91 +672,259 @@ const CampaignManager = () => {
             <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", color: "#667781" }}>Target Contacts</label>
 
             <div style={{ background: "#f0f2f5", padding: "15px", borderRadius: "12px", border: "1px solid #ddd", marginBottom: "12px" }}>
-              <p style={{ margin: "0 0 10px 0", fontSize: "0.85rem", color: "#00a884", fontWeight: "700" }}>Option 1: Load from Database (Tags/Sectors)</p>
-              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-                <select
-                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
-                  value={selectedSourceType}
-                  onChange={(e) => setSelectedSourceType(e.target.value)}
-                >
-                  <option value="">Category (All)</option>
-                  <option value="tag">By Tag</option>
-                  <option value="sector">By Sector</option>
-                </select>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                <p style={{ margin: 0, fontSize: "0.85rem", color: "#00a884", fontWeight: "700" }}>Option 1: Load from Database</p>
+                {/* Active Filters Summary */}
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.7rem", color: "#667781", fontWeight: "600" }}>Active Filters:</span>
+                  {selectedSourceType && selectedSourceValue
+                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "tag" ? "Tag" : "Sector"}: {selectedSourceValue}</span>
+                    : <span style={{ background: "#f0f2f5", color: "#667781", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem" }}>All Categories</span>
+                  }
+                  {selectedStatuses.length > 0
+                    ? selectedStatuses.map(s => <span key={s} style={{ background: excludeStatuses ? "#fff1f2" : "#f0fdf4", color: excludeStatuses ? "#e11d48" : "#00a884", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>{excludeStatuses ? "−" : "+"} {s}</span>)
+                    : <span style={{ background: "#f0f2f5", color: "#667781", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem" }}>All Statuses</span>
+                  }
+                  {selectedUsers.length > 0
+                    ? <span style={{ background: excludeUsers ? "#fff1f2" : "#eff6ff", color: excludeUsers ? "#e11d48" : "#339af0", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>{excludeUsers ? "−" : "+"} {selectedUsers.length} User(s)</span>
+                    : null
+                  }
+                  {loadCampaignStatus.length > 0
+                    ? loadCampaignStatus.map(s => (
+                        <span key={s} style={{ background: (s === "failed" || excludeCampaignStatus) ? "#fff1f2" : "#f0fdf4", color: (s === "failed" || excludeCampaignStatus) ? "#e11d48" : "#008069", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>
+                          {excludeCampaignStatus ? "−" : "+"} {s === "sent" ? "Sent" : s === "failed" ? "Failed" : "Unsent"}
+                        </span>
+                      ))
+                    : null
+                  }
+                </div>
+              </div>
+              {/* --- ROW 1: Category + Value + Campaign Status --- */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px", marginBottom: "10px" }}>
+                <div>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Category</label>
+                  <select
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", outline: "none" }}
+                    value={selectedSourceType}
+                    onChange={(e) => { setSelectedSourceType(e.target.value); setSelectedSourceValue(""); }}
+                  >
+                    <option value="">All Contacts</option>
+                    <option value="tag">By Tag</option>
+                    <option value="sector">By Sector</option>
+                  </select>
+                </div>
 
-                <select
-                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
-                  value={selectedSourceValue}
-                  onChange={(e) => setSelectedSourceValue(e.target.value)}
-                  disabled={!selectedSourceType}
-                >
-                  <option value="">Select Value</option>
-                  {selectedSourceType === "tag" ? tags.map(t => <option key={t} value={t}>{t}</option>) :
-                    selectedSourceType === "sector" ? sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>) : null}
-                </select>
+                <div>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Value</label>
+                  <select
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", outline: "none", opacity: !selectedSourceType ? 0.5 : 1 }}
+                    value={selectedSourceValue}
+                    onChange={(e) => setSelectedSourceValue(e.target.value)}
+                    disabled={!selectedSourceType}
+                  >
+                    <option value="">-- Select Value --</option>
+                    {selectedSourceType === "tag" ? tags.map(t => <option key={t} value={t}>{t}</option>) :
+                      selectedSourceType === "sector" ? sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>) : null}
+                  </select>
+                </div>
 
-                <select
-                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                >
-                  <option value="">All Status</option>
-                  {customStatuses.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-                </select>
+                {/* Custom Campaign Status Multi-Select */}
+                <div style={{ position: "relative" }} ref={campaignStatusDropdownRef}>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Campaign Status {loadCampaignStatus.length > 0 && <span style={{ background: "#339af0", color: "white", borderRadius: "10px", padding: "1px 7px", fontSize: "0.65rem" }}>{loadCampaignStatus.length}</span>}
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div
+                      onClick={() => setShowCampaignStatusDropdown(prev => !prev)}
+                      style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none" }}
+                    >
+                      <span style={{ color: loadCampaignStatus.length === 0 ? "#aaa" : "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "140px" }}>
+                        {loadCampaignStatus.length === 0 ? "All Contacts" : 
+                          loadCampaignStatus.map(s => s === "sent" ? "✅ Sent" : s === "failed" ? "❌ Failed" : "⚪ Unsent").join(", ")}
+                      </span>
+                      <span style={{ color: "#667781", fontSize: "0.7rem" }}>▼</span>
+                    </div>
+                    {showCampaignStatusDropdown && (
+                      <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "white", border: "1px solid #ddd", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100 }}>
+                        <div style={{ padding: "10px", background: "#f8f9fa", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "0.75rem", fontWeight: "700" }}>Mode:</span>
+                          <div style={{ display: "flex", background: "#eee", borderRadius: "20px", padding: "2px" }}>
+                            <div onClick={() => setExcludeCampaignStatus(false)} style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.7rem", cursor: "pointer", background: !excludeCampaignStatus ? "#339af0" : "transparent", color: !excludeCampaignStatus ? "white" : "#667781", fontWeight: "700" }}>+ Include</div>
+                            <div onClick={() => setExcludeCampaignStatus(true)} style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.7rem", cursor: "pointer", background: excludeCampaignStatus ? "#ea4335" : "transparent", color: excludeCampaignStatus ? "white" : "#667781", fontWeight: "700" }}>− Exclude</div>
+                          </div>
+                        </div>
+                        <div
+                          onClick={() => setLoadCampaignStatus([])}
+                          style={{ padding: "8px 14px", fontSize: "0.8rem", cursor: "pointer", borderBottom: "1px solid #f0f2f5", color: "#667781", fontWeight: "600" }}
+                        >✕ Clear (All Contacts)</div>
+                        
+                        {[
+                          { id: "unsent", label: "Unsent Only", color: "#667781" },
+                          { id: "sent", label: "Sent", color: "#00a884" },
+                          { id: "failed", label: "Failed", color: "#ea4335" }
+                        ].map(s => (
+                          <div
+                            key={s.id}
+                            onClick={() => setLoadCampaignStatus(prev => prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id])}
+                            style={{ padding: "10px 14px", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: loadCampaignStatus.includes(s.id) ? (excludeCampaignStatus ? "#fff1f2" : "#f8f9fa") : "transparent" }}
+                          >
+                            <span style={{ width: "16px", height: "16px", borderRadius: "4px", border: `2px solid ${loadCampaignStatus.includes(s.id) ? (excludeCampaignStatus ? "#e11d48" : s.color) : "#ccc"}`, background: loadCampaignStatus.includes(s.id) ? (excludeCampaignStatus ? "#e11d48" : s.color) : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", color: "white", flexShrink: 0 }}>
+                              {loadCampaignStatus.includes(s.id) ? (excludeCampaignStatus ? "−" : "✓") : ""}
+                            </span>
+                            <span style={{ color: loadCampaignStatus.includes(s.id) ? "#111b21" : "#667781", fontWeight: loadCampaignStatus.includes(s.id) ? "600" : "400" }}>{s.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
 
-                <select
-                  style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd", minWidth: "120px" }}
-                  value={loadCampaignStatus}
-                  onChange={(e) => setLoadCampaignStatus(e.target.value)}
-                >
-                  <option value="all">All Contacts</option>
-                  <option value="unsent">Unsent Only</option>
-                  <option value="sent">Already Sent</option>
-                </select>
+              {/* --- ROW 2: Status Multi-select + Users Multi-select + Range + Load --- */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto auto auto", gap: "10px", alignItems: "end" }}>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "white", padding: "0 10px", borderRadius: "8px", border: "1px solid #ddd" }}>
-                  <span style={{ fontSize: "0.75rem", color: "#667781" }}>Start from:</span>
-                  <input 
-                    type="number" 
-                    value={loadSkip} 
-                    onChange={(e) => setLoadSkip(e.target.value)} 
-                    style={{ width: "60px", border: "none", outline: "none", fontSize: "0.85rem", padding: "10px 0" }}
+                {/* Custom Status Multi-Select */}
+                <div style={{ position: "relative" }} ref={statusDropdownRef}>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Contact Status {selectedStatuses.length > 0 && <span style={{ background: "#00a884", color: "white", borderRadius: "10px", padding: "1px 7px", fontSize: "0.65rem" }}>{selectedStatuses.length}</span>}
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div
+                      onClick={() => setShowStatusDropdown(prev => !prev)}
+                      style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none" }}
+                    >
+                      <span style={{ color: selectedStatuses.length === 0 ? "#aaa" : "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "140px" }}>
+                        {selectedStatuses.length === 0 ? "All Statuses" : selectedStatuses.join(", ")}
+                      </span>
+                      <span style={{ color: "#667781", fontSize: "0.7rem" }}>▼</span>
+                    </div>
+                    {showStatusDropdown && (
+                      <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "white", border: "1px solid #ddd", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, maxHeight: "250px", overflowY: "auto" }}>
+                        <div style={{ padding: "10px", background: "#f8f9fa", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "0.75rem", fontWeight: "700" }}>Mode:</span>
+                          <div style={{ display: "flex", background: "#eee", borderRadius: "20px", padding: "2px" }}>
+                            <div onClick={() => setExcludeStatuses(false)} style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.7rem", cursor: "pointer", background: !excludeStatuses ? "#00a884" : "transparent", color: !excludeStatuses ? "white" : "#667781", fontWeight: "700" }}>+ Include</div>
+                            <div onClick={() => setExcludeStatuses(true)} style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.7rem", cursor: "pointer", background: excludeStatuses ? "#ea4335" : "transparent", color: excludeStatuses ? "white" : "#667781", fontWeight: "700" }}>− Exclude</div>
+                          </div>
+                        </div>
+                        <div
+                          onClick={() => setSelectedStatuses([])}
+                          style={{ padding: "8px 14px", fontSize: "0.8rem", cursor: "pointer", borderBottom: "1px solid #f0f2f5", color: "#667781", fontWeight: "600" }}
+                        >✕ Clear All</div>
+                        {customStatuses.map(s => (
+                          <div
+                            key={s.name}
+                            onClick={() => setSelectedStatuses(prev => prev.includes(s.name) ? prev.filter(x => x !== s.name) : [...prev, s.name])}
+                            style={{ padding: "8px 14px", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: selectedStatuses.includes(s.name) ? (excludeStatuses ? "#fff1f2" : "#f0fdf4") : "transparent", color: selectedStatuses.includes(s.name) ? (excludeStatuses ? "#e11d48" : "#00a884") : "#111b21" }}
+                          >
+                            <span style={{ width: "16px", height: "16px", borderRadius: "4px", border: `2px solid ${selectedStatuses.includes(s.name) ? (excludeStatuses ? "#e11d48" : "#00a884") : "#ccc"}`, background: selectedStatuses.includes(s.name) ? (excludeStatuses ? "#e11d48" : "#00a884") : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", color: "white", flexShrink: 0 }}>
+                              {selectedStatuses.includes(s.name) ? (excludeStatuses ? "−" : "✓") : ""}
+                            </span>
+                            {s.name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Custom Assigned User Multi-Select */}
+                <div style={{ position: "relative" }} ref={userDropdownRef}>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Assigned User {selectedUsers.length > 0 && <span style={{ background: "#339af0", color: "white", borderRadius: "10px", padding: "1px 7px", fontSize: "0.65rem" }}>{selectedUsers.length}</span>}
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div
+                      onClick={() => setShowUserDropdown(prev => !prev)}
+                      style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none" }}
+                    >
+                      <span style={{ color: selectedUsers.length === 0 ? "#aaa" : "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "140px" }}>
+                        {selectedUsers.length === 0 ? "All Users" : users.filter(u => selectedUsers.includes(u._id)).map(u => u.name).join(", ")}
+                      </span>
+                      <span style={{ color: "#667781", fontSize: "0.7rem" }}>▼</span>
+                    </div>
+                    {showUserDropdown && (
+                      <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "white", border: "1px solid #ddd", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, maxHeight: "250px", overflowY: "auto" }}>
+                        <div style={{ padding: "10px", background: "#f8f9fa", borderBottom: "1px solid #eee", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: "0.75rem", fontWeight: "700" }}>Mode:</span>
+                          <div style={{ display: "flex", background: "#eee", borderRadius: "20px", padding: "2px" }}>
+                            <div onClick={() => setExcludeUsers(false)} style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.7rem", cursor: "pointer", background: !excludeUsers ? "#339af0" : "transparent", color: !excludeUsers ? "white" : "#667781", fontWeight: "700" }}>+ Include</div>
+                            <div onClick={() => setExcludeUsers(true)} style={{ padding: "3px 10px", borderRadius: "20px", fontSize: "0.7rem", cursor: "pointer", background: excludeUsers ? "#ea4335" : "transparent", color: excludeUsers ? "white" : "#667781", fontWeight: "700" }}>− Exclude</div>
+                          </div>
+                        </div>
+                        <div
+                          onClick={() => setSelectedUsers([])}
+                          style={{ padding: "8px 14px", fontSize: "0.8rem", cursor: "pointer", borderBottom: "1px solid #f0f2f5", color: "#667781", fontWeight: "600" }}
+                        >✕ Clear All</div>
+                        {users.map(u => (
+                          <div
+                            key={u._id}
+                            onClick={() => setSelectedUsers(prev => prev.includes(u._id) ? prev.filter(x => x !== u._id) : [...prev, u._id])}
+                            style={{ padding: "8px 14px", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: selectedUsers.includes(u._id) ? (excludeUsers ? "#fff1f2" : "#eff6ff") : "transparent", color: selectedUsers.includes(u._id) ? (excludeUsers ? "#e11d48" : "#339af0") : "#111b21" }}
+                          >
+                            <span style={{ width: "16px", height: "16px", borderRadius: "4px", border: `2px solid ${selectedUsers.includes(u._id) ? (excludeUsers ? "#e11d48" : "#339af0") : "#ccc"}`, background: selectedUsers.includes(u._id) ? (excludeUsers ? "#e11d48" : "#339af0") : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", color: "white", flexShrink: 0 }}>
+                              {selectedUsers.includes(u._id) ? (excludeUsers ? "−" : "✓") : ""}
+                            </span>
+                            <div>
+                              <div style={{ fontWeight: "600", lineHeight: 1.2 }}>{u.name}</div>
+                              <div style={{ fontSize: "0.7rem", color: "#667781" }}>{u.role}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Start From */}
+                <div>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Start From</label>
+                  <input
+                    type="number"
+                    value={loadSkip}
+                    onChange={(e) => setLoadSkip(e.target.value)}
+                    style={{ width: "80px", padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", outline: "none" }}
                   />
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "white", padding: "0 10px", borderRadius: "8px", border: "1px solid #ddd" }}>
-                  <span style={{ fontSize: "0.75rem", color: "#667781" }}>Limit:</span>
-                  <input 
-                    type="number" 
-                    value={loadLimit} 
-                    onChange={(e) => setLoadLimit(e.target.value)} 
-                    style={{ width: "60px", border: "none", outline: "none", fontSize: "0.85rem", padding: "10px 0" }}
+                {/* Limit */}
+                <div>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Limit</label>
+                  <input
+                    type="number"
+                    value={loadLimit}
+                    onChange={(e) => setLoadLimit(e.target.value)}
+                    style={{ width: "80px", padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", outline: "none" }}
                   />
                 </div>
 
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      let url = `/contacts?limit=${loadLimit}&skip=${loadSkip}&showAllAccounts=true`;
-                      if (selectedSourceType && selectedSourceValue) url += `&${selectedSourceType}=${selectedSourceValue}`;
-                      if (selectedStatus) url += `&status=${selectedStatus}`;
-                      
-                      if (loadCampaignStatus === "unsent") url += `&isCampaignSent=false`;
-                      else if (loadCampaignStatus === "sent") url += `&isCampaignSent=true`;
+                {/* Load Button */}
+                <div>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "transparent", display: "block", marginBottom: "4px" }}>_</label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        let url = `/contacts?limit=${loadLimit}&skip=${loadSkip}&showAllAccounts=true&onlyPhones=true`;
+                        if (selectedSourceType && selectedSourceValue) url += `&${selectedSourceType}=${selectedSourceValue}`;
+                        if (selectedStatuses.length > 0) url += `&statuses=${selectedStatuses.join(",")}&excludeStatuses=${excludeStatuses}`;
+                        if (selectedUsers.length > 0) url += `&assignedUsers=${selectedUsers.join(",")}&excludeUsers=${excludeUsers}`;
+                        if (loadCampaignStatus.length > 0) url += `&campaignStatus=${loadCampaignStatus.join(",")}&excludeCampaignStatus=${excludeCampaignStatus}`;
 
-                      const res = await api.get(url, {
-                        headers: { "x-whatsapp-account-id": "all" }
-                      });
-                      const numbers = res.data.contacts.map(c => c.phone).join("\n");
-                      setNewCampaign({ ...newCampaign, contactsRaw: numbers });
-                      alert(`✅ Loaded ${res.data.contacts.length} contacts starting from #${loadSkip}!`);
-                    } catch (err) { alert("Failed to load contacts"); }
-                  }}
-                  style={{ padding: "10px 20px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700" }}
-                >
-                  Load
-                </button>
+                        const res = await api.get(url, { headers: { "x-whatsapp-account-id": "all" } });
+                        const numbers = res.data.contacts.map(c => c.phone).join("\n");
+                        setNewCampaign({ ...newCampaign, contactsRaw: numbers });
+                        setShowStatusDropdown(false);
+                        setShowUserDropdown(false);
+                        setShowCampaignStatusDropdown(false);
+                        alert(`✅ Loaded ${res.data.contacts.length} numbers instantly!`);
+                      } catch (err) { alert("Failed to load contacts"); }
+                    }}
+                    style={{ padding: "9px 20px", background: "linear-gradient(135deg, #00a884, #008069)", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "700", fontSize: "0.9rem", whiteSpace: "nowrap", boxShadow: "0 2px 8px rgba(0,168,132,0.3)" }}
+                  >
+                    ⚡ Load
+                  </button>
+                </div>
               </div>
             </div>
 
