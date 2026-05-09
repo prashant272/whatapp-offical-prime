@@ -77,14 +77,8 @@ export const getConversations = async (req, res) => {
 
     // 4. Role-based restriction
     if (req.user.role === "Executive") {
-      // Executives see their own chats + any Unassigned chats (so they can pick them up)
-      conditions.push({ 
-        $or: [
-          { assignedTo: req.user._id },
-          { assignedTo: { $exists: false } },
-          { assignedTo: null }
-        ]
-      });
+      // Executives ONLY see their own assigned chats
+      conditions.push({ assignedTo: req.user._id });
     }
 
     // Apply conditions
