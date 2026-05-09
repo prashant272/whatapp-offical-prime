@@ -51,5 +51,9 @@ export const smartEmit = (eventName, data) => {
       : conversation.assignedTo;
     
     io.to(`user_${assignedId}`).emit(eventName, data);
+  } else {
+    // 3. If unassigned, emit to Managers and Executives so they can see new/unassigned chats
+    io.to("role_Manager").emit(eventName, data);
+    io.to("role_Executive").emit(eventName, data);
   }
 };

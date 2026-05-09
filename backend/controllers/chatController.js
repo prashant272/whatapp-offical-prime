@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Conversation from "../models/Conversation.js";
 import Template from "../models/Template.js";
 import Message from "../models/Message.js";
@@ -8,59 +9,143 @@ import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getIO, smartEmit } from "../utils/socket.js";
 
+const escapeRegex = (string) => {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+};
+
 export const getConversations = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, assignedTo, sector } = req.query;
+    const { page = 1, limit = 20, status, assignedTo, sector, cursor, search, filter: typeFilter } = req.query;
     const account = req.whatsappAccount;
     const accountIds = req.whatsappAccountIds;
-    console.log("🔍 Backend accountIds:", accountIds, "IsArray:", Array.isArray(accountIds));
-
+    
     let filter = {};
+    const conditions = [];
+
+    // 1. Account Filtering logic
+    const isExplicitAccountFilter = req.headers["x-whatsapp-account-id"];
 
     if (Array.isArray(accountIds)) {
-      // Filter by multiple specific accounts
       if (req.includesDefaultAccount) {
-        filter.$or = [
-          { whatsappAccountId: { $in: accountIds } },
-          { whatsappAccountId: { $exists: false } },
-          { whatsappAccountId: null }
-        ];
+        conditions.push({
+          $or: [
+            { whatsappAccountId: { $in: accountIds } },
+            { whatsappAccountId: { $exists: false } },
+            { whatsappAccountId: null }
+          ]
+        });
       } else {
-        filter.whatsappAccountId = { $in: accountIds };
+        conditions.push({ whatsappAccountId: { $in: accountIds } });
       }
-    } else {
-      // Single account (fallback)
-      filter.whatsappAccountId = account?._id;
+    } else if (account?._id) {
+      // For Admins/Managers, only filter if they explicitly chose an account.
+      // For Executives, always restrict to their current account context.
+      if (req.user.role === "Executive" || isExplicitAccountFilter) {
+        conditions.push({ whatsappAccountId: account._id });
+      }
     }
 
-    // Apply additional filters
-    if (status && status !== "all") filter.status = status;
-    if (assignedTo && assignedTo !== "all") filter.assignedTo = assignedTo;
-    if (sector && sector !== "all") filter.sector = sector;
+    // 2. Search Logic (Database-wide)
+    if (search) {
+      const escapedSearch = escapeRegex(search);
+      
+      const contactIds = await Contact.find({ 
+        name: { $regex: escapedSearch, $options: "i" } 
+      }).distinct("_id");
 
-    // Role-based restriction
+      conditions.push({
+        $or: [
+          { phone: { $regex: escapedSearch, $options: "i" } },
+          { lastMessage: { $regex: escapedSearch, $options: "i" } },
+          { contact: { $in: contactIds } }
+        ]
+      });
+    }
+
+    // 3. Additional Filters
+    if (status && status !== "all") conditions.push({ status });
+    if (assignedTo && assignedTo !== "all") conditions.push({ assignedTo });
+    if (sector && sector !== "all") conditions.push({ sector });
+
+    // 3b. Unread/Window Quick Filters
+    if (typeFilter === "unread") {
+      conditions.push({ unreadCount: { $gt: 0 } });
+    } else if (typeFilter === "window") {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      conditions.push({ lastCustomerMessageAt: { $gte: twentyFourHoursAgo } });
+    }
+
+    // 4. Role-based restriction
     if (req.user.role === "Executive") {
-      filter.assignedTo = req.user._id;
+      // Executives see their own chats + any Unassigned chats (so they can pick them up)
+      conditions.push({ 
+        $or: [
+          { assignedTo: req.user._id },
+          { assignedTo: { $exists: false } },
+          { assignedTo: null }
+        ]
+      });
     }
 
-    console.log("🔍 Final Conversation Filter:", JSON.stringify(filter));
+    // Apply conditions
+    if (conditions.length > 0) {
+      filter.$and = conditions;
+    }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    if (cursor) {
+      filter.lastMessageTime = { $lt: new Date(cursor) };
+    }
+
+    // Remove excessive logging
+
+    const skip = cursor ? 0 : (parseInt(page) - 1) * parseInt(limit);
     const total = await Conversation.countDocuments(filter);
-    const conversations = await Conversation.find(filter)
+    let conversations = await Conversation.find(filter)
       .populate("contact", "_id name phone sector")
+      .select("phone lastMessage lastMessageTime unreadCount status contact whatsappAccountId assignedTo sector followUpTime followUpActivity")
       .sort({ lastMessageTime: -1 })
       .skip(skip)
       .limit(Number(limit));
 
-    console.log(`📂 API: Found ${conversations.length} conversations for account ${account?._id} (Total matches: ${total})`);
+    // Fallback: If searching and we have room in the list, search for matching Contacts 
+    // who don't have a conversation record yet in this account context
+    if (search && conversations.length < Number(limit)) {
+      const existingPhones = conversations.map(c => c.phone);
+      
+      const extraContacts = await Contact.find({
+        phone: { $nin: existingPhones },
+        $or: [
+          { phone: { $regex: search, $options: "i" } },
+          { name: { $regex: search, $options: "i" } }
+        ]
+      }).limit(Number(limit) - conversations.length);
+
+      const virtualConvs = extraContacts.map(contact => ({
+        _id: `new:${contact.phone}`,
+        contact: contact,
+        phone: contact.phone,
+        lastMessage: "Saved Contact (No history)",
+        lastMessageTime: null,
+        unreadCount: 0,
+        status: "New",
+        whatsappAccountId: contact.whatsappAccountId,
+        isVirtual: true
+      }));
+
+      conversations = [...conversations, ...virtualConvs];
+    }
+
+    const nextCursor = (conversations.length > 0 && !conversations[conversations.length - 1].isVirtual) 
+      ? conversations[conversations.length - 1].lastMessageTime 
+      : null;
 
     res.json({
       conversations,
       currentPage: Number(page),
       totalPages: Math.ceil(total / limit),
       totalConversations: total,
-      hasMore: skip + conversations.length < total
+      hasMore: skip + (conversations.filter(c => !c.isVirtual).length) < total,
+      nextCursor
     });
   } catch (error) {
     console.error("❌ getConversations Error:", error);
@@ -103,6 +188,7 @@ export const getMessages = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const messages = await Message.find(filter)
+      .select("body from to timestamp status direction type mediaUrl templateData")
       .sort({ timestamp: -1 })
       .skip(skip)
       .limit(limit);
@@ -147,24 +233,38 @@ export const sendMessage = async (req, res) => {
     await newMessage.save();
 
     // Step 4: Update the Conversation in the Database
-    // We look for an existing conversation for this phone that either belongs to this account or is unassigned (null).
+    // We look for an existing conversation for this phone.
+    const existingConv = await Conversation.findOne({ 
+      phone: to, 
+      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] 
+    }).sort({ lastMessageTime: -1 });
+
+    const updateFields = {
+      lastMessage: body,
+      lastMessageTime: new Date(),
+      unreadCount: 0,
+      whatsappAccountId: account._id // Claim it for this account
+    };
+
+    // AUTO-ASSIGN: If unassigned, assign it to the sender
+    if (!existingConv || !existingConv.assignedTo) {
+      updateFields.assignedTo = req.user._id;
+    }
+
     const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
-      {
-        lastMessage: body,
-        lastMessageTime: new Date(),
-        unreadCount: 0,
-        whatsappAccountId: account._id // Claim it
-      },
+      updateFields,
       { upsert: true, new: true }
     );
 
-    // Step 5: Claim the Customer! 
-    // This ensures future automated follow-ups will strictly use this specific account to send messages.
+    // Step 5: Claim the Customer/Contact! 
     if (updatedConv && updatedConv.contact) {
-      await Contact.findByIdAndUpdate(updatedConv.contact, {
-        whatsappAccountId: account._id
-      });
+      const contactUpdate = { whatsappAccountId: account._id };
+      // Also sync assignment to contact record
+      if (updateFields.assignedTo) {
+        contactUpdate.assignedTo = updateFields.assignedTo;
+      }
+      await Contact.findByIdAndUpdate(updatedConv.contact, contactUpdate);
     }
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
@@ -179,21 +279,28 @@ export const sendMessage = async (req, res) => {
 
 export const updateConversationStatus = async (req, res) => {
   try {
+    const { id } = req.params;
     const { phone, status, followUpTime, followUpActivity } = req.body;
-    const account = req.whatsappAccount; // The account currently selected in the UI
+    const account = req.whatsappAccount; 
 
-    // Step 1: Update the Status in the Conversation (so it shows in the Chat List).
-    // If the conversation is unassigned (legacy/null), this claims ownership of it for the currently active account.
+    // Robust ID check: If it starts with 'new:', it's a virtual ID from search
+    const isVirtualId = id && id.startsWith("new:");
+    const isValidId = id && mongoose.Types.ObjectId.isValid(id);
+
+    const query = (isValidId && !isVirtualId) 
+      ? { _id: id } 
+      : { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] };
+
     const conversation = await Conversation.findOneAndUpdate(
-      { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
+      query,
       {
-        status, // Set the new status (e.g. "Interested")
-        followUpTime: followUpTime || null, // Set follow-up reminder time
-        followUpActivity: followUpActivity || null, // Activity/Note
-        followUpNotified: false, // Reset notification status
-        whatsappAccountId: account?._id // Claim it for this account
+        status,
+        followUpTime: followUpTime || null,
+        followUpActivity: followUpActivity || null,
+        followUpNotified: false,
+        whatsappAccountId: account?._id 
       },
-      { new: true }
+      { new: true, upsert: true } // Use upsert for virtual IDs to create the record
     );
 
     // Step 2: Update the Status in the Contact record too.
@@ -255,9 +362,25 @@ export const sendChatTemplateMessage = async (req, res) => {
     });
     await newMessage.save();
 
+    const existingConv = await Conversation.findOne({ 
+      phone: to, 
+      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] 
+    });
+
+    const updateFields = { 
+      lastMessage: newMessage.body, 
+      lastMessageTime: new Date(), 
+      unreadCount: 0, 
+      whatsappAccountId: account._id 
+    };
+
+    if (!existingConv || !existingConv.assignedTo) {
+      updateFields.assignedTo = req.user._id;
+    }
+
     const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
-      { lastMessage: newMessage.body, lastMessageTime: new Date(), unreadCount: 0, whatsappAccountId: account._id },
+      updateFields,
       { upsert: true, new: true }
     );
 
@@ -296,9 +419,25 @@ export const sendChatImageMessage = async (req, res) => {
     });
     await newMessage.save();
 
+    const existingConv = await Conversation.findOne({ 
+      phone: to, 
+      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] 
+    });
+
+    const updateFields = { 
+      lastMessage: caption || "📷 Image", 
+      lastMessageTime: new Date(), 
+      unreadCount: 0, 
+      whatsappAccountId: account._id 
+    };
+
+    if (!existingConv || !existingConv.assignedTo) {
+      updateFields.assignedTo = req.user._id;
+    }
+
     const updatedConv = await Conversation.findOneAndUpdate(
       { phone: to, $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
-      { lastMessage: caption || "📷 Image", lastMessageTime: new Date(), unreadCount: 0, whatsappAccountId: account._id },
+      updateFields,
       { upsert: true, new: true }
     );
 

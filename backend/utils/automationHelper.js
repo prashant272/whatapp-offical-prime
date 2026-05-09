@@ -4,9 +4,10 @@ import Conversation from "../models/Conversation.js";
 import { sendTextMessage } from "../services/whatsappService.js";
 import Flow from "../models/Flow.js";
 import { smartEmit } from "./socket.js";
+import { normalizePhone } from "./phoneUtils.js";
 
 // --- STRING SIMILARITY ALGORITHM (Levenshtein Distance) ---
-function getSimilarity(s1, s2) {
+export function getSimilarity(s1, s2) {
   let longer = s1.toLowerCase();
   let shorter = s2.toLowerCase();
   if (s1.length < s2.length) {
@@ -163,16 +164,15 @@ async function sendDelayedMessage(account, phone, text, contact, delayMs) {
       });
       await newMessage.save();
 
-      const normalizedPhone = phone.toString().replace(/\D/g, "");
+      const normalizedPhone = normalizePhone(phone);
       const updatedConv = await Conversation.findOneAndUpdate(
         { phone: normalizedPhone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
         {
           whatsappAccountId: account?._id,
           lastMessage: text,
-          lastMessageTime: new Date(),
-          unreadCount: 0
+          lastMessageTime: new Date()
         },
-        { new: true, upsert: true }
+        { new: true, upsert: true, sort: { lastMessageTime: -1 } }
       ).populate("contact");
 
       smartEmit("new_message", { message: newMessage, conversation: updatedConv });

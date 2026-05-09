@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
 import {
   Send, User, Search, MoreVertical, MessageSquare, Clock,
@@ -8,10 +8,29 @@ import {
 import { io } from "socket.io-client";
 
 import { useParams, useNavigate } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
+import { 
+  setFilter as setReduxFilter,
+  setStatusFilter as setReduxStatusFilter, 
+  setSectorFilter as setReduxSectorFilter, 
+  setUserFilter as setReduxUserFilter, 
+  setSearchQuery as setReduxSearchQuery,
+  setSelectedAccountIds as setReduxSelectedAccountIds,
+  setActiveChat,
+  addMessage,
+  updateMessageStatus,
+  fetchMessages as fetchReduxMessages,
+  fetchConversations as fetchReduxConversations,
+  sendMessage as sendReduxMessage,
+  sendImage as sendReduxImage,
+  updateConversationStatus as updateReduxStatus
+} from "../redux/slices/chatSlice";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import * as ReactWindow from "react-window";
+const List = ReactWindow.List || ReactWindow.FixedSizeList || (ReactWindow.default && (ReactWindow.default.List || ReactWindow.default.FixedSizeList));
 import api, { API_BASE } from "../api";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 import { startFollowUpAlarm } from "../utils/beep_sound";
-import { useCallback } from "react";
 
 const COMMON_EMOJIS = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🤲", "👐", "🙌", "👏", "🤝", "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘", "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐", "🖖", "👋", "🤙", "💪", "🦾", "🖕", "✍️", "🙏", "🦶", "🦵", "🦿", "💄", "💋", "👄", "🦷", "👅", "👂", "🦻", "👃", "👣", "👁", "👀", "🧠", "🫀", "🫁", "🦴", "💩", "🔥", "✨", "🌟", "⭐", "🌈", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"];
 
@@ -21,32 +40,6 @@ const ChatModule = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
   const { accounts, activeAccount, switchAccount } = useWhatsAppAccount();
-  const [conversations, setConversations] = useState([]);
-  const [convPage, setConvPage] = useState(1);
-  const [hasMoreConvs, setHasMoreConvs] = useState(true);
-  const [isFetchingConvs, setIsFetchingConvs] = useState(false);
-
-  const [messages, setMessages] = useState([]);
-  const [msgPage, setMsgPage] = useState(1);
-  const [hasMoreMsgs, setHasMoreMsgs] = useState(true);
-  const [isFetchingMsgs, setIsFetchingMsgs] = useState(false);
-
-  // Derived active chat for perfect real-time sync
-  const selectedChat = useMemo(() => {
-    if (!chatId) return null;
-    if (chatId.startsWith("new:")) {
-      const phone = chatId.split(":")[1];
-      return { phone, status: "New", isNew: true, whatsappAccountId: activeAccount?._id };
-    }
-    const chat = conversations.find(c => c._id === chatId);
-    if (!chat) return null;
-
-    const normalized = { ...chat };
-    if (!normalized.whatsappAccountId && activeAccount?.isDefault) {
-      normalized.whatsappAccountId = activeAccount._id;
-    }
-    return normalized;
-  }, [chatId, conversations, activeAccount]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState([]);
@@ -79,14 +72,91 @@ const ChatModule = () => {
   const [showKeywordModal, setShowKeywordModal] = useState(false);
   const [manageType, setManageType] = useState("status"); // 'status' or 'sector'
 
-  // Filters State
-  const [filter, setFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [sectorFilter, setSectorFilter] = useState("all");
-  const [userFilter, setUserFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const dispatch = useDispatch();
+  const { 
+    filter, 
+    statusFilter, 
+    sectorFilter, 
+    userFilter, 
+    searchQuery, 
+    selectedAccountIds,
+    messages,
+    hasMoreMsgs,
+    msgPage,
+    isFetchingMsgs
+  } = useSelector(state => state.chat);
 
-  const [showTimelineModal, setShowTimelineModal] = useState(false);
+  const setFilter = (val) => dispatch(setReduxFilter(val));
+  const setStatusFilter = (val) => dispatch(setReduxStatusFilter(val));
+  const setSectorFilter = (val) => dispatch(setReduxSectorFilter(val));
+  const setUserFilter = (val) => dispatch(setReduxUserFilter(val));
+  const setSearchQuery = (val) => dispatch(setReduxSearchQuery(val));
+  const setSelectedAccountIds = (val) => dispatch(setReduxSelectedAccountIds(val));
+
+  // Transitioning back to Redux for everything as requested
+   const [conversations, setConversations] = useState([]);
+  const [hasNextPage, setHasNextPage] = useState(true);
+  const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const loadConversations = useCallback(async (cursor = null) => {
+    setIsFetchingNextPage(true);
+    const accIds = selectedAccountIds.length > 0 ? selectedAccountIds.join(",") : activeAccount?._id;
+    const resultAction = await dispatch(fetchReduxConversations({ 
+      cursor, 
+      status: statusFilter, 
+      assignedTo: userFilter, 
+      sector: sectorFilter, 
+      search: debouncedSearch,
+      accountIds: accIds,
+      filter: filter 
+    }));
+    
+    if (fetchReduxConversations.fulfilled.match(resultAction)) {
+      const { conversations: newConvs, nextCursor: nCursor, hasMore } = resultAction.payload;
+      if (!cursor) {
+        setConversations(newConvs);
+      } else {
+        setConversations(prev => [...prev, ...newConvs]);
+      }
+      setNextCursor(nCursor);
+      setHasNextPage(hasMore);
+    }
+    setIsFetchingNextPage(false);
+  }, [dispatch, selectedAccountIds, activeAccount, statusFilter, userFilter, sectorFilter, debouncedSearch]);
+
+  useEffect(() => {
+    if (activeAccount?._id || selectedAccountIds.length > 0) {
+      loadConversations();
+    }
+  }, [loadConversations, activeAccount?._id, selectedAccountIds, statusFilter, userFilter, sectorFilter, debouncedSearch]);
+
+  const fetchNextPage = () => {
+    if (hasNextPage && !isFetchingNextPage) {
+      loadConversations(nextCursor);
+    }
+  };
+
+  const refetchConvs = () => loadConversations();
+
+  // Derived active chat
+  const selectedChat = useMemo(() => {
+    if (!chatId) return null;
+    if (chatId.startsWith("new:")) {
+      const phone = chatId.split(":")[1];
+      return { phone, status: "New", isNew: true, whatsappAccountId: activeAccount?._id };
+    }
+    return conversations.find(c => c._id === chatId) || null;
+  }, [chatId, conversations, activeAccount]);
+
+   const [showTimelineModal, setShowTimelineModal] = useState(false);
   const [timelineEntries, setTimelineEntries] = useState([]);
   const [newTimelineContent, setNewTimelineContent] = useState("");
   const [isTimelineLoading, setIsTimelineLoading] = useState(false);
@@ -104,7 +174,6 @@ const ChatModule = () => {
 
   const [activeReminders, setActiveReminders] = useState([]);
   const [shownReminders, setShownReminders] = useState(new Set());
-  const [selectedAccountIds, setSelectedAccountIds] = useState([]);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const accountDropdownRef = useRef(null);
   const alarmRef = useRef(null);
@@ -154,9 +223,13 @@ const ChatModule = () => {
 
   useEffect(() => {
     if (activeAccount?._id && selectedAccountIds.length === 0) {
-      setSelectedAccountIds([activeAccount._id]);
+      if (currentUser.role === "Admin" || currentUser.role === "Manager") {
+        setSelectedAccountIds(accounts.map(a => a._id));
+      } else {
+        setSelectedAccountIds([activeAccount._id]);
+      }
     }
-  }, [activeAccount]);
+  }, [activeAccount, accounts]);
 
   useEffect(() => {
     if (Notification.permission === "default") {
@@ -164,115 +237,16 @@ const ChatModule = () => {
     }
   }, []);
 
-  const fetchMessages = async (phone, page = 1) => {
-    try {
-      if (page === 1) setLoading(true);
-      // Pass the specific account ID for this chat to ensure we get the right messages
-      const res = await api.get(`/messages/${phone}?page=${page}&limit=50`, {
-        headers: { "x-whatsapp-account-id": (selectedChat?.whatsappAccountId || selectedAccountIds.join(",") || activeAccount?._id) }
-      });
-      const newMsgs = res.data.messages || [];
-
-      if (page === 1) {
-        setMessages(newMsgs);
-        setMsgPage(1);
-      } else {
-        setMessages(prev => [...newMsgs, ...prev]);
-      }
-      setHasMoreMsgs(res.data.hasMore);
-    } catch (err) {
-      console.error("Error fetching messages:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fetchMessages = useCallback(async (phone, page = 1) => {
+    const accId = selectedChat?.whatsappAccountId || selectedAccountIds[0] || activeAccount?._id;
+    dispatch(fetchReduxMessages({ phone, page, accountId: accId }));
+  }, [selectedChat, selectedAccountIds, activeAccount, dispatch]);
 
   const fetchMoreMessages = async () => {
     if (!hasMoreMsgs || isFetchingMsgs || !selectedChat) return;
-    setIsFetchingMsgs(true);
-    const nextPage = msgPage + 1;
-    await fetchMessages(selectedChat.phone, nextPage);
-    setMsgPage(nextPage);
-    setIsFetchingMsgs(false);
+    await fetchMessages(selectedChat.phone, msgPage + 1);
   };
 
-  const fetchConversations = useCallback(async (page = 1) => {
-    try {
-      setIsFetchingConvs(true);
-      const accIds = Array.isArray(selectedAccountIds) ? selectedAccountIds.join(",") : "";
-      const effectiveId = accIds || activeAccount?._id;
-      
-      if (!effectiveId) {
-        console.log("⏳ Skipping fetch: No account selected yet.");
-        setIsFetchingConvs(false);
-        return;
-      }
-
-      console.log("🌐 Fetching conversations for accounts:", effectiveId);
-      const res = await api.get(`/conversations?page=${page}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`, {
-        headers: { "x-whatsapp-account-id": effectiveId }
-      });
-      const newData = res.data.conversations || [];
-      console.log(`📥 Received ${newData.length} conversations from backend.`);
-
-      if (page === 1) {
-        setConversations(newData);
-        setConvPage(1);
-      } else {
-        setConversations(prev => {
-          // Prevent duplicates
-          const existingIds = new Set(prev.map(c => c._id));
-          const uniqueNew = newData.filter(c => !existingIds.has(c._id));
-          return [...prev, ...uniqueNew];
-        });
-      }
-      setHasMoreConvs(res.data.hasMore);
-    } catch (err) {
-      console.error("Error fetching conversations:", err);
-    } finally {
-      setIsFetchingConvs(false);
-    }
-  }, [statusFilter, userFilter, sectorFilter, activeAccount, selectedAccountIds]);
-
-  const fetchMoreConversations = async () => {
-    if (!hasMoreConvs || isFetchingConvs) return;
-
-    const nextPage = convPage + 1;
-    console.log(`📜 Infinite Scroll: Loading page ${nextPage}...`);
-
-    // Set fetching flag IMMEDIATELY to prevent double-triggers
-    setIsFetchingConvs(true);
-
-    try {
-      const accIds = selectedAccountIds.join(",");
-      const res = await api.get(`/conversations?page=${nextPage}&limit=100&status=${statusFilter}&assignedTo=${userFilter}&sector=${sectorFilter}`, {
-        headers: { "x-whatsapp-account-id": accIds || activeAccount?._id }
-      });
-      const newData = res.data.conversations || [];
-
-      setConversations(prev => {
-        const existingIds = new Set(prev.map(c => c._id));
-        const uniqueNew = newData.filter(c => !existingIds.has(c._id));
-        return [...prev, ...uniqueNew];
-      });
-
-      setConvPage(nextPage);
-      setHasMoreConvs(res.data.hasMore);
-    } catch (err) {
-      console.error("Error fetching more conversations:", err);
-    } finally {
-      setIsFetchingConvs(false);
-    }
-  };
-
-  const handleSidebarScroll = (e) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.target;
-    // Trigger when user is within 200px of bottom
-    if (scrollHeight - scrollTop - clientHeight < 200 && !isFetchingConvs && hasMoreConvs) {
-      console.log("📜 Infinite Scroll: Loading more chats...");
-      fetchMoreConversations();
-    }
-  };
 
   const handleMessageScroll = (e) => {
     if (e.target.scrollTop === 0 && hasMoreMsgs && !isFetchingMsgs) {
@@ -302,46 +276,50 @@ const ChatModule = () => {
   useEffect(() => {
     selectedChatRef.current = selectedChat;
     if (selectedChat) {
-      // FETCH CONTACT INFO: Smart Lookup
-      if (selectedChat.isNew || !selectedChat.contact) {
+      // Sync basic contact info from conversation list
+      if (selectedChat.contact) {
+        setActiveContact(selectedChat.contact);
+      } else if (selectedChat.isNew) {
+        // Only fetch if it's a "New" chat (unsaved number)
         const fetchContactByPhone = async () => {
           try {
-            // Get last 10 digits for fuzzy matching (to handle 91 or no 91)
             const cleanPhone = selectedChat.phone.replace(/[^0-9]/g, "");
             const last10 = cleanPhone.slice(-10);
-
             const res = await api.get(`/contacts?search=${last10}`, {
               headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
             });
-
-            // Find best match (ending with the same 10 digits)
-            const found = res.data.contacts.find(c => {
-              const cPhone = (c.phone || "").replace(/[^0-9]/g, "");
-              return cPhone.endsWith(last10);
-            });
-
-            if (found) {
-              console.log("🔍 Found existing contact record:", found.name);
-              setActiveContact(found);
-            } else {
-              setActiveContact(null);
-            }
+            const found = res.data.contacts.find(c => (c.phone || "").endsWith(last10));
+            if (found) setActiveContact(found);
+            else setActiveContact(null);
           } catch (err) {
             console.error("Error searching contact:", err);
           }
         };
         fetchContactByPhone();
-      } else {
-        setActiveContact(selectedChat.contact);
       }
 
+      // Always fetch messages on select
       fetchMessages(selectedChat.phone);
       // Reset unreadCount locally on select
-      setConversations(prev => prev.map(c =>
-        c.phone === selectedChat.phone ? { ...c, unreadCount: 0 } : c
-      ));
+      refetchConvs();
     }
   }, [selectedChat?.phone, selectedChat?._id, activeAccount]);
+
+  // Lazy Load FULL Contact Details (Custom Fields etc) when Sidebar opens
+  useEffect(() => {
+    if (showContactInfo && (activeContact?._id || selectedChat?.contact?._id)) {
+      const contactId = activeContact?._id || selectedChat?.contact?._id;
+      const fetchFullContact = async () => {
+        try {
+          const res = await api.get(`/contacts/${contactId}`);
+          setActiveContact(res.data);
+        } catch (err) {
+          console.error("Error fetching full contact details:", err);
+        }
+      };
+      fetchFullContact();
+    }
+  }, [showContactInfo, activeContact?._id, selectedChat?.contact?._id]);
 
   const fetchExecutives = async () => {
     if (currentUser.role === "Executive") return;
@@ -416,9 +394,7 @@ const ChatModule = () => {
 
       // Update local state
       setActiveContact(res.data);
-      setConversations(prev => prev.map(c =>
-        (c.contact?._id === contactId || c.contact === contactId) ? { ...c, contact: res.data } : c
-      ));
+      refetchConvs();
       console.log(`✅ Field ${fieldName} updated to: ${value}`);
     } catch (err) {
       console.error("Error updating field:", err);
@@ -452,9 +428,8 @@ const ChatModule = () => {
 
   // Trigger fresh fetch when filters or account change
   useEffect(() => {
-    setConversations([]); // Clear list for fresh start
-    setConvPage(1);
-    fetchConversations(1);
+    // Clear list for fresh start (Handled by React Query internally)
+    refetchConvs();
   }, [statusFilter, userFilter, sectorFilter, activeAccount, selectedAccountIds]);
 
   // Click outside to close popovers
@@ -527,67 +502,58 @@ const ChatModule = () => {
     });
 
     socket.on("new_message", ({ message, conversation }) => {
-      // 1. Update Conversations List (STRICT MATCH: Phone AND Account ID)
-      // This ensures we only show the new message in the sidebar if it belongs to the exact account we are viewing.
+      // 1. Update Conversations List Locally for instant feedback
       setConversations(prev => {
-        const index = prev.findIndex(c =>
-          c.phone === conversation.phone &&
-          String(c.whatsappAccountId) === String(conversation.whatsappAccountId)
-        );
+        const getClean10 = (p) => String(p || "").replace(/\D/g, "").slice(-10);
+        const incoming10 = getClean10(conversation.phone);
 
-        let updatedConvData = { ...conversation };
+        // Find match by phone first (Ignoring strict account ID for legacy/duplicates sync)
+        const index = prev.findIndex(c => getClean10(c.phone) === incoming10);
 
-        // Reset unreadCount only if it's the EXACT active chat on the EXACT account
-        const isActive = selectedChatRef.current?.phone === conversation.phone &&
-          String(selectedChatRef.current?.whatsappAccountId) === String(conversation.whatsappAccountId);
+        const isActiveChat = selectedChatRef.current &&
+          getClean10(selectedChatRef.current.phone) === incoming10;
 
-        if (isActive) {
-          updatedConvData.unreadCount = 0;
-          api.post("/conversations/mark-read", {
-            phone: conversation.phone,
-            whatsappAccountId: conversation.whatsappAccountId
-          }).catch(() => { });
-        }
-
-        if (index !== -1) {
-          // Update the SPECIFIC conversation only
+        if (index > -1) {
           const updated = [...prev];
-          const finalConv = { ...updated[index], ...updatedConvData };
-          updated[index] = finalConv;
-          // Sort to move updated chat to top
-          return updated.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
-        } else {
-          // IMPORTANT: Only add to sidebar if it matches the CURRENTLY VIEWED account
-          const matchesAccount = !activeAccount || (function (conv, active) {
-            const chatAccountId = conv.whatsappAccountId ? String(conv.whatsappAccountId) : null;
-            const activeAccountId = String(active._id);
-            if (!chatAccountId && active.name.toLowerCase().includes("primary")) return true;
-            return chatAccountId === activeAccountId;
-          })(conversation, activeAccount);
-
-          if (matchesAccount) {
-            return [updatedConvData, ...prev];
+          // Deep merge: keep existing contact/name but update with new message info
+          const item = { 
+            ...updated[index], 
+            ...conversation,
+            lastMessage: message.body,
+            lastMessageTime: message.timestamp
+          };
+          
+          if (!isActiveChat && message.direction === "inbound") {
+            item.unreadCount = (item.unreadCount || 0) + 1;
           }
-          return prev;
+          
+          updated.splice(index, 1);
+          return [item, ...updated];
+        } else {
+          // If it's a new conversation, just add it to top
+          return [conversation, ...prev];
         }
       });
 
-      // 2. Update Messages if current chat is open (Match by Phone AND Account)
+      // 2. Update Messages if current chat is open
       const isActiveChat = selectedChatRef.current &&
         selectedChatRef.current.phone === conversation.phone &&
         String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId);
 
       if (isActiveChat) {
-        setMessages(prev => {
-          const exists = prev.find(m => m._id === message._id || (m.messageId && m.messageId === message.messageId));
-          if (exists) return prev;
-          return [...prev, message];
-        });
+        dispatch(addMessage(message));
+        // If it's inbound and we are looking at it, mark it read on server too
+        if (message.direction === "inbound") {
+          api.post("/conversations/mark-read", { 
+            phone: message.from, 
+            whatsappAccountId: conversation.whatsappAccountId 
+          }).catch(console.error);
+        }
       }
     });
 
     socket.on("status_update", ({ messageId, status }) => {
-      setMessages(prev => prev.map(m => m.messageId === messageId ? { ...m, status } : m));
+      dispatch(updateMessageStatus({ messageId, status }));
     });
 
     socket.on("followup_reminder", ({ conversation }) => {
@@ -613,9 +579,7 @@ const ChatModule = () => {
 
     socket.on("conversation_status_update", ({ phone, status }) => {
       console.log(`🔄 Conversation status sync: ${phone} -> ${status}`);
-      setConversations(prev => prev.map(c =>
-        c.phone === phone ? { ...c, status } : c
-      ));
+      refetchConvs();
     });
 
     return () => socket.disconnect();
@@ -687,9 +651,7 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
       // Update local state
-      setConversations(prev => prev.map(c =>
-        c.phone === selectedChat.phone ? { ...c, assignedTo: res.data.conversation.assignedTo, sector: res.data.conversation.sector } : c
-      ));
+      refetchConvs();
       if (activeContact && (activeContact._id === res.data.conversation.contact?._id || activeContact._id === res.data.conversation.contact)) {
         setActiveContact(prev => ({ ...prev, assignedTo: res.data.conversation.assignedTo, sector: res.data.conversation.sector }));
       }
@@ -742,7 +704,7 @@ const ChatModule = () => {
           timestamp: new Date()
         };
 
-        setMessages(prev => [...prev, optimisticMsg]);
+      dispatch(addMessage(optimisticMsg));
         setNewMessage("");
         setPendingImage(null); // Clear preview IMMEDIATELY
 
@@ -763,27 +725,25 @@ const ChatModule = () => {
             imageUrl = uploadRes.data.url;
           }
 
-          // 2. Send Image Message via WhatsApp
-          const res = await api.post("/messages/send-image", {
+          // 2. Send Image Message via Redux Thunk
+          const resultAction = await dispatch(sendReduxImage({
             to: selectedChat.phone,
             imageUrl: imageUrl,
-            caption: caption
-          });
+            caption: caption,
+            accountId: selectedChat.whatsappAccountId
+          }));
 
-          // 3. Replace Temp Message with Real Message (if not already added by socket)
-          setMessages(prev => {
-            const realMsg = res.data.message;
-            const alreadyExists = prev.find(m => m._id === realMsg._id || (m.messageId && m.messageId === realMsg.messageId));
-            if (alreadyExists) {
-              return prev.filter(m => m._id !== tempId);
-            }
-            return prev.map(m => m._id === tempId ? realMsg : m);
-          });
-          
-          fetchConversations();
+          if (sendReduxImage.fulfilled.match(resultAction)) {
+            const realMsg = resultAction.payload;
+            dispatch(updateMessageStatus({ tempId, realMsg }));
+            dispatch(addMessage(realMsg));
+            refetchConvs();
+          } else {
+            throw new Error(resultAction.payload || "Failed to send image");
+          }
         } catch (err) {
           console.error("Error sending image:", err);
-          setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
+          dispatch(updateMessageStatus({ tempId, realMsg: { ...optimisticMsg, status: "failed" } }));
           alert("Failed to send image: " + (err.response?.data?.error || err.message));
         } finally {
           setIsUploading(false);
@@ -805,35 +765,32 @@ const ChatModule = () => {
           timestamp: new Date()
         };
         
-        setMessages(prev => [...prev, optimisticMsg]);
+      dispatch(addMessage(optimisticMsg));
         setNewMessage("");
 
         try {
-          const res = await api.post(`/messages/send`, {
+          const resultAction = await dispatch(sendReduxMessage({
             to: selectedChat.phone,
-            body: text
-          }, {
-            headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
-          });
+            body: text,
+            accountId: selectedChat.whatsappAccountId
+          }));
 
-          // Replace optimistic message
-          setMessages(prev => {
-            const realMsg = res.data.message;
-            const alreadyExists = prev.find(m => m._id === realMsg._id || (m.messageId && m.messageId === realMsg.messageId));
-            if (alreadyExists) {
-              return prev.filter(m => m._id !== tempId);
+          if (sendReduxMessage.fulfilled.match(resultAction)) {
+            const realMsg = resultAction.payload;
+            dispatch(updateMessageStatus({ tempId, realMsg }));
+            dispatch(addMessage(realMsg));
+
+            if (selectedChat.isNew) {
+              await refetchConvs();
+            } else {
+              refetchConvs();
             }
-            return prev.map(m => m._id === tempId ? realMsg : m);
-          });
-
-          if (selectedChat.isNew) {
-            await fetchConversations();
           } else {
-            fetchConversations();
+            throw new Error(resultAction.payload || "Failed to send message");
           }
         } catch (err) {
           console.error("Error sending message:", err);
-          setMessages(prev => prev.map(m => m._id === tempId ? { ...m, status: "failed" } : m));
+          dispatch(updateMessageStatus({ tempId, realMsg: { ...optimisticMsg, status: "failed" } }));
           const errorMsg = err.response?.data?.error || "Failed to send message";
           if (errorMsg.includes("24-hour") || err.response?.status === 400) {
             alert("WhatsApp Rule: You can only send a Template message to this number right now (24-hour window closed).");
@@ -872,19 +829,25 @@ const ChatModule = () => {
     }
 
     try {
-      await api.post(`/conversations/status`, {
-        phone: selectedChat.phone,
+      const resultAction = await dispatch(updateReduxStatus({
+        conversationId: selectedChat._id,
         status,
         followUpTime: status.toLowerCase().includes("follow") ? fTime : null,
-        followUpActivity: status.toLowerCase().includes("follow") ? (fTime ? followUpActivity : null) : null
-      }, {
-        headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
-      });
-      // Update local state instead of full fetch
-      setConversations(prev => prev.map(c =>
-        c.phone === selectedChat.phone ? { ...c, status, followUpTime: status.toLowerCase().includes("follow") ? fTime : null, followUpActivity: status.toLowerCase().includes("follow") ? followUpActivity : null } : c
-      ));
-      setShowFollowUpModal(false);
+        followUpActivity: status.toLowerCase().includes("follow") ? (fTime ? followUpActivity : null) : null,
+        accountId: selectedChat.whatsappAccountId
+      }));
+
+      if (updateReduxStatus.fulfilled.match(resultAction)) {
+        // Update local state immediately for snappy UI
+        const updatedConversation = resultAction.payload;
+        setConversations(prev => prev.map(c => c._id === updatedConversation._id ? { ...c, ...updatedConversation } : c));
+        
+        setShowFollowUpModal(false);
+        // Still refetch to ensure everything else is in sync
+        refetchConvs();
+      } else {
+        throw new Error(resultAction.payload || "Failed to update status");
+      }
     } catch (err) {
       alert("Error updating status: " + err.message);
     }
@@ -1033,10 +996,10 @@ const ChatModule = () => {
       }, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
-      setMessages([...messages, res.data.message]);
+      dispatch(addMessage(res.data.message));
       setShowTemplateModal(false);
       setSelectedTemplate(null);
-      fetchConversations();
+      refetchConvs();
     } catch (err) {
       alert("Error sending template: " + err.message);
     }
@@ -1157,6 +1120,107 @@ const ChatModule = () => {
     return map;
   }, [accounts]);
 
+  const Row = useCallback(({ index, style }) => {
+    const chat = filteredConversations[index];
+    if (!chat) return null;
+    const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);
+
+    if (index === filteredConversations.length - 1 && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+
+    return (
+      <div style={{ ...style, borderBottom: "1px solid #f5f6f6" }}>
+        <div
+          className={`chat-item ${isActive ? "active" : ""}`}
+          onClick={() => navigate(`/chats/${chat._id}`)}
+          style={{
+            padding: "12px 16px",
+            cursor: "pointer",
+            display: "flex",
+            gap: "14px",
+            alignItems: "center",
+            height: "100%",
+            background: isActive ? "#f0f2f5" : "transparent",
+            transition: "background 0.2s"
+          }}
+        >
+          <div style={{
+            width: "48px",
+            height: "48px",
+            borderRadius: "50%",
+            background: isActive ? "#d1d7db" : "#dfe5e7",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            color: "#54656f",
+            fontWeight: "700",
+            fontSize: "1.1rem",
+            flexShrink: 0
+          }}>
+            {(chat.contact?.name || chat.phone).charAt(0).toUpperCase()}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
+              <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                {chat.contact?.name || chat.phone}
+                {selectedAccountIds.length > 1 && (
+                  <span style={{ fontSize: "0.55rem", background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: "10px", fontWeight: "800", textTransform: "uppercase", border: "1px solid #e2e8f0" }}>
+                    {accountNameMap[chat.whatsappAccountId] || "Primary"}
+                  </span>
+                )}
+              </span>
+              <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+                {chat.lastMessageTime ? (
+                  <>
+                    <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#010f0dff" : "#00a2ffff" }}>
+                      {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span style={{ fontSize: "0.62rem", color: "#ff0000ff", fontWeight: "600", textTransform: "uppercase" }}>
+                      {new Date(chat.lastMessageTime).toLocaleDateString([], { day: '2-digit', month: 'short' })}
+                    </span>
+                  </>
+                ) : ""}
+              </div>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <p style={{
+                fontSize: "0.85rem",
+                color: "#667781",
+                margin: 0,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                flex: 1,
+                fontWeight: chat.unreadCount > 0 ? "700" : "400"
+              }}>
+                {chat.lastMessage || "No messages"}
+              </p>
+              {chat.unreadCount > 0 && (
+                <span style={{
+                  background: "#25d366",
+                  color: "white",
+                  borderRadius: "50%",
+                  padding: "2px 6px",
+                  fontSize: "0.75rem",
+                  fontWeight: "800",
+                  minWidth: "20px",
+                  height: "20px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginLeft: "8px"
+                }}>
+                  {chat.unreadCount}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }, [filteredConversations, selectedChat, navigate, hasNextPage, isFetchingNextPage, fetchNextPage, accountNameMap, selectedAccountIds]);
+
   return (
     <div className="chat-container" style={{
       display: "grid",
@@ -1171,16 +1235,14 @@ const ChatModule = () => {
       position: "relative"
     }}>
       <style>{`
-        .chat-scroll::-webkit-scrollbar { width: 12px !important; }
-        .chat-scroll::-webkit-scrollbar-track { background: var(--bg-secondary) !important; }
-        .chat-scroll::-webkit-scrollbar-thumb { background: #8696a0 !important; border-radius: 6px; border: 2px solid var(--bg-secondary); }
-        .chat-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-primary) !important; }
-        
-        .chat-scroll {
-          overflow-y: scroll !important;
-          scrollbar-width: auto;
-          scrollbar-color: #8696a0 var(--bg-secondary);
+        .sidebar-list-container {
+          overflow: hidden !important;
         }
+        
+        .chat-scroll::-webkit-scrollbar { width: 6px !important; }
+        .chat-scroll::-webkit-scrollbar-track { background: transparent !important; }
+        .chat-scroll::-webkit-scrollbar-thumb { background: #ced0d1 !important; border-radius: 10px; }
+        .chat-scroll::-webkit-scrollbar-thumb:hover { background: #aeb1b3 !important; }
         
         .chat-item:hover { background: #f5f6f6 !important; }
         .chat-item.active { background: #f0f2f5 !important; border-left: 4px solid var(--accent-primary) !important; }
@@ -1486,104 +1548,24 @@ const ChatModule = () => {
         </div>
 
         <div
-          className="chat-scroll"
-          onScroll={handleSidebarScroll}
-          style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "block", background: "white" }}
+          className="sidebar-list-container"
+          style={{ flex: 1, background: "white" }}
         >
-          {filteredConversations.map((chat) => {
-            const isActive = (selectedChat?._id === chat._id || selectedChat?.phone === chat.phone);
-            return (
-              <div
-                key={chat._id}
-                className={`chat-item ${isActive ? "active" : ""}`}
-                onClick={() => navigate(`/chats/${chat._id}`)}
-                style={{
-                  padding: "12px 16px",
-                  cursor: "pointer",
-                  display: "flex",
-                  gap: "14px",
-                  alignItems: "center",
-                  background: isActive ? "#f0f2f5" : "transparent",
-                  borderBottom: "1px solid #f5f6f6",
-                  transition: "background 0.2s"
-                }}
-                onMouseOver={e => !isActive && (e.currentTarget.style.background = "#f5f6f6")}
-                onMouseOut={e => !isActive && (e.currentTarget.style.background = "transparent")}
-              >
-                <div style={{
-                  width: "48px",
-                  height: "48px",
-                  borderRadius: "50%",
-                  background: isActive ? "#d1d7db" : "#dfe5e7",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "#54656f",
-                  fontWeight: "700",
-                  fontSize: "1.1rem",
-                  flexShrink: 0
-                }}>
-                  {(chat.contact?.name || chat.phone).charAt(0).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-                    <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem", display: "flex", alignItems: "center", gap: "6px" }}>
-                      {chat.contact?.name || chat.phone}
-                      {selectedAccountIds.length > 1 && (
-                        <span style={{ fontSize: "0.55rem", background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: "10px", fontWeight: "800", textTransform: "uppercase", border: "1px solid #e2e8f0" }}>
-                          {accountNameMap[chat.whatsappAccountId] || "Primary"}
-                        </span>
-                      )}
-                    </span>
-                    <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
-                      {chat.lastMessageTime ? (
-                        <>
-                          <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#010f0dff" : "#00a2ffff" }}>
-                            {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                          <span style={{ fontSize: "0.62rem", color: "#ff0000ff", fontWeight: "600", textTransform: "uppercase" }}>
-                            {new Date(chat.lastMessageTime).toLocaleDateString([], { day: '2-digit', month: 'short' })}
-                          </span>
-                        </>
-                      ) : ""}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <p style={{
-                      fontSize: "0.85rem",
-                      color: "#667781",
-                      margin: 0,
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      flex: 1,
-                      fontWeight: chat.unreadCount > 0 ? "700" : "400"
-                    }}>
-                      {chat.lastMessage || "No messages"}
-                    </p>
-                    {chat.unreadCount > 0 && (
-                      <span style={{
-                        background: "#25d366",
-                        color: "white",
-                        borderRadius: "50%",
-                        padding: "2px 6px",
-                        fontSize: "0.75rem",
-                        fontWeight: "800",
-                        minWidth: "20px",
-                        height: "20px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginLeft: "8px"
-                      }}>
-                        {chat.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {conversations.length === 0 && !isFetchingNextPage ? (
+            <div style={{ padding: "40px 20px", textAlign: "center", color: "#667781" }}>
+              <p style={{ fontSize: "0.9rem", margin: "0 0 8px 0" }}>No contacts found</p>
+              <p style={{ fontSize: "0.8rem" }}>Try a different search or filter</p>
+            </div>
+          ) : (
+            <List
+              className="chat-scroll"
+              rowCount={filteredConversations.length}
+              rowHeight={72}
+              rowComponent={Row}
+              rowProps={{}}
+              style={{ height: window.innerHeight - 150, width: "100%" }}
+            />
+          )}
         </div>
       </div>
 
@@ -2129,7 +2111,7 @@ const ChatModule = () => {
                   <div style={{ marginTop: "8px", padding: "8px 12px", background: "#fffbeb", border: "1px solid #fef3c7", borderRadius: "10px", display: "flex", alignItems: "center", gap: "8px" }}>
                     <Clock size={12} color="#d97706" />
                     <span style={{ fontSize: "0.7rem", color: "#d97706", fontWeight: "700" }}>
-                      Due: {new Date(selectedChat.followUpTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      Due: {selectedChat.followUpTime ? new Date(selectedChat.followUpTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "Not Scheduled"}
                       {selectedChat.followUpActivity && ` - ${selectedChat.followUpActivity}`}
                     </span>
                   </div>
@@ -2695,9 +2677,16 @@ const ChatModule = () => {
 
               <div style={{ marginTop: "15px", display: "flex", gap: "10px" }}>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    // Reset conversations locally if not found to force a deep reload
+                    const found = conversations.find(c => c._id === rem._id);
+                    if (!found) {
+                      setConversations(prev => [rem, ...prev]);
+                    }
                     navigate(`/chats/${rem._id}`);
                     setActiveReminders(prev => prev.filter(r => r._id !== rem._id));
+                    // Small delay to ensure route change triggers effects
+                    setTimeout(() => refetchConvs(), 100);
                   }}
                   style={{ flex: 1, padding: "8px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer" }}
                 >

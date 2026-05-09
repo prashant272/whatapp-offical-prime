@@ -6,7 +6,8 @@ import Campaign from "../models/Campaign.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getMediaUrl } from "../services/whatsappService.js";
 import { getIO, smartEmit } from "../utils/socket.js";
-import { processAutoReply } from "../utils/automationHelper.js";
+import { processAutoReply, getSimilarity } from "../utils/automationHelper.js";
+import KeywordRule from "../models/KeywordRule.js";
 
 export const verifyWebhook = (req, res) => {
   const mode = req.query["hub.mode"];
@@ -164,7 +165,7 @@ export const handleWebhook = async (req, res) => {
         let conversation = await Conversation.findOne({ 
           phone: from, 
           $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] 
-        });
+        }).sort({ lastMessageTime: -1 });
         
         // Extract Profile Name from Meta Webhook
         const profileName = value?.contacts?.[0]?.profile?.name;
@@ -185,8 +186,6 @@ export const handleWebhook = async (req, res) => {
 
         // Step 3: Check dynamic Keyword Rules for automation
         const textContent = bodyContent.trim().toLowerCase();
-        const KeywordRule = (await import("../models/KeywordRule.js")).default;
-        const { getSimilarity } = await import("../utils/automationHelper.js");
         
         // Fetch all active rules for this account or global
         const allRules = await KeywordRule.find({ 
