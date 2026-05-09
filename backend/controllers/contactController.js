@@ -113,6 +113,18 @@ export const getContacts = async (req, res, next) => {
   }
 };
 
+export const getContactById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const contact = await Contact.findById(id);
+    if (!contact) return res.status(404).json({ error: "Contact not found" });
+    
+    res.json(contact);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const getBulkDetails = async (req, res, next) => {
   try {
     const { ids } = req.body;

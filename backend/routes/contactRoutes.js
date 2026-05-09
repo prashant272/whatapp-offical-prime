@@ -1,5 +1,5 @@
 import express from "express";
-import { verifyNumbers, getContacts, updateContact, deleteContact, importContacts, getUniqueTags, checkExistingConversations, bulkUpdateContacts, getBulkDetails } from "../controllers/contactController.js";
+import { verifyNumbers, getContacts, updateContact, deleteContact, importContacts, getUniqueTags, checkExistingConversations, bulkUpdateContacts, getBulkDetails, getContactById } from "../controllers/contactController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -11,6 +11,7 @@ router.post("/bulk-update", bulkUpdateContacts);
 router.post("/bulk-details", getBulkDetails);
 router.get("/", getContacts);
 router.get("/tags", getUniqueTags);
+router.get("/:id", getContactById);
 router.post("/import", importContacts);
 router.put("/:id", updateContact);
 router.delete("/:id", deleteContact);

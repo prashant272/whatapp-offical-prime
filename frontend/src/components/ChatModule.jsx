@@ -515,7 +515,13 @@ const ChatModule = () => {
     if (selectedChat) {
       // Sync basic contact info from conversation list
       if (selectedChat.contact) {
-        setActiveContact(selectedChat.contact);
+        setActiveContact(prev => {
+          if (prev && prev._id === selectedChat.contact._id) {
+            // Keep existing detailed fields (like customFields), just update basic ones
+            return { ...prev, ...selectedChat.contact };
+          }
+          return selectedChat.contact;
+        });
       } else if (selectedChat.isNew) {
         // Only fetch if it's a "New" chat (unsaved number)
         const fetchContactByPhone = async () => {
