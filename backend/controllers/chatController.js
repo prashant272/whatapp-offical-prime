@@ -18,7 +18,7 @@ export const getConversations = async (req, res) => {
     const { page = 1, limit = 20, status, assignedTo, sector, cursor, search, filter: typeFilter } = req.query;
     const account = req.whatsappAccount;
     const accountIds = req.whatsappAccountIds;
-    
+
     let filter = {};
     const conditions = [];
 
@@ -48,9 +48,9 @@ export const getConversations = async (req, res) => {
     // 2. Search Logic (Database-wide)
     if (search) {
       const escapedSearch = escapeRegex(search);
-      
-      const contactIds = await Contact.find({ 
-        name: { $regex: escapedSearch, $options: "i" } 
+
+      const contactIds = await Contact.find({
+        name: { $regex: escapedSearch, $options: "i" }
       }).distinct("_id");
 
       conditions.push({
@@ -105,7 +105,7 @@ export const getConversations = async (req, res) => {
     // who don't have a conversation record yet in this account context
     if (search && conversations.length < Number(limit)) {
       const existingPhones = conversations.map(c => c.phone);
-      
+
       const extraContacts = await Contact.find({
         phone: { $nin: existingPhones },
         $or: [
@@ -129,8 +129,8 @@ export const getConversations = async (req, res) => {
       conversations = [...conversations, ...virtualConvs];
     }
 
-    const nextCursor = (conversations.length > 0 && !conversations[conversations.length - 1].isVirtual) 
-      ? conversations[conversations.length - 1].lastMessageTime 
+    const nextCursor = (conversations.length > 0 && !conversations[conversations.length - 1].isVirtual)
+      ? conversations[conversations.length - 1].lastMessageTime
       : null;
 
     res.json({
@@ -228,9 +228,9 @@ export const sendMessage = async (req, res) => {
 
     // Step 4: Update the Conversation in the Database
     // We look for an existing conversation for this phone.
-    const existingConv = await Conversation.findOne({ 
-      phone: to, 
-      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] 
+    const existingConv = await Conversation.findOne({
+      phone: to,
+      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }]
     }).sort({ lastMessageTime: -1 });
 
     const updateFields = {
@@ -275,14 +275,14 @@ export const updateConversationStatus = async (req, res) => {
   try {
     const { id } = req.params;
     const { phone, status, followUpTime, followUpActivity } = req.body;
-    const account = req.whatsappAccount; 
+    const account = req.whatsappAccount;
 
     // Robust ID check: If it starts with 'new:', it's a virtual ID from search
     const isVirtualId = id && id.startsWith("new:");
     const isValidId = id && mongoose.Types.ObjectId.isValid(id);
 
-    const query = (isValidId && !isVirtualId) 
-      ? { _id: id } 
+    const query = (isValidId && !isVirtualId)
+      ? { _id: id }
       : { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] };
 
     const conversation = await Conversation.findOneAndUpdate(
@@ -292,7 +292,7 @@ export const updateConversationStatus = async (req, res) => {
         followUpTime: followUpTime || null,
         followUpActivity: followUpActivity || null,
         followUpNotified: false,
-        whatsappAccountId: account?._id 
+        whatsappAccountId: account?._id
       },
       { new: true, upsert: true } // Use upsert for virtual IDs to create the record
     );
@@ -356,16 +356,16 @@ export const sendChatTemplateMessage = async (req, res) => {
     });
     await newMessage.save();
 
-    const existingConv = await Conversation.findOne({ 
-      phone: to, 
-      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] 
+    const existingConv = await Conversation.findOne({
+      phone: to,
+      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }]
     });
 
-    const updateFields = { 
-      lastMessage: newMessage.body, 
-      lastMessageTime: new Date(), 
-      unreadCount: 0, 
-      whatsappAccountId: account._id 
+    const updateFields = {
+      lastMessage: newMessage.body,
+      lastMessageTime: new Date(),
+      unreadCount: 0,
+      whatsappAccountId: account._id
     };
 
     if (!existingConv || !existingConv.assignedTo) {
@@ -413,16 +413,16 @@ export const sendChatImageMessage = async (req, res) => {
     });
     await newMessage.save();
 
-    const existingConv = await Conversation.findOne({ 
-      phone: to, 
-      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] 
+    const existingConv = await Conversation.findOne({
+      phone: to,
+      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }]
     });
 
-    const updateFields = { 
-      lastMessage: caption || "📷 Image", 
-      lastMessageTime: new Date(), 
-      unreadCount: 0, 
-      whatsappAccountId: account._id 
+    const updateFields = {
+      lastMessage: caption || "📷 Image",
+      lastMessageTime: new Date(),
+      unreadCount: 0,
+      whatsappAccountId: account._id
     };
 
     if (!existingConv || !existingConv.assignedTo) {
