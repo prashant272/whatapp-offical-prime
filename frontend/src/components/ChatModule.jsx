@@ -317,8 +317,9 @@ const ChatModule = () => {
       // This ensures that after a refresh, it will be seen as read.
       if (!selectedChat.isNew) {
         api.post("/conversations/mark-read", { 
-          phone: selectedChat.phone, 
-          whatsappAccountId: selectedChat.whatsappAccountId 
+          phone: selectedChat.phone
+        }, {
+          headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
         }).catch(console.error);
       }
     }
@@ -812,7 +813,9 @@ const ChatModule = () => {
         dispatch(addMessage(message));
         // Mark as read in backend background for active chat
         if (message.direction === "inbound") {
-          api.post("/conversations/mark-read", { phone: conversation.phone, whatsappAccountId: conversation.whatsappAccountId }).catch(console.error);
+          api.post("/conversations/mark-read", { phone: conversation.phone }, {
+            headers: { "x-whatsapp-account-id": conversation.whatsappAccountId }
+          }).catch(console.error);
         }
       }
     });
