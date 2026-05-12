@@ -40,7 +40,7 @@ function AppContent() {
 
   useEffect(() => {
     if (!user) return;
-    
+
     const fetchStats = async () => {
       try {
         const res = await api.get("/campaigns");
@@ -83,20 +83,20 @@ function AppContent() {
       <Route path="/login" element={<Login onLogin={handleLogin} />} />
       <Route path="/*" element={
         <div className="dashboard-container" style={{ display: "flex" }}>
-          <Sidebar 
-            user={user} 
-            menuItems={menuItems} 
-            handleLogout={handleLogout} 
+          <Sidebar
+            user={user}
+            menuItems={menuItems}
+            handleLogout={handleLogout}
             isCollapsed={isCollapsed}
             setIsCollapsed={setIsCollapsed}
           />
 
-          <main className="main-content" style={{ 
-            marginLeft: isCollapsed ? "70px" : "240px", 
-            padding: isChatTab ? "0" : "1rem", 
-            height: "100vh", 
+          <main className="main-content" style={{
+            marginLeft: isCollapsed ? "70px" : "240px",
+            padding: isChatTab ? "0" : "1rem",
+            height: "100vh",
             width: `calc(100% - ${isCollapsed ? "70px" : "240px"})`,
-            overflow: isChatTab ? "hidden" : "auto", 
+            overflow: isChatTab ? "hidden" : "auto",
             transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
             flex: 1
           }}>

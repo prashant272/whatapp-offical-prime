@@ -43,12 +43,12 @@ const ChatRow = memo(({ index, style, conversations, selectedId, selectedPhone, 
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-            <span style={{ 
-              fontWeight: isActive ? "700" : "600", 
-              color: "#1b1b1b", 
-              fontSize: "0.95rem", 
-              display: "flex", 
-              alignItems: "center", 
+            <span style={{
+              fontWeight: isActive ? "700" : "600",
+              color: "#1b1b1b",
+              fontSize: "0.95rem",
+              display: "flex",
+              alignItems: "center",
               gap: "8px",
               overflow: "hidden",
               textOverflow: "ellipsis",
@@ -59,14 +59,14 @@ const ChatRow = memo(({ index, style, conversations, selectedId, selectedPhone, 
                 {String(chat.contact?.name || chat.phone || "Unknown").replace(/^User\s+/i, "")}
               </span>
               {selectedAccountIds && selectedAccountIds.length > 1 && (
-                <span style={{ 
-                  fontSize: "0.55rem", 
-                  background: "rgba(0, 168, 132, 0.08)", 
-                  color: "#00a884", 
-                  padding: "2px 8px", 
-                  borderRadius: "6px", 
-                  fontWeight: "800", 
-                  textTransform: "uppercase", 
+                <span style={{
+                  fontSize: "0.55rem",
+                  background: "rgba(0, 168, 132, 0.08)",
+                  color: "#00a884",
+                  padding: "2px 8px",
+                  borderRadius: "6px",
+                  fontWeight: "800",
+                  textTransform: "uppercase",
                   border: "1px solid rgba(0, 168, 132, 0.15)",
                   flexShrink: 0
                 }}>
@@ -190,14 +190,14 @@ const ChatSidebar = ({
           <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-primary)" }}>Chats</h3>
           <div style={{ display: "flex", gap: "15px", color: "var(--text-secondary)" }}>
             <Plus size={20} cursor="pointer" onClick={() => setShowNewChatModal(true)} />
-            <div 
+            <div
               style={{ position: "relative", cursor: "pointer" }}
               ref={notifRef}
             >
               <Bell size={20} onClick={() => setShowNotifList(!showNotifList)} />
               {uiNotifications?.length > 0 && (
-                <div style={{ 
-                  position: "absolute", top: "-8px", right: "-8px", background: "#ff4757", 
+                <div style={{
+                  position: "absolute", top: "-8px", right: "-8px", background: "#ff4757",
                   width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #f0f2f5",
                   display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem",
                   color: "white", fontWeight: "bold"
@@ -213,8 +213,8 @@ const ChatSidebar = ({
                 }}>
                   <p style={{ margin: "0 0 10px 0", fontSize: "0.75rem", fontWeight: "bold", color: "#667781", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>Notifications</p>
                   {uiNotifications.map(n => (
-                    <div 
-                      key={n.id} 
+                    <div
+                      key={n.id}
                       onClick={() => { handleNotificationClick(n); setShowNotifList(false); }}
                       style={{ padding: "8px", borderRadius: "8px", fontSize: "0.8rem", marginBottom: "5px", cursor: "pointer", background: "#f8f9fa", border: "1px solid #eee" }}
                       onMouseOver={e => e.currentTarget.style.background = "#e7fce3"}
@@ -224,7 +224,7 @@ const ChatSidebar = ({
                       <p style={{ margin: "4px 0 0 0", fontSize: "0.65rem", color: "#25d366", fontWeight: "bold" }}>Click to open chat</p>
                     </div>
                   ))}
-                  <button 
+                  <button
                     onClick={markNotificationsAsRead}
                     style={{ width: "100%", padding: "5px", fontSize: "0.7rem", border: "none", background: "none", color: "#00a884", cursor: "pointer", fontWeight: "bold", textAlign: "center" }}
                   >

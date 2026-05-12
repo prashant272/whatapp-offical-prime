@@ -136,7 +136,7 @@ const ChatModule = () => {
   const handleNotificationClick = (notif) => {
     if (notif.conversation) {
       const target = notif.conversation;
-      
+
       // 1. Auto-switch account if the chat belongs to a different instance
       if (activeAccount && target.whatsappAccountId && target.whatsappAccountId !== activeAccount._id) {
         const targetAcc = accounts.find(a => a._id === target.whatsappAccountId);
@@ -184,10 +184,41 @@ const ChatModule = () => {
 
     if (fetchReduxConversations.fulfilled.match(resultAction)) {
       const { conversations: newConvs, nextCursor: nCursor, hasMore } = resultAction.payload;
+
+      let finalConvs = newConvs;
+      const currentChatId = window.location.pathname.split("/").pop();
+
       if (!cursor) {
-        setConversations(newConvs);
+        const isPresent = newConvs.find(c => c._id === currentChatId);
+        if (!isPresent && currentChatId && currentChatId.length > 10) {
+          try {
+            const res = await api.get(`/conversations/${currentChatId}`);
+            if (res.data) {
+              const chatToInsert = res.data;
+              // Find the correct sorted position (by lastMessageTime)
+              const insertIndex = newConvs.findIndex(c => 
+                new Date(c.lastMessageTime) < new Date(chatToInsert.lastMessageTime)
+              );
+              if (insertIndex === -1) {
+                finalConvs = [...newConvs, chatToInsert];
+              } else {
+                finalConvs = [
+                  ...newConvs.slice(0, insertIndex),
+                  chatToInsert,
+                  ...newConvs.slice(insertIndex)
+                ];
+              }
+            }
+          } catch (err) {
+            console.error("Could not fetch missing chat", err);
+          }
+        }
+      }
+
+      if (!cursor) {
+        setConversations(finalConvs);
       } else {
-        setConversations(prev => [...prev, ...newConvs]);
+        setConversations(prev => [...(Array.isArray(prev) ? prev : []), ...newConvs]);
       }
       setNextCursor(nCursor);
       setHasNextPage(hasMore);
@@ -312,11 +343,11 @@ const ChatModule = () => {
         setActiveContact(null);
       }
       fetchMessages(selectedChat.phone);
-      
+
       // Mark as read in the BACKGROUND (backend only)
       // This ensures that after a refresh, it will be seen as read.
       if (!selectedChat.isNew) {
-        api.post("/conversations/mark-read", { 
+        api.post("/conversations/mark-read", {
           phone: selectedChat.phone
         }, {
           headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
@@ -344,7 +375,7 @@ const ChatModule = () => {
   const handleAssign = async (userId, sector) => {
     if (!selectedChat) return;
     try {
-      const res = await api.post(`/conversations/assign`, {
+      const res = await api.patch(`/conversations/assign`, {
         phone: selectedChat.phone,
         userId: userId !== undefined ? userId : selectedChat.assignedTo?._id,
         sector: sector !== undefined ? sector : selectedChat.sector
@@ -446,9 +477,9 @@ const ChatModule = () => {
           dispatch(updateMessageStatus({ tempId, realMsg: { ...optimisticMsg, status: "failed" } }));
           alert("Error: " + (err.response?.data?.error || "Failed to send message"));
         }
-        
+
         // NEW: Clear assignment notifications for this chat because executive replied
-        setUiNotifications(prev => prev.filter(n => 
+        setUiNotifications(prev => prev.filter(n =>
           !n.conversation || String(n.conversation.phone).replace(/\D/g, "").slice(-10) !== String(selectedChat.phone).replace(/\D/g, "").slice(-10)
         ));
       }
@@ -472,9 +503,9 @@ const ChatModule = () => {
       if (res.data.success) {
         dispatch(addMessage(res.data.message));
         refetchConvs();
-        
+
         // Clear assignment notifications on template reply too
-        setUiNotifications(prev => prev.filter(n => 
+        setUiNotifications(prev => prev.filter(n =>
           !n.conversation || String(n.conversation.phone).replace(/\D/g, "").slice(-10) !== String(selectedChat.phone).replace(/\D/g, "").slice(-10)
         ));
       }
@@ -710,14 +741,15 @@ const ChatModule = () => {
       if (statusFilter && statusFilter.toLowerCase() !== "all" && c.status !== statusFilter) return false;
       if (userFilter && userFilter.toLowerCase() !== "all") {
         const assignedId = typeof c.assignedTo === 'object' ? c.assignedTo?._id : c.assignedTo;
-        if (userFilter === "Unassigned") {
-          if (c.assignedTo) return false;
+        if (userFilter === "unassigned") {
+          if (assignedId) return false;
         } else if (assignedId !== userFilter) return false;
       }
-      if (sectorFilter !== "all" && c.sector !== sectorFilter) return false;
+      if (sectorFilter && sectorFilter.toLowerCase() !== "all" && c.sector !== sectorFilter) return false;
       if (query) {
         if (!((c.contact?.name || "").toLowerCase().includes(query) || c.phone.includes(query) || (c.lastMessage || "").toLowerCase().includes(query))) return false;
       }
+      if (c._id === chatId) return true;
       return true;
     });
   }, [conversations, filter, statusFilter, sectorFilter, userFilter, searchQuery, chatId]);
@@ -827,7 +859,7 @@ const ChatModule = () => {
       const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
       if (assignedToId === currentUser._id) {
         const contactName = conversation.contact?.name || conversation.phone;
-        
+
         // 1. Browser Notification
         if (Notification.permission === "granted") {
           new Notification("New Chat Assigned", {
@@ -841,8 +873,8 @@ const ChatModule = () => {
         } catch (e) { console.error("Sound error", e); }
 
         // 3. UI Notification
-        const newNotif = { 
-          id: Date.now(), 
+        const newNotif = {
+          id: Date.now(),
           message: `New Chat Assigned: ${contactName}`,
           conversation: conversation
         };
@@ -891,9 +923,9 @@ const ChatModule = () => {
       {/* UI Notifications Overlay */}
       <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 10000, display: "flex", flexDirection: "column", gap: "10px" }}>
         {uiNotifications.map(n => (
-          <div key={n.id} style={{ 
-            background: "#00a884", color: "white", padding: "12px 24px", borderRadius: "12px", 
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontWeight: "bold", animation: "slideIn 0.3s ease-out" 
+          <div key={n.id} style={{
+            background: "#00a884", color: "white", padding: "12px 24px", borderRadius: "12px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontWeight: "bold", animation: "slideIn 0.3s ease-out"
           }}>
             {n.message}
           </div>

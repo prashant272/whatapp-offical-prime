@@ -488,6 +488,16 @@ export const assignConversation = async (req, res) => {
   }
 };
 
+export const getConversationById = async (req, res) => {
+  try {
+    const conversation = await Conversation.findById(req.params.id).populate("contact").populate("assignedTo", "name");
+    if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+    res.json(conversation);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const markAsRead = async (req, res) => {
   try {
     const { phone } = req.body;

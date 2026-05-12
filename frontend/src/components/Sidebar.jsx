@@ -23,8 +23,8 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
   const visibleMenu = user ? menuItems.filter(item => item.roles.includes(user.role)) : [];
 
   return (
-    <aside className={`sidebar ${isCollapsed ? "mini-sidebar" : ""}`} style={{ 
-      width: isCollapsed ? "70px" : "240px", 
+    <aside className={`sidebar ${isCollapsed ? "mini-sidebar" : ""}`} style={{
+      width: isCollapsed ? "70px" : "240px",
       transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
       padding: isCollapsed ? "0.5rem 0" : "0.5rem 0.5rem",
       display: "flex",
@@ -36,7 +36,7 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
       height: "100vh"
     }}>
       {/* Premium Header Area */}
-      <div style={{ 
+      <div style={{
         padding: isCollapsed ? "0" : "12px 10px",
         marginBottom: "0.5rem",
         background: isCollapsed ? "transparent" : "linear-gradient(145deg, #f8fafc, #ffffff)",
@@ -47,7 +47,7 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
       }}>
         {/* Toggle Button - ONLY IN CHAT TAB */}
         {isChatTab && (
-          <button 
+          <button
             onClick={() => setIsCollapsed(!isCollapsed)}
             style={{
               position: "absolute",
@@ -81,11 +81,11 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
               <div style={{ width: "35px", height: "35px", background: "var(--accent-primary)", borderRadius: "10px", margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: "900", fontSize: "1.2rem" }}>W</div>
             ) : (
               <>
-                <span style={{ 
-                  fontSize: "1.1rem", 
-                  fontWeight: "900", 
-                  letterSpacing: "0.5px", 
-                  lineHeight: 1, 
+                <span style={{
+                  fontSize: "1.1rem",
+                  fontWeight: "900",
+                  letterSpacing: "0.5px",
+                  lineHeight: 1,
                   background: "linear-gradient(90deg, var(--accent-primary), #00d2ff)",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
@@ -98,16 +98,16 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
 
         <div style={{ position: "relative" }} ref={accountSwitcherRef}>
           {activeAccount && !isCollapsed && (
-            <div 
+            <div
               onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
-              style={{ 
-                display: "flex", 
-                alignItems: "center", 
-                gap: "8px", 
-                padding: "8px 12px", 
-                borderRadius: "12px", 
-                background: "rgba(0, 168, 132, 0.04)", 
-                cursor: "pointer", 
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 12px",
+                borderRadius: "12px",
+                background: "rgba(0, 168, 132, 0.04)",
+                cursor: "pointer",
                 border: "1px solid rgba(0, 168, 132, 0.1)",
                 transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
               }}
@@ -131,7 +131,7 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
           )}
 
           {isCollapsed && activeAccount && (
-            <div 
+            <div
               onClick={() => setShowAccountSwitcher(!showAccountSwitcher)}
               style={{ width: "45px", height: "45px", background: "rgba(0, 168, 132, 0.1)", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", margin: "0 auto" }}
               title={activeAccount.name}
@@ -141,17 +141,17 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
           )}
 
           {showAccountSwitcher && (
-            <div style={{ 
-              position: "absolute", 
-              top: "calc(100% + 8px)", 
-              left: isChatTab ? "50%" : "0", 
+            <div style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              left: isChatTab ? "50%" : "0",
               transform: isChatTab ? "translateX(-50%)" : "none",
               width: isChatTab ? "200px" : "260px",
-              background: "rgba(255, 255, 255, 0.98)", 
-              borderRadius: "16px", 
-              boxShadow: "0 10px 40px rgba(0,0,0,0.2)", 
-              padding: "8px", 
-              zIndex: 9999, 
+              background: "rgba(255, 255, 255, 0.98)",
+              borderRadius: "16px",
+              boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+              padding: "8px",
+              zIndex: 9999,
               border: "1px solid rgba(0,0,0,0.05)",
               backdropFilter: "blur(20px)",
               animation: "slideIn 0.2s ease-out"
@@ -159,16 +159,16 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
               <p style={{ fontSize: "0.65rem", color: "#94a3b8", padding: "8px 12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px" }}>Switch Instance</p>
               <div style={{ maxHeight: "300px", overflowY: "auto" }}>
                 {accounts.map(acc => (
-                  <div 
-                    key={acc._id} 
+                  <div
+                    key={acc._id}
                     onClick={() => { switchAccount(acc); setShowAccountSwitcher(false); }}
-                    style={{ 
-                      padding: "10px 12px", 
-                      borderRadius: "10px", 
-                      cursor: "pointer", 
-                      display: "flex", 
-                      alignItems: "center", 
-                      gap: "12px", 
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "10px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
                       marginBottom: "4px",
                       background: activeAccount?._id === acc._id ? "rgba(0, 168, 132, 0.08)" : "transparent",
                       transition: "all 0.2s"
