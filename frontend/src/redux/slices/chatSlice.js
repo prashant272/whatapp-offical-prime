@@ -17,10 +17,10 @@ export const fetchMessages = createAsyncThunk(
 
 export const fetchConversations = createAsyncThunk(
   "chat/fetchConversations",
-  async ({ cursor, status, assignedTo, sector, search, accountIds }, { rejectWithValue }) => {
+  async ({ cursor, status, assignedTo, sector, search, accountIds, filter }, { rejectWithValue }) => {
     try {
       const res = await api.get(`/conversations`, {
-        params: { limit: 20, status, assignedTo, sector, search, cursor },
+        params: { limit: 20, status, assignedTo, sector, search, cursor, filter },
         headers: { "x-whatsapp-account-id": accountIds }
       });
       return res.data;
