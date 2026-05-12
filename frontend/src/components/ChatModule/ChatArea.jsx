@@ -1,6 +1,7 @@
 import React, { memo } from "react";
-import { MessageSquare, Clock, Send, Paperclip, Smile, Zap, Loader2, MoreVertical, Plus } from "lucide-react";
+import { MessageSquare, Clock, Send, Paperclip, Smile, Zap, Loader2, MoreVertical, Plus, Phone, Video } from "lucide-react";
 import MessageBubble from "./MessageBubble";
+import api from "../../api";
 
 const COMMON_EMOJIS = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🤲", "👐", "🙌", "👏", "🤝", "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘", "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐", "🖖", "👋", "🤙", "💪", "🦾", "🖕", "✍️", "🙏", "FOOT", "🦵", "🦿", "💄", "💋", "👄", "🦷", "👅", "👂", "🦻", "👃", "👣", "👁", "👀", "🧠", "🫀", "🫁", "🦴", "💩", "🔥", "✨", "🌟", "⭐", "🌈", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"];
 
@@ -15,6 +16,21 @@ const ChatArea = ({
   setShowTemplateModal, setShowContactInfo, showContactInfo,
   formatDateLabel
 }) => {
+  const handleInitiateCall = async (type) => {
+    try {
+      const res = await api.post("/calls/initiate", {
+        conversationId: selectedChat._id,
+        type
+      });
+      if (res.data.success) {
+        alert(`${type === "video" ? "Video" : "Voice"} call initiated successfully!`);
+      }
+    } catch (error) {
+      console.error("Call initiation failed:", error);
+      alert(`Failed to initiate ${type} call. Please check Meta Cloud API settings.`);
+    }
+  };
+
   if (!selectedChat) {
     return (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8696a0", background: "#f8f9fa" }}>
@@ -38,67 +54,136 @@ const ChatArea = ({
     <div className="chat-area-container" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
       {/* Chat Header */}
       <div style={{
-        padding: "8px 16px",
+        padding: "0 16px",
         background: "#f0f2f5",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
         zIndex: 10,
         flexShrink: 0,
-        height: "52px",
-        borderBottom: "1px solid rgba(0,0,0,0.05)",
-        position: "relative"
+        height: "58px",
+        borderBottom: "1px solid rgba(0,0,0,0.08)"
       }}>
         <div
-          style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}
+          style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", minWidth: 0, flex: 1 }}
           onClick={() => setShowContactInfo(!showContactInfo)}
         >
-          <div style={{ width: "34px", height: "34px", borderRadius: "50%", background: "#dfe5e7", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696a0", fontSize: "1.1rem", fontWeight: "bold" }}>
+          <div style={{ 
+            width: "40px", 
+            height: "40px", 
+            borderRadius: "50%", 
+            background: "#00a884", 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center", 
+            color: "white", 
+            fontSize: "1.2rem", 
+            fontWeight: "bold",
+            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+            flexShrink: 0
+          }}>
             {(selectedChat?.contact?.name || selectedChat?.phone || "U").charAt(0).toUpperCase()}
           </div>
-          <div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <h4 style={{ margin: 0, fontSize: "0.95rem", fontWeight: "700", color: "#111b21" }}>{selectedChat.contact?.name || selectedChat.phone}</h4>
-                <span style={{ fontSize: "0.6rem", color: "#00a884", fontWeight: "800", background: "#e7fce3", padding: "2px 8px", borderRadius: "10px", border: "1px solid #00a88433", textTransform: "uppercase" }}>
-                  {accounts.find(a => a._id === selectedChat.whatsappAccountId)?.name || "Primary Account"}
-                </span>
-              </div>
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h4 style={{ 
+                margin: 0, 
+                fontSize: "1rem", 
+                fontWeight: "700", 
+                color: "#111b21",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}>
+                {selectedChat.contact?.name || selectedChat.phone}
+              </h4>
+              <span style={{ 
+                fontSize: "0.55rem", 
+                color: "#00a884", 
+                fontWeight: "800", 
+                background: "rgba(0, 168, 132, 0.08)", 
+                padding: "2px 8px", 
+                borderRadius: "6px", 
+                border: "1px solid rgba(0, 168, 132, 0.15)", 
+                textTransform: "uppercase",
+                flexShrink: 0
+              }}>
+                {accounts.find(a => a._id === selectedChat.whatsappAccountId)?.name || "Primary"}
+              </span>
             </div>
-            <span style={{ fontSize: "0.68rem", color: "#667781" }}>
+            <span style={{ fontSize: "0.7rem", color: "#667781" }}>
               {selectedChat.contact?.name ? selectedChat.phone : "Online"}
             </span>
           </div>
         </div>
 
-        {/* Centered Session Timer */}
-        {windowTimeLeft && (
-          <div style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            background: "#e7fce3",
-            color: "#008069",
-            padding: "4px 12px",
-            borderRadius: "20px",
-            fontSize: "0.75rem",
-            fontWeight: "700",
-            border: "1px solid #00a88433"
-          }}>
-            <Clock size={12} />
-            <span>Session: {windowTimeLeft}</span>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center", flexShrink: 0 }}>
+          {windowTimeLeft && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "#d9fdd3",
+              color: "#008069",
+              padding: "4px 12px",
+              borderRadius: "20px",
+              fontSize: "0.75rem",
+              fontWeight: "700",
+              border: "1px solid rgba(0, 128, 105, 0.15)",
+              whiteSpace: "nowrap"
+            }}>
+              <Clock size={14} />
+              <span>{windowTimeLeft}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", gap: "20px", marginRight: "8px", marginLeft: "8px" }}>
+            <Phone 
+              size={20} 
+              style={{ color: "#54656f", cursor: "pointer", transition: "0.2s" }} 
+              onMouseOver={e => e.currentTarget.style.color = "#00a884"}
+              onMouseOut={e => e.currentTarget.style.color = "#54656f"}
+              onClick={() => handleInitiateCall("audio")}
+              title="Voice Call"
+            />
+            <Video 
+              size={22} 
+              style={{ color: "#54656f", cursor: "pointer", transition: "0.2s" }} 
+              onMouseOver={e => e.currentTarget.style.color = "#00a884"}
+              onMouseOut={e => e.currentTarget.style.color = "#54656f"}
+              onClick={() => handleInitiateCall("video")}
+              title="Video Call"
+            />
           </div>
-        )}
-
-        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <button onClick={() => setShowTemplateModal(true)} style={{ background: "#00a884", border: "none", color: "#ffffff", padding: "6px 14px", borderRadius: "20px", fontSize: "0.75rem", fontWeight: "700", cursor: "pointer", boxShadow: "0 2px 4px rgba(0, 168, 132, 0.2)", transition: "0.2s" }} onMouseOver={e => e.currentTarget.style.transform = "translateY(-1px)"} onMouseOut={e => e.currentTarget.style.transform = "translateY(0)"}>
-            Send Template
-          </button>
-          <MoreVertical size={20} style={{ color: "#8696a0", cursor: "pointer" }} />
+          
+          {!showContactInfo && (
+            <button 
+              onClick={() => setShowTemplateModal(true)} 
+              style={{ 
+                background: "#00a884", 
+                border: "none", 
+                color: "#ffffff", 
+                padding: "8px 18px", 
+                borderRadius: "20px", 
+                fontSize: "0.8rem", 
+                fontWeight: "700", 
+                cursor: "pointer", 
+                boxShadow: "0 2px 6px rgba(0, 168, 132, 0.3)", 
+                transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
+                whiteSpace: "nowrap"
+              }} 
+              onMouseOver={e => {
+                e.currentTarget.style.transform = "translateY(-1px)";
+                e.currentTarget.style.boxShadow = "0 4px 10px rgba(0, 168, 132, 0.4)";
+              }} 
+              onMouseOut={e => {
+                e.currentTarget.style.transform = "translateY(0)";
+                e.currentTarget.style.boxShadow = "0 2px 6px rgba(0, 168, 132, 0.3)";
+              }}
+            >
+              Send Template
+            </button>
+          )}
+          <MoreVertical size={20} style={{ color: "#54656f", cursor: "pointer", opacity: 0.8 }} />
         </div>
       </div>
 

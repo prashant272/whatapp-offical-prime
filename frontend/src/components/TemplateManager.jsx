@@ -24,9 +24,30 @@ const TemplateManager = () => {
     body: "",
     headerType: "NONE",
     headerText: "",
+    headerSampleUrl: "",
     footerText: ""
   });
   const [buttons, setButtons] = useState([]);
+  
+  const handleAddButton = () => {
+    if (buttons.length >= 10) return alert("Maximum 10 buttons allowed.");
+    setButtons([...buttons, { type: "QUICK_REPLY", text: "" }]);
+  };
+
+  const handleRemoveButton = (idx) => {
+    setButtons(buttons.filter((_, i) => i !== idx));
+  };
+
+  const handleButtonChange = (idx, field, value) => {
+    const newButtons = [...buttons];
+    newButtons[idx][field] = value;
+    // Reset secondary fields if type changes
+    if (field === "type") {
+      delete newButtons[idx].url;
+      delete newButtons[idx].phone_number;
+    }
+    setButtons(newButtons);
+  };
 
   const fetchTemplates = async () => {
     if (!activeAccount) return;
@@ -96,7 +117,7 @@ const TemplateManager = () => {
           const matches = formData.headerText.match(/{{(\d+)}}/g);
           if (matches) headerComp.example = { header_text: [ "Example Header" ] };
         } else {
-          headerComp.example = { header_handle: [ "https://example.com/file.jpg" ] };
+          headerComp.example = { header_url: [ formData.headerSampleUrl || "https://images.unsplash.com/photo-1575936123452-b67c3203c357?fm=jpg&q=60&w=3000&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxzZWFyY2h8Mnx8aW1hZ2V8ZW58MHx8MHx8fDA%3D" ] };
         }
         components.push(headerComp);
       }
@@ -247,33 +268,187 @@ const TemplateManager = () => {
       </div>
 
       {showForm && (
-        <form className="glass-card" style={{ marginBottom: "2rem" }} onSubmit={handleSubmit}>
-          {/* ... Template creation form details ... */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-            <div>
-              <label>Template Name</label>
-              <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px" }} value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")})} required />
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 0.8fr", gap: "2rem", marginBottom: "2rem" }}>
+          {/* Left: Inputs */}
+          <form className="glass-card" style={{ border: "1px solid var(--accent-primary)" }} onSubmit={handleSubmit}>
+            <h4 style={{ marginBottom: "1.5rem", color: "var(--accent-primary)" }}>Create New Template</h4>
+            
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>Template Name</label>
+                <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }} value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")})} placeholder="e.g. welcome_message" required />
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>Category</label>
+                <select style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }} value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})}>
+                  <option value="MARKETING">Marketing</option>
+                  <option value="UTILITY">Utility</option>
+                  <option value="AUTHENTICATION">Authentication</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label>Category</label>
-              <select style={{ width: "100%", padding: "12px", borderRadius: "10px" }} value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})}>
-                <option value="MARKETING">Marketing</option>
-                <option value="UTILITY">Utility</option>
-              </select>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
+              <div>
+                <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>Header Type</label>
+                <select style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }} value={formData.headerType} onChange={(e) => setFormData({...formData, headerType: e.target.value})}>
+                  <option value="NONE">None</option>
+                  <option value="TEXT">Text</option>
+                  <option value="IMAGE">Image</option>
+                  <option value="VIDEO">Video</option>
+                  <option value="DOCUMENT">Document</option>
+                </select>
+              </div>
+              {formData.headerType === "TEXT" && (
+                <div>
+                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>Header Text</label>
+                  <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }} value={formData.headerText} onChange={(e) => setFormData({...formData, headerText: e.target.value})} placeholder="e.g. Welcome to our store" />
+                </div>
+              )}
+              {["IMAGE", "VIDEO", "DOCUMENT"].includes(formData.headerType) && (
+                <div>
+                  <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>Sample {formData.headerType}</label>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <input type="text" style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }} value={formData.headerSampleUrl} readOnly placeholder="Upload sample file..." />
+                    <label className="btn-primary" style={{ padding: "10px 20px", cursor: "pointer", fontSize: "0.8rem", display: "flex", alignItems: "center" }}>
+                      Upload
+                      <input type="file" hidden onChange={(e) => handleFileUpload(e, "headerSampleUrl", true)} />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>Body Content (Use {"{{1}}"}, {"{{2}}"} for variables)</label>
+              <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }} value={formData.body} onChange={(e) => setFormData({...formData, body: e.target.value})} placeholder="Hello {{1}}, thanks for your order!" required />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ display: "block", marginBottom: "8px", fontWeight: "600" }}>Footer Text (Optional)</label>
+              <input type="text" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }} value={formData.footerText} onChange={(e) => setFormData({...formData, footerText: e.target.value})} placeholder="e.g. Reply STOP to opt out" />
+            </div>
+
+            <div style={{ marginBottom: "1.5rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+                <label style={{ fontWeight: "600" }}>Buttons (Optional, Max 10)</label>
+                {buttons.length < 10 && (
+                  <button type="button" onClick={handleAddButton} className="btn-primary" style={{ padding: "5px 15px", fontSize: "0.8rem" }}>
+                    <Plus size={14} /> Add Button
+                  </button>
+                )}
+              </div>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "1rem", maxHeight: "300px", overflowY: "auto", paddingRight: "10px" }}>
+                {buttons.map((btn, idx) => (
+                  <div key={idx} className="glass-card" style={{ padding: "1rem", background: "#f8f9fa", border: "1px dashed #ccc" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 40px", gap: "10px", alignItems: "end" }}>
+                      <div>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "700" }}>Type</label>
+                        <select style={{ width: "100%", padding: "8px", borderRadius: "6px" }} value={btn.type} onChange={(e) => handleButtonChange(idx, "type", e.target.value)}>
+                          <option value="QUICK_REPLY">Quick Reply</option>
+                          <option value="URL">Call to Action (URL)</option>
+                          <option value="PHONE_NUMBER">Call to Action (Phone)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: "0.75rem", fontWeight: "700" }}>Button Text</label>
+                        <input type="text" style={{ width: "100%", padding: "8px", borderRadius: "6px" }} value={btn.text} onChange={(e) => handleButtonChange(idx, "text", e.target.value)} placeholder="e.g. Visit Website" required />
+                      </div>
+                      {btn.type === "URL" && (
+                        <div>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "700" }}>URL</label>
+                          <input type="text" style={{ width: "100%", padding: "8px", borderRadius: "6px" }} value={btn.url} onChange={(e) => handleButtonChange(idx, "url", e.target.value)} placeholder="https://..." required />
+                        </div>
+                      )}
+                      {btn.type === "PHONE_NUMBER" && (
+                        <div>
+                          <label style={{ fontSize: "0.75rem", fontWeight: "700" }}>Phone Number</label>
+                          <input type="text" style={{ width: "100%", padding: "8px", borderRadius: "6px" }} value={btn.phone_number} onChange={(e) => handleButtonChange(idx, "phone_number", e.target.value)} placeholder="+91..." required />
+                        </div>
+                      )}
+                      <button type="button" onClick={() => handleRemoveButton(idx)} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", paddingBottom: "10px" }}>
+                        <Trash2 size={20} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px", marginTop: "1rem" }}>
+              Submit for Approval from {activeAccount?.name}
+            </button>
+          </form>
+
+          {/* Right: Live Preview */}
+          <div style={{ position: "sticky", top: "20px", height: "fit-content" }}>
+            <div style={{ background: "#e5ddd5", borderRadius: "20px", padding: "20px", display: "flex", flexDirection: "column", border: "1px solid #ddd", boxShadow: "0 10px 25px rgba(0,0,0,0.1)" }}>
+              <div style={{ textAlign: "center", color: "#667781", fontSize: "0.7rem", marginBottom: "15px", textTransform: "uppercase", letterSpacing: "1px", fontWeight: "700" }}>Live Preview</div>
+              
+              <div className="wa-bubble" style={{ background: "white", padding: "10px", borderRadius: "0 15px 15px 15px", boxShadow: "0 1px 0.5px rgba(0,0,0,0.13)", maxWidth: "100%", position: "relative" }}>
+                {/* Header Preview */}
+                {formData.headerType !== "NONE" && (
+                  <div style={{ marginBottom: "8px" }}>
+                    {formData.headerType === "TEXT" ? (
+                      <div style={{ fontWeight: "700", fontSize: "0.95rem", color: "#111b21" }}>{formData.headerText || "Header Text Placeholder"}</div>
+                    ) : (
+                      <div style={{ width: "100%", aspectRatio: "16/9", background: "#f0f2f5", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                        {formData.headerSampleUrl ? (
+                          <img src={formData.headerSampleUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        ) : (
+                          <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{formData.headerType} Preview</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Body Preview */}
+                <div style={{ fontSize: "0.9rem", color: "#111b21", whiteSpace: "pre-wrap", lineHeight: "1.4" }}>
+                  {formData.body || "Your message body content will appear here..."}
+                </div>
+
+                {/* Footer Preview */}
+                {formData.footerText && (
+                  <div style={{ fontSize: "0.75rem", color: "#667781", marginTop: "5px" }}>
+                    {formData.footerText}
+                  </div>
+                )}
+
+                {/* Buttons Preview */}
+                {buttons.length > 0 && (
+                  <div style={{ marginTop: "12px", borderTop: "1px solid #f0f2f5" }}>
+                    {buttons.map((btn, i) => (
+                      <div key={i} style={{ padding: "10px", textAlign: "center", color: "#00a884", fontSize: "0.9rem", fontWeight: "600", borderBottom: i < buttons.length - 1 ? "1px solid #f0f2f5" : "none" }}>
+                        {btn.text || "Button Text"}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="glass-card" style={{ marginTop: "1rem", padding: "1rem", fontSize: "0.8rem", color: "#64748b", background: "white" }}>
+              <h5 style={{ marginBottom: "8px", color: "var(--accent-primary)" }}>Preview Tips:</h5>
+              <ul style={{ paddingLeft: "1.2rem" }}>
+                <li>Variables like {"{{1}}"} will be replaced with real data when sending.</li>
+                <li>Media headers require a sample file for Meta approval.</li>
+                <li>Buttons are interactive and will appear at the bottom.</li>
+              </ul>
             </div>
           </div>
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label>Body Content</label>
-            <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px" }} value={formData.body} onChange={(e) => setFormData({...formData, body: e.target.value})} required />
-          </div>
-          <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px" }}>Submit for Approval from {activeAccount?.name}</button>
-        </form>
+        </div>
       )}
 
       {loading ? (
         <div style={{ textAlign: "center", padding: "4rem" }}><RefreshCw className="animate-spin" size={40} color="var(--accent-primary)" /></div>
       ) : filter === "PRESETS" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))", gap: "1.5rem" }}>
+        <div style={{ 
+          display: "grid", 
+          gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 450px), 1fr))", 
+          gap: "1.5rem" 
+        }}>
           {presets.map(p => {
             const bodyComp = p.template?.components?.find(c => c.type === "BODY");
             const headerComp = p.template?.components?.find(c => c.type === "HEADER");
@@ -290,20 +465,21 @@ const TemplateManager = () => {
                 </div>
                 
                 {imageUrl && (
-                  <div style={{ width: "100%", height: "150px", borderRadius: "10px", overflow: "hidden", background: "#f1f5f9" }}>
-                    <img src={imageUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="Preset" />
+                  <div style={{ width: "100%", height: "200px", borderRadius: "10px", overflow: "hidden", background: "#f1f5f9" }}>
+                    <img src={imageUrl} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} alt="Preset" />
                   </div>
                 )}
                 
                 <div style={{ 
                   background: "#f8fafc", 
-                  padding: "10px", 
+                  padding: "12px", 
                   borderRadius: "8px", 
-                  fontSize: "0.85rem", 
+                  fontSize: "0.95rem", 
                   color: "#334155",
-                  maxHeight: "100px",
+                  maxHeight: "300px",
                   overflowY: "auto",
-                  borderLeft: "4px solid var(--accent-primary)"
+                  borderLeft: "4px solid var(--accent-primary)",
+                  lineHeight: "1.5"
                 }}>
                   {bodyComp ? formatPreviewText(bodyComp.text, "BODY", p.config || {}) : "No body text"}
                 </div>

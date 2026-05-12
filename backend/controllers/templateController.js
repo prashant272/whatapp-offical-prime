@@ -1,4 +1,4 @@
-import { getTemplates as getTemplatesFromMeta, createTemplate as createMetaTemplate, deleteMetaTemplate } from "../services/whatsappService.js";
+import { getTemplates as getTemplatesFromMeta, createTemplate as createMetaTemplate, deleteMetaTemplate, uploadMediaToMeta } from "../services/whatsappService.js";
 import Template from "../models/Template.js";
 
 export const getTemplates = async (req, res) => {
@@ -75,11 +75,36 @@ export const createNewTemplate = async (req, res) => {
     const account = req.whatsappAccount;
     if (!account) return res.status(400).json({ error: "No active account" });
 
-    const metaResponse = await createMetaTemplate(account, req.body);
+    const templateData = req.body;
+
+    // --- AUTOMATED MEDIA HANDLE CONVERSION ---
+    console.log("🛠️ Checking for media components in template...");
+    if (templateData.components) {
+      for (let comp of templateData.components) {
+        console.log(`🔍 Checking component: ${comp.type} (Format: ${comp.format})`);
+        if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
+          const sampleUrl = comp.example?.header_url?.[0] || comp.example?.header_handle?.[0];
+          
+          if (sampleUrl && sampleUrl.startsWith("http")) {
+            try {
+              const handle = await uploadMediaToMeta(account.accessToken, sampleUrl);
+              // Meta requires 'header_handle' for approval samples
+              comp.example = { header_handle: [handle] };
+              console.log(`✅ Sample converted to Meta handle: ${handle}`);
+            } catch (err) {
+              console.error("⚠️ Failed to convert media URL to handle:", err.message);
+              // Fallback: Continue with original, though Meta might reject
+            }
+          }
+        }
+      }
+    }
+
+    const metaResponse = await createMetaTemplate(account, templateData);
     
     const newTemplate = new Template({
-      ...req.body,
-      metaId: metaResponse.data.id,
+      ...templateData,
+      metaId: metaResponse.id,
       status: "PENDING",
       whatsappAccountId: account._id
     });
@@ -87,7 +112,11 @@ export const createNewTemplate = async (req, res) => {
 
     res.status(201).json(newTemplate);
   } catch (error) {
-    res.status(500).json({ error: error.response?.data?.error?.message || error.message });
+    console.error("❌ Template Creation Error:", error.response?.data || error.message);
+    res.status(500).json({ 
+      error: error.response?.data?.error?.message || error.message,
+      details: error.response?.data?.error || null
+    });
   }
 };
 

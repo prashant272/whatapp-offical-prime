@@ -6,6 +6,7 @@ import Conversation from "../models/Conversation.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import { throttleCampaign } from "../utils/messageThrottler.js";
 import { sendTemplateMessage } from "../services/whatsappService.js";
+import { initiateWhatsAppCall } from "../services/callingService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getIO, smartEmit } from "../utils/socket.js";
@@ -35,8 +36,10 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
     await throttleCampaign(
       account,
       contacts,
-      template.name,
-      sendTemplateMessage,
+      campaign.type === "VOICE" ? "VOICE_CALL" : template.name,
+      campaign.type === "VOICE" 
+        ? (acc, phone) => initiateWhatsAppCall(acc, phone, "audio")
+        : sendTemplateMessage,
       async (currentSuccess, currentFailure, currentLogs, latestLog) => {
         const deltaSuccess = currentSuccess - lastReportedSuccess;
         const deltaFailure = currentFailure - lastReportedFailure;

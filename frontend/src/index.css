@@ -31,7 +31,7 @@ body {
 }
 
 .sidebar {
-  width: 260px;
+  width: 240px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
   padding: 2rem 1rem;
@@ -40,12 +40,15 @@ body {
   gap: 2rem;
   position: fixed;
   height: 100vh;
+  z-index: 100;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .main-content {
-  margin-left: 260px;
+  margin-left: 240px;
   flex: 1;
   padding: 2rem;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-card {
@@ -54,12 +57,14 @@ body {
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   padding: 1.5rem;
-  transition: transform 0.3s ease, border-color 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .glass-card:hover {
   border-color: var(--accent-primary);
   transform: translateY(-4px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
 }
 
 .btn-primary {

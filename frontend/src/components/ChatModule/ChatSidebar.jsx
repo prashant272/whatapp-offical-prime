@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Plus, Search, ChevronDown, Check, MoreVertical } from "lucide-react";
+import { Plus, Search, ChevronDown, Check, MoreVertical, Bell } from "lucide-react";
 import { List } from "react-window";
 
 // In react-window v2.2.x, the Row component receives props directly from rowProps
@@ -22,15 +22,15 @@ const ChatRow = memo(({ index, style, conversations, selectedId, selectedPhone, 
           gap: "14px",
           alignItems: "center",
           height: "100%",
-          background: isActive ? "#f0f2f5" : "transparent",
-          transition: "background 0.2s"
+          background: isActive ? "#e7fce3" : "transparent",
+          transition: "all 0.2s"
         }}
       >
         <div style={{
           width: "48px",
           height: "48px",
           borderRadius: "50%",
-          background: isActive ? "#d1d7db" : "#dfe5e7",
+          background: isActive ? "#d1f4cc" : "#dfe5e7",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -43,21 +43,44 @@ const ChatRow = memo(({ index, style, conversations, selectedId, selectedPhone, 
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "3px" }}>
-            <span style={{ fontWeight: isActive ? "700" : "600", color: "#111b21", fontSize: "1rem", display: "flex", alignItems: "center", gap: "6px" }}>
-              {chat.contact?.name || chat.phone}
+            <span style={{ 
+              fontWeight: isActive ? "700" : "600", 
+              color: "#1b1b1b", 
+              fontSize: "0.95rem", 
+              display: "flex", 
+              alignItems: "center", 
+              gap: "8px",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              flex: 1
+            }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {String(chat.contact?.name || chat.phone || "Unknown").replace(/^User\s+/i, "")}
+              </span>
               {selectedAccountIds && selectedAccountIds.length > 1 && (
-                <span style={{ fontSize: "0.55rem", background: "#f1f5f9", color: "#64748b", padding: "1px 6px", borderRadius: "10px", fontWeight: "800", textTransform: "uppercase", border: "1px solid #e2e8f0" }}>
+                <span style={{ 
+                  fontSize: "0.55rem", 
+                  background: "rgba(0, 168, 132, 0.08)", 
+                  color: "#00a884", 
+                  padding: "2px 8px", 
+                  borderRadius: "6px", 
+                  fontWeight: "800", 
+                  textTransform: "uppercase", 
+                  border: "1px solid rgba(0, 168, 132, 0.15)",
+                  flexShrink: 0
+                }}>
                   {accountNameMap[chat.whatsappAccountId] || "Primary"}
                 </span>
               )}
             </span>
-            <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px" }}>
+            <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "2px", flexShrink: 0, marginLeft: "8px" }}>
               {chat.lastMessageTime ? (
                 <>
-                  <span style={{ fontSize: "0.75rem", fontWeight: "700", color: isActive ? "#010f0dff" : "#00a2ffff" }}>
+                  <span style={{ fontSize: "0.7rem", fontWeight: "700", color: isActive ? "#00a884" : "#667781" }}>
                     {new Date(chat.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span style={{ fontSize: "0.62rem", color: "#ff0000ff", fontWeight: "600", textTransform: "uppercase" }}>
+                  <span style={{ fontSize: "0.6rem", color: "#667781", fontWeight: "500", opacity: 0.8 }}>
                     {new Date(chat.lastMessageTime).toLocaleDateString([], { day: '2-digit', month: 'short' })}
                   </span>
                 </>
@@ -73,7 +96,7 @@ const ChatRow = memo(({ index, style, conversations, selectedId, selectedPhone, 
               overflow: "hidden",
               textOverflow: "ellipsis",
               flex: 1,
-              fontWeight: chat.unreadCount > 0 ? "700" : "400"
+              fontWeight: (chat.unreadCount > 0 || isActive) ? "700" : "400"
             }}>
               {chat.lastMessage || "No More messege "}
             </p>
@@ -145,8 +168,21 @@ const ChatSidebar = ({
   listData, selectedChat, navigate,
   accountNameMap, hasNextPage, isFetchingNextPage, fetchNextPage,
   unreadCountTotal, currentUser,
-  showAccountDropdown, setShowAccountDropdown, accountDropdownRef
+  showAccountDropdown, setShowAccountDropdown, accountDropdownRef,
+  uiNotifications, markNotificationsAsRead, handleNotificationClick
 }) => {
+  const [showNotifList, setShowNotifList] = React.useState(false);
+  const notifRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setShowNotifList(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
   return (
     <div className="sidebar-container" style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ padding: "12px", background: "#f0f2f5", flexShrink: 0 }}>
@@ -154,6 +190,49 @@ const ChatSidebar = ({
           <h3 style={{ margin: 0, fontSize: "1.1rem", color: "var(--text-primary)" }}>Chats</h3>
           <div style={{ display: "flex", gap: "15px", color: "var(--text-secondary)" }}>
             <Plus size={20} cursor="pointer" onClick={() => setShowNewChatModal(true)} />
+            <div 
+              style={{ position: "relative", cursor: "pointer" }}
+              ref={notifRef}
+            >
+              <Bell size={20} onClick={() => setShowNotifList(!showNotifList)} />
+              {uiNotifications?.length > 0 && (
+                <div style={{ 
+                  position: "absolute", top: "-8px", right: "-8px", background: "#ff4757", 
+                  width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #f0f2f5",
+                  display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem",
+                  color: "white", fontWeight: "bold"
+                }}>
+                  {uiNotifications.length}
+                </div>
+              )}
+              {showNotifList && uiNotifications?.length > 0 && (
+                <div style={{
+                  position: "absolute", top: "30px", right: "0", background: "white", width: "250px",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.15)", borderRadius: "12px", padding: "10px",
+                  zIndex: 1000, border: "1px solid #eee"
+                }}>
+                  <p style={{ margin: "0 0 10px 0", fontSize: "0.75rem", fontWeight: "bold", color: "#667781", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>Notifications</p>
+                  {uiNotifications.map(n => (
+                    <div 
+                      key={n.id} 
+                      onClick={() => { handleNotificationClick(n); setShowNotifList(false); }}
+                      style={{ padding: "8px", borderRadius: "8px", fontSize: "0.8rem", marginBottom: "5px", cursor: "pointer", background: "#f8f9fa", border: "1px solid #eee" }}
+                      onMouseOver={e => e.currentTarget.style.background = "#e7fce3"}
+                      onMouseOut={e => e.currentTarget.style.background = "#f8f9fa"}
+                    >
+                      {n.message}
+                      <p style={{ margin: "4px 0 0 0", fontSize: "0.65rem", color: "#25d366", fontWeight: "bold" }}>Click to open chat</p>
+                    </div>
+                  ))}
+                  <button 
+                    onClick={markNotificationsAsRead}
+                    style={{ width: "100%", padding: "5px", fontSize: "0.7rem", border: "none", background: "none", color: "#00a884", cursor: "pointer", fontWeight: "bold", textAlign: "center" }}
+                  >
+                    Clear All
+                  </button>
+                </div>
+              )}
+            </div>
             <MoreVertical size={20} cursor="pointer" />
           </div>
         </div>

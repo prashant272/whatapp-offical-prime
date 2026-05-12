@@ -64,7 +64,13 @@ export const getConversations = async (req, res) => {
 
     // 3. Additional Filters
     if (status && status !== "all") conditions.push({ status });
-    if (assignedTo && assignedTo !== "all") conditions.push({ assignedTo });
+    if (assignedTo && assignedTo !== "all") {
+      if (assignedTo === "unassigned") {
+        conditions.push({ $or: [{ assignedTo: null }, { assignedTo: { $exists: false } }] });
+      } else {
+        conditions.push({ assignedTo });
+      }
+    }
     if (sector && sector !== "all") conditions.push({ sector });
 
     // 3b. Unread/Window Quick Filters
@@ -189,11 +195,13 @@ export const getMessages = async (req, res) => {
 
     const total = await Message.countDocuments(filter);
 
-    // Update unread count only for current account context
+    // Update unread count only for current account context - REMOVED AUTO MARK READ
+    /*
     await Conversation.findOneAndUpdate(
       { phone, whatsappAccountId: account?._id },
       { unreadCount: 0 }
     );
+    */
 
     res.json({
       messages: messages.reverse(),
@@ -236,7 +244,6 @@ export const sendMessage = async (req, res) => {
     const updateFields = {
       lastMessage: body,
       lastMessageTime: new Date(),
-      unreadCount: 0,
       whatsappAccountId: account._id // Claim it for this account
     };
 
@@ -364,7 +371,6 @@ export const sendChatTemplateMessage = async (req, res) => {
     const updateFields = {
       lastMessage: newMessage.body,
       lastMessageTime: new Date(),
-      unreadCount: 0,
       whatsappAccountId: account._id
     };
 
@@ -421,7 +427,6 @@ export const sendChatImageMessage = async (req, res) => {
     const updateFields = {
       lastMessage: caption || "📷 Image",
       lastMessageTime: new Date(),
-      unreadCount: 0,
       whatsappAccountId: account._id
     };
 
@@ -474,7 +479,10 @@ export const assignConversation = async (req, res) => {
     const sectorName = conversation.sector || "Unassigned";
     await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName})`, phone);
 
-    res.json({ message: "Conversation assigned", conversation });
+    const populatedConv = await Conversation.findById(conversation._id).populate("assignedTo", "name").populate("contact");
+    smartEmit("chat_assigned", { conversation: populatedConv });
+
+    res.json({ message: "Conversation assigned", conversation: populatedConv });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

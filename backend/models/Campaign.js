@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 
 const campaignSchema = new mongoose.Schema({
   name: { type: String, required: true },
-  template: { type: mongoose.Schema.Types.ObjectId, ref: "Template", required: true },
+  type: { type: String, enum: ["MESSAGE", "VOICE"], default: "MESSAGE" },
+  template: { type: mongoose.Schema.Types.ObjectId, ref: "Template" },
   totalContacts: { type: Number, default: 0 },
   sentCount: { type: Number, default: 0 },
   deliveredCount: { type: Number, default: 0 },

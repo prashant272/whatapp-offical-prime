@@ -128,6 +128,39 @@ const ChatModule = () => {
   const [pendingStatus, setPendingStatus] = useState("");
 
   const [activeReminders, setActiveReminders] = useState([]);
+  const [uiNotifications, setUiNotifications] = useState([]);
+  const markNotificationsAsRead = () => {
+    setUiNotifications([]);
+  };
+
+  const handleNotificationClick = (notif) => {
+    if (notif.conversation) {
+      const target = notif.conversation;
+      
+      // 1. Auto-switch account if the chat belongs to a different instance
+      if (activeAccount && target.whatsappAccountId && target.whatsappAccountId !== activeAccount._id) {
+        const targetAcc = accounts.find(a => a._id === target.whatsappAccountId);
+        if (targetAcc) switchAccount(targetAcc);
+      }
+
+      // 2. Clear filters to ensure the chat is visible
+      setFilter("all");
+      setStatusFilter("all");
+      setSearchQuery("");
+
+      // 3. Select and Navigate
+      setSelectedChat(target);
+      if (target._id) {
+        navigate(`/chats/${target._id}`);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
 
   // --- Logic Functions ---
 
@@ -276,15 +309,18 @@ const ChatModule = () => {
         };
         fetchContactByPhone();
       } else {
-        // Not new, but no contact object attached (e.g. placeholder)
         setActiveContact(null);
       }
       fetchMessages(selectedChat.phone);
-      setConversations(prev => prev.map(c =>
-        (c._id === selectedChat._id || c.phone === selectedChat.phone)
-          ? { ...c, unreadCount: 0 }
-          : c
-      ));
+      
+      // Mark as read in the BACKGROUND (backend only)
+      // This ensures that after a refresh, it will be seen as read.
+      if (!selectedChat.isNew) {
+        api.post("/conversations/mark-read", { 
+          phone: selectedChat.phone, 
+          whatsappAccountId: selectedChat.whatsappAccountId 
+        }).catch(console.error);
+      }
     }
   }, [selectedChat?.phone, selectedChat?._id, activeAccount]);
 
@@ -346,7 +382,7 @@ const ChatModule = () => {
 
         const optimisticMsg = {
           _id: tempId, from: "me", to: selectedChat.phone, body: caption || "Image", type: "image",
-          mediaUrl: previewUrl, direction: "outbound", status: "sending", timestamp: new Date()
+          mediaUrl: previewUrl, direction: "outbound", status: "sending", timestamp: new Date().toISOString()
         };
 
         dispatch(addMessage(optimisticMsg));
@@ -388,7 +424,7 @@ const ChatModule = () => {
         const tempId = "temp-" + Date.now();
         const optimisticMsg = {
           _id: tempId, from: "me", to: selectedChat.phone, body: text, type: "text",
-          direction: "outbound", status: "sending", timestamp: new Date()
+          direction: "outbound", status: "sending", timestamp: new Date().toISOString()
         };
 
         dispatch(addMessage(optimisticMsg));
@@ -409,6 +445,11 @@ const ChatModule = () => {
           dispatch(updateMessageStatus({ tempId, realMsg: { ...optimisticMsg, status: "failed" } }));
           alert("Error: " + (err.response?.data?.error || "Failed to send message"));
         }
+        
+        // NEW: Clear assignment notifications for this chat because executive replied
+        setUiNotifications(prev => prev.filter(n => 
+          !n.conversation || String(n.conversation.phone).replace(/\D/g, "").slice(-10) !== String(selectedChat.phone).replace(/\D/g, "").slice(-10)
+        ));
       }
     } catch (err) {
       console.error("Critical handleSend error:", err);
@@ -430,6 +471,11 @@ const ChatModule = () => {
       if (res.data.success) {
         dispatch(addMessage(res.data.message));
         refetchConvs();
+        
+        // Clear assignment notifications on template reply too
+        setUiNotifications(prev => prev.filter(n => 
+          !n.conversation || String(n.conversation.phone).replace(/\D/g, "").slice(-10) !== String(selectedChat.phone).replace(/\D/g, "").slice(-10)
+        ));
       }
     } catch (err) {
       alert("Error sending template: " + (err.response?.data?.error || err.message));
@@ -744,10 +790,8 @@ const ChatModule = () => {
             lastCustomerMessageAt: message.direction === "inbound" ? message.timestamp : existing.lastCustomerMessageAt
           };
 
-          if (!isActiveChat && message.direction === "inbound") {
+          if (message.direction === "inbound") {
             updatedConv.unreadCount = (existing.unreadCount || 0) + 1;
-          } else if (isActiveChat) {
-            updatedConv.unreadCount = 0;
           }
 
           const filtered = prev.filter((_, i) => i !== index);
@@ -755,7 +799,7 @@ const ChatModule = () => {
         } else {
           updatedConv = {
             ...conversation,
-            unreadCount: (!isActiveChat && message.direction === "inbound") ? 1 : 0,
+            unreadCount: (message.direction === "inbound") ? 1 : 0,
             lastMessage: message.body,
             lastMessageTime: message.timestamp,
             lastCustomerMessageAt: message.direction === "inbound" ? message.timestamp : conversation.lastCustomerMessageAt
@@ -766,6 +810,7 @@ const ChatModule = () => {
 
       if (selectedChatRef.current && String(selectedChatRef.current.phone).replace(/\D/g, "").slice(-10) === String(conversation.phone).replace(/\D/g, "").slice(-10)) {
         dispatch(addMessage(message));
+        // Mark as read in backend background for active chat
         if (message.direction === "inbound") {
           api.post("/conversations/mark-read", { phone: conversation.phone, whatsappAccountId: conversation.whatsappAccountId }).catch(console.error);
         }
@@ -774,6 +819,34 @@ const ChatModule = () => {
 
     socket.on("status_update", ({ messageId, status }) => { dispatch(updateMessageStatus({ messageId, status })); });
     socket.on("conversation_status_update", ({ phone, status }) => { refetchConvs(); });
+
+    socket.on("chat_assigned", ({ conversation }) => {
+      const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
+      if (assignedToId === currentUser._id) {
+        const contactName = conversation.contact?.name || conversation.phone;
+        
+        // 1. Browser Notification
+        if (Notification.permission === "granted") {
+          new Notification("New Chat Assigned", {
+            body: `Admin assigned a chat to you: ${contactName}`,
+          });
+        }
+
+        // 2. Sound Alert
+        try {
+          startFollowUpAlarm();
+        } catch (e) { console.error("Sound error", e); }
+
+        // 3. UI Notification
+        const newNotif = { 
+          id: Date.now(), 
+          message: `New Chat Assigned: ${contactName}`,
+          conversation: conversation
+        };
+        setUiNotifications(prev => [newNotif, ...prev]);
+      }
+      refetchConvs();
+    });
 
     return () => socket.disconnect();
   }, []);
@@ -812,13 +885,29 @@ const ChatModule = () => {
       gridTemplateColumns: showContactInfo ? "350px 1fr 350px" : "350px 1fr",
       height: "100vh", width: "100%", maxWidth: "100%", margin: 0, padding: 0, overflow: "hidden", background: "var(--bg-secondary)", position: "relative"
     }}>
+      {/* UI Notifications Overlay */}
+      <div style={{ position: "fixed", top: "20px", right: "20px", zIndex: 10000, display: "flex", flexDirection: "column", gap: "10px" }}>
+        {uiNotifications.map(n => (
+          <div key={n.id} style={{ 
+            background: "#00a884", color: "white", padding: "12px 24px", borderRadius: "12px", 
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)", fontWeight: "bold", animation: "slideIn 0.3s ease-out" 
+          }}>
+            {n.message}
+          </div>
+        ))}
+      </div>
+
       <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
         .sidebar-list-container { overflow: hidden !important; }
         .chat-scroll::-webkit-scrollbar { width: 6px !important; }
         .chat-scroll::-webkit-scrollbar-track { background: transparent !important; }
         .chat-scroll::-webkit-scrollbar-thumb { background: #ced0d1 !important; border-radius: 10px; }
-        .chat-item:hover { background: #f5f6f6 !important; }
-        .chat-item.active { background: #f0f2f5 !important; border-left: 4px solid var(--accent-primary) !important; }
+        .chat-item:hover { background: #f0f2f5 !important; }
+        .chat-item.active { background: #e7fce3 !important; border-left: 4px solid #00a884 !important; }
         .msg-bubble { max-width: 65%; padding: 8px 12px; font-size: 0.9rem; margin-bottom: 4px; line-height: 1.4; box-shadow: 0 1px 0.5px rgba(0,0,0,0.13); position: relative; }
         .msg-outbound { align-self: flex-end !important; background-color: #d9fdd3 !important; color: #111b21 !important; border-radius: 8px 0 8px 8px; }
         .msg-inbound { align-self: flex-start !important; background-color: #ffffff !important; color: #111b21 !important; border-radius: 0 8px 8px 8px; }
@@ -840,6 +929,9 @@ const ChatModule = () => {
         unreadCountTotal={unreadCountTotal} currentUser={currentUser}
         showAccountDropdown={showAccountDropdown} setShowAccountDropdown={setShowAccountDropdown}
         accountDropdownRef={accountDropdownRef}
+        uiNotifications={uiNotifications}
+        markNotificationsAsRead={markNotificationsAsRead}
+        handleNotificationClick={handleNotificationClick}
       />
 
       <ChatArea

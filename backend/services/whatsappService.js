@@ -152,3 +152,54 @@ export const verifyContacts = async (account, phones) => {
     throw error;
   }
 };
+
+/**
+ * Uploads a file from a URL to Meta and returns a header_handle for template creation.
+ */
+export const uploadMediaToMeta = async (accessToken, fileUrl) => {
+  try {
+    console.log(`📥 Downloading sample media from: ${fileUrl}`);
+    const fileRes = await axios.get(fileUrl, { responseType: "arraybuffer" });
+    const fileData = Buffer.from(fileRes.data);
+    const contentType = fileRes.headers["content-type"] || "image/jpeg";
+    const fileLength = fileData.length;
+    
+    const APP_ID = "4777118855760718"; // Found via debug_token
+    
+    // Step 1: Create Upload Session
+    console.log(`🚀 Creating Meta Upload Session (Size: ${fileLength} bytes)`);
+    const sessionRes = await axios.post(
+      `https://graph.facebook.com/v21.0/${APP_ID}/uploads`,
+      null,
+      {
+        params: {
+          file_name: "template_sample",
+          file_length: fileLength,
+          file_type: contentType,
+          access_token: accessToken
+        }
+      }
+    );
+    const sessionId = sessionRes.data.id;
+    
+    // Step 2: Upload Data
+    console.log(`📤 Uploading bytes to Meta Session: ${sessionId}`);
+    const uploadRes = await axios.post(
+      `https://graph.facebook.com/v21.0/${sessionId}`,
+      fileData,
+      {
+        headers: {
+          Authorization: `OAuth ${accessToken}`,
+          "Content-Type": contentType
+        }
+      }
+    );
+    
+    console.log(`✅ Meta Media Handle Obtained: ${uploadRes.data.h}`);
+    return uploadRes.data.h;
+  } catch (error) {
+    const errData = error.response?.data || error.message;
+    console.error("❌ Meta Upload Failed:", JSON.stringify(errData, null, 2));
+    throw new Error(`Meta media upload failed: ${error.response?.data?.error?.message || error.message}`);
+  }
+};

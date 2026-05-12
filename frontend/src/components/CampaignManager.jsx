@@ -26,6 +26,7 @@ const CampaignManager = () => {
   const [showAllCampaigns, setShowAllCampaigns] = useState(false);
   const [newCampaign, setNewCampaign] = useState({
     name: "",
+    type: "MESSAGE",
     templateName: "",
     contactsRaw: "",
     delay: 2,
@@ -515,7 +516,7 @@ const CampaignManager = () => {
   const handleStartCampaign = async (e) => {
     e.preventDefault();
     if (!activeAccount) return alert("Select an account first");
-    if (!newCampaign.templateName) return alert("Select a template");
+    if (newCampaign.type === "MESSAGE" && !newCampaign.templateName) return alert("Select a template");
     if (!newCampaign.contactsRaw) return alert("Add contacts");
 
     const phones = newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5);
@@ -563,10 +564,11 @@ const CampaignManager = () => {
 
       const payload = {
         name: newCampaign.name,
-        templateName: newCampaign.templateName,
+        type: newCampaign.type,
+        templateName: newCampaign.type === "MESSAGE" ? newCampaign.templateName : "VOICE_CALL",
         whatsappAccountId: newCampaign.whatsappAccountId,
         contacts: phones,
-        templateComponents,
+        templateComponents: newCampaign.type === "MESSAGE" ? templateComponents : [],
         delay: parseInt(newCampaign.delay),
         sector: newCampaign.sector
       };
@@ -626,28 +628,78 @@ const CampaignManager = () => {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
-            <div>
-              <label>Select Preset (Optional)</label>
-              <select
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #00a884", marginTop: "8px", background: "#f0fdf4" }}
-                value={selectedPreset}
-                onChange={(e) => handlePresetChange(e.target.value)}
+          <div style={{ marginBottom: "1.5rem" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", color: "#667781" }}>Campaign Strategy</label>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <div 
+                onClick={() => setNewCampaign({ ...newCampaign, type: "MESSAGE" })}
+                style={{ 
+                  flex: 1, padding: "15px", borderRadius: "12px", cursor: "pointer", border: "1px solid",
+                  borderColor: newCampaign.type === "MESSAGE" ? "#00a884" : "#ddd",
+                  background: newCampaign.type === "MESSAGE" ? "#f0fdf4" : "white",
+                  display: "flex", alignItems: "center", gap: "12px", transition: "0.2s"
+                }}
               >
-                <option value="">-- Use a Saved Preset --</option>
-                {presets.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-              </select>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: "2px solid #00a884", background: newCampaign.type === "MESSAGE" ? "#00a884" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {newCampaign.type === "MESSAGE" && <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "white" }} />}
+                </div>
+                <div>
+                  <div style={{ fontWeight: "700", color: newCampaign.type === "MESSAGE" ? "#111b21" : "#667781" }}>WhatsApp Message</div>
+                  <div style={{ fontSize: "0.75rem", color: "#8696a0" }}>Broadcast template messages</div>
+                </div>
+              </div>
+              <div 
+                onClick={() => setNewCampaign({ ...newCampaign, type: "VOICE" })}
+                style={{ 
+                  flex: 1, padding: "15px", borderRadius: "12px", cursor: "pointer", border: "1px solid",
+                  borderColor: newCampaign.type === "VOICE" ? "#00a884" : "#ddd",
+                  background: newCampaign.type === "VOICE" ? "#f0fdf4" : "white",
+                  display: "flex", alignItems: "center", gap: "12px", transition: "0.2s"
+                }}
+              >
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: "2px solid #00a884", background: newCampaign.type === "VOICE" ? "#00a884" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {newCampaign.type === "VOICE" && <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: "white" }} />}
+                </div>
+                <div>
+                  <div style={{ fontWeight: "700", color: newCampaign.type === "VOICE" ? "#111b21" : "#667781" }}>WhatsApp Voice/Video Call</div>
+                  <div style={{ fontSize: "0.75rem", color: "#8696a0" }}>Automated bulk VoIP calls</div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label>Choose Message Template</label>
-              <select style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.templateName} onChange={(e) => {
-                handleTemplateChange(e);
-                setSelectedPreset("");
-              }} required>
-                <option value="">-- Choose Template --</option>
-                {templates.map(t => <option key={t._id} value={t.name}>{t.name}</option>)}
-              </select>
-            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
+            {newCampaign.type === "MESSAGE" ? (
+              <>
+                <div>
+                  <label>Select Preset (Optional)</label>
+                  <select
+                    style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #00a884", marginTop: "8px", background: "#f0fdf4" }}
+                    value={selectedPreset}
+                    onChange={(e) => handlePresetChange(e.target.value)}
+                  >
+                    <option value="">-- Use a Saved Preset --</option>
+                    {presets.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label>Choose Message Template</label>
+                  <select style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }} value={newCampaign.templateName} onChange={(e) => {
+                    handleTemplateChange(e);
+                    setSelectedPreset("");
+                  }} required>
+                    <option value="">-- Choose Template --</option>
+                    {templates.map(t => <option key={t._id} value={t.name}>{t.name}</option>)}
+                  </select>
+                </div>
+              </>
+            ) : (
+              <div style={{ gridColumn: "span 2", padding: "15px", background: "rgba(0, 168, 132, 0.05)", borderRadius: "12px", border: "1px solid rgba(0, 168, 132, 0.1)" }}>
+                <p style={{ margin: 0, fontSize: "0.9rem", color: "#00a884", fontWeight: "600" }}>
+                  📞 Call Campaign Mode: This will automatically initiate VoIP voice calls to the selected contacts. No template selection is required.
+                </p>
+              </div>
+            )}
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
