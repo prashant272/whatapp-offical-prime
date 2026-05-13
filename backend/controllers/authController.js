@@ -28,6 +28,15 @@ export const login = async (req, res) => {
   }
 };
 
+export const logout = async (req, res) => {
+  try {
+    await logActivity(req.user._id, "LOGOUT", "User logged out of dashboard");
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");

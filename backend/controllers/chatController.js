@@ -109,7 +109,8 @@ export const getConversations = async (req, res) => {
 
     // Fallback: If searching and we have room in the list, search for matching Contacts 
     // who don't have a conversation record yet in this account context
-    if (search && conversations.length < Number(limit)) {
+    // RBAC: Executives should NOT see unassigned contacts in search fallback
+    if (search && req.user.role !== "Executive" && conversations.length < Number(limit)) {
       const existingPhones = conversations.map(c => c.phone);
 
       const extraContacts = await Contact.find({
@@ -182,6 +183,18 @@ export const getMessages = async (req, res) => {
         accountFilter
       ]
     };
+
+    // RBAC Check for Executives
+    if (req.user.role === "Executive") {
+      const isAssigned = await Conversation.findOne({
+        phone,
+        assignedTo: req.user._id,
+        $or: [{ whatsappAccountId: req.whatsappAccount?._id }, { whatsappAccountId: null }]
+      });
+      if (!isAssigned) {
+        return res.status(403).json({ error: "Access denied. You are not assigned to this contact." });
+      }
+    }
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 50;
@@ -492,6 +505,12 @@ export const getConversationById = async (req, res) => {
   try {
     const conversation = await Conversation.findById(req.params.id).populate("contact").populate("assignedTo", "name");
     if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+
+    // RBAC: Executives can only see their own assigned chats
+    if (req.user.role === "Executive" && String(conversation.assignedTo?._id || conversation.assignedTo) !== String(req.user._id)) {
+      return res.status(403).json({ error: "Access denied. This chat is not assigned to you." });
+    }
+
     res.json(conversation);
   } catch (error) {
     res.status(500).json({ error: error.message });

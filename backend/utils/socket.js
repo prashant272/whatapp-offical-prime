@@ -52,8 +52,8 @@ export const smartEmit = (eventName, data) => {
     
     io.to(`user_${assignedId}`).emit(eventName, data);
   } else {
-    // 3. If unassigned, emit to Managers and Executives so they can see new/unassigned chats
+    // 3. If unassigned, only emit to Managers (Admins already covered in step 1)
+    // Executives should NOT see unassigned chats in real-time
     io.to("role_Manager").emit(eventName, data);
-    io.to("role_Executive").emit(eventName, data);
   }
 };
