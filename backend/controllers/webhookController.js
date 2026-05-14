@@ -146,6 +146,13 @@ export const handleWebhook = async (req, res) => {
 
         console.log(`📩 PROCESSED: [${type}] "${bodyContent}" from ${from}`);
 
+        // FIX: Check if message already exists to prevent duplicate key errors from Meta retries
+        const existingMsg = await Message.findOne({ messageId: message.id });
+        if (existingMsg) {
+          console.log(`ℹ️ Message ${message.id} already exists. Skipping save.`);
+          return res.sendStatus(200);
+        }
+
         const newMessage = new Message({
           messageId: message.id,
           from,
