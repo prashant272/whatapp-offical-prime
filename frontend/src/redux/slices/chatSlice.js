@@ -37,7 +37,7 @@ export const sendMessage = createAsyncThunk(
       const res = await api.post("/messages/send", { to, body }, {
         headers: { "x-whatsapp-account-id": accountId }
       });
-      return res.data.message;
+      return res.data; // Full data including conversation
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
     }
@@ -46,12 +46,12 @@ export const sendMessage = createAsyncThunk(
 
 export const sendImage = createAsyncThunk(
   "chat/sendImage",
-  async ({ to, imageUrl, caption, accountId }, { rejectWithValue }) => {
+  async ({ to, imageUrl, caption, accountId, type, filename }, { rejectWithValue }) => {
     try {
-      const res = await api.post("/messages/send-image", { to, imageUrl, caption }, {
+      const res = await api.post("/messages/send-image", { to, imageUrl, caption, type, filename }, {
         headers: { "x-whatsapp-account-id": accountId }
       });
-      return res.data.message;
+      return res.data; // Full data including conversation
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
     }
@@ -62,8 +62,8 @@ export const updateConversationStatus = createAsyncThunk(
   "chat/updateStatus",
   async ({ conversationId, status, followUpTime, followUpActivity, accountId }, { rejectWithValue }) => {
     try {
-      const res = await api.put(`/conversations/${conversationId}/status`, { 
-        status, followUpTime, followUpActivity 
+      const res = await api.put(`/conversations/${conversationId}/status`, {
+        status, followUpTime, followUpActivity
       }, {
         headers: { "x-whatsapp-account-id": accountId }
       });
@@ -128,7 +128,7 @@ const chatSlice = createSlice({
       if (tempId) {
         const existingRealMsgIndex = state.messages.findIndex(m => m._id === realMsg._id || (m.messageId && m.messageId === realMsg.messageId));
         const tempIndex = state.messages.findIndex(m => m._id === tempId);
-        
+
         if (existingRealMsgIndex !== -1 && existingRealMsgIndex !== tempIndex) {
           // The socket already added the real message, so just remove the temp one
           if (tempIndex !== -1) {

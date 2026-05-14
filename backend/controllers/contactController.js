@@ -43,9 +43,9 @@ export const getContacts = async (req, res, next) => {
     } = req.query;
 
     let query = {};
-    const isAll = showAllAccounts === "true" || accountId === "all";
+    const isAll = showAllAccounts === "true" || accountId === "all" || !accountId;
 
-    if (isAll || !accountId) {
+    if (isAll) {
       query = {};
     } else {
       query.$or = [
@@ -57,14 +57,9 @@ export const getContacts = async (req, res, next) => {
 
     if (search) {
       const searchClean = search.toString().trim();
-      const searchWithout91 = searchClean.replace(/^91/, "");
-      const searchWith91 = searchClean.startsWith("91") ? searchClean : `91${searchClean}`;
-
       const searchFilter = [
         { name: { $regex: searchClean, $options: "i" } },
-        { phone: { $regex: searchClean, $options: "i" } },
-        { phone: { $regex: searchWithout91, $options: "i" } },
-        { phone: { $regex: searchWith91, $options: "i" } }
+        { phone: { $regex: searchClean, $options: "i" } }
       ];
 
       if (query.$or) {
@@ -103,7 +98,6 @@ export const getContacts = async (req, res, next) => {
         if (query.$and) {
           query.$and.push(campaignQuery);
         } else {
-          // Special case for $nor if excluding
           if (excludeCampaignStatus === 'true') {
             query.$and = [campaignQuery];
           } else {
@@ -115,15 +109,15 @@ export const getContacts = async (req, res, next) => {
       query.isCampaignSent = req.query.isCampaignSent === "true";
     }
 
-    const limitInt = parseInt(limit);
+    const limitInt = parseInt(limit) || 100;
     const skip = skipParam ? parseInt(skipParam) : (parseInt(page) - 1) * limitInt;
     const total = await Contact.countDocuments(query);
 
-    // HIGH SPEED MODE for Campaign Manager loading
+    // HIGH SPEED MODE for Campaign Manager loading (RESTORED)
     if (onlyPhones === 'true') {
       const rawContacts = await Contact.find(query)
         .select("phone")
-        .sort({ updatedAt: -1 })
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitInt)
         .lean();
@@ -137,11 +131,12 @@ export const getContacts = async (req, res, next) => {
     }
 
     const rawContacts = await Contact.find(query)
+      .select("name phone status sector tags isCampaignSent whatsappAccountId createdAt")
       .populate("assignedTo", "name")
       .populate("whatsappAccountId", "name")
-      .sort({ updatedAt: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(limitInt)
       .lean();
 
     // Optimized: Fetch all conversations for these contacts in ONE single query
@@ -414,6 +409,57 @@ export const bulkUpdateContacts = async (req, res, next) => {
     );
 
     res.json({ success: true, message: `Updated ${phones.length} contacts to sector: ${sector}` });
+  } catch (err) {
+    next(err);
+  }
+};
+export const addNote = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { content } = req.body;
+    const contact = await Contact.findById(id);
+    if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+    contact.internalNotes.push({
+      content,
+      createdBy: req.user._id
+    });
+    await contact.save();
+    
+    const updated = await Contact.findById(id).populate("internalNotes.createdBy", "name");
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const addReminder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, time } = req.body;
+    const contact = await Contact.findById(id);
+    if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+    contact.reminders.push({ title, time });
+    await contact.save();
+    res.json(contact);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const toggleReminder = async (req, res, next) => {
+  try {
+    const { id, reminderId } = req.params;
+    const contact = await Contact.findById(id);
+    if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+    const reminder = contact.reminders.id(reminderId);
+    if (!reminder) return res.status(404).json({ error: "Reminder not found" });
+
+    reminder.isCompleted = !reminder.isCompleted;
+    await contact.save();
+    res.json(contact);
   } catch (err) {
     next(err);
   }

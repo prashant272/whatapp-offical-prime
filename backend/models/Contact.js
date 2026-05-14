@@ -28,6 +28,25 @@ const contactSchema = new mongoose.Schema({
   chatData: { type: Map, of: String, default: {} },
   customFields: { type: Map, of: String, default: {} },
 
+  // --- ADVANCED CRM FIELDS ---
+  // Priority: 'Hot', 'Warm', 'Cold' or numerical score
+  priority: { type: String, enum: ["Hot", "Warm", "Cold", null], default: null },
+  
+  // Internal tracking notes (Array of objects to keep history)
+  internalNotes: [{
+    content: String,
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    createdAt: { type: Date, default: Date.now }
+  }],
+
+  // Follow-up Reminders (Alarms)
+  reminders: [{
+    title: String,
+    time: Date,
+    isCompleted: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now }
+  }],
+
   // A log of all automated follow-up messages sent to this customer. 
   // Prevents the Cron job from sending the same message twice before the delay time is over.
   followUpsLog: [{ 

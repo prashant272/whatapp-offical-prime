@@ -4,7 +4,7 @@ import Template from "../models/Template.js";
 import Message from "../models/Message.js";
 import Contact from "../models/Contact.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
-import { sendTextMessage, sendTemplateMessage, sendImageMessage } from "../services/whatsappService.js";
+import { sendTextMessage, sendTemplateMessage, sendImageMessage, sendDocumentMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getIO, smartEmit } from "../utils/socket.js";
@@ -257,7 +257,8 @@ export const sendMessage = async (req, res) => {
     const updateFields = {
       lastMessage: body,
       lastMessageTime: new Date(),
-      whatsappAccountId: account._id // Claim it for this account
+      whatsappAccountId: account._id,
+      unreadCount: 0 // Auto-mark as read when replying
     };
 
     // AUTO-ASSIGN: If unassigned, assign it to the sender
@@ -285,7 +286,7 @@ export const sendMessage = async (req, res) => {
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
     await logActivity(req.user._id, "SEND_MESSAGE", `Sent text message: ${body.substring(0, 50)}...`, to);
 
-    res.json({ success: true, message: newMessage });
+    res.json({ success: true, message: newMessage, conversation: populatedConv });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -384,7 +385,8 @@ export const sendChatTemplateMessage = async (req, res) => {
     const updateFields = {
       lastMessage: newMessage.body,
       lastMessageTime: new Date(),
-      whatsappAccountId: account._id
+      whatsappAccountId: account._id,
+      unreadCount: 0 // Auto-mark read on template reply
     };
 
     if (!existingConv || !existingConv.assignedTo) {
@@ -401,7 +403,7 @@ export const sendChatTemplateMessage = async (req, res) => {
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
     await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
 
-    res.json({ success: true, message: newMessage });
+    res.json({ success: true, message: newMessage, conversation: populatedConv });
   } catch (err) {
     console.error(`❌ Error in ${req.url}:`, err.response?.data || err);
     res.status(500).json({ error: err.message });
@@ -410,24 +412,45 @@ export const sendChatTemplateMessage = async (req, res) => {
 
 export const sendChatImageMessage = async (req, res) => {
   try {
-    const { imageUrl, caption } = req.body;
+    const { imageUrl, caption, type: providedType, filename } = req.body;
     const to = normalizePhone(req.body.to);
     const account = req.whatsappAccount;
 
     if (!account) throw new Error("No active WhatsApp account found");
 
-    const metaRes = await sendImageMessage(account, to, imageUrl, caption);
+    // Detect if it's a document based on URL or provided type
+    const isDocument = providedType === "document" || 
+                       imageUrl.toLowerCase().endsWith(".pdf") || 
+                       imageUrl.toLowerCase().endsWith(".doc") || 
+                       imageUrl.toLowerCase().endsWith(".docx") ||
+                       imageUrl.toLowerCase().endsWith(".xlsx") ||
+                       imageUrl.toLowerCase().endsWith(".xls");
+
+    let metaRes;
+    let type = "image";
+    let bodyText = caption || "Image sent";
+    let lastMsgIcon = "📷 Image";
+
+    if (isDocument) {
+      metaRes = await sendDocumentMessage(account, to, imageUrl, filename || "document.pdf", caption);
+      type = "document";
+      bodyText = filename || caption || "Document sent";
+      lastMsgIcon = "📄 Document";
+    } else {
+      metaRes = await sendImageMessage(account, to, imageUrl, caption);
+    }
+
     const messageId = metaRes.messages?.[0]?.id;
 
     const newMessage = new Message({
       messageId,
       from: "me",
       to,
-      body: caption || "Image sent",
-      type: "image",
+      body: bodyText,
+      type,
       mediaUrl: imageUrl,
       direction: "outbound",
-      status: "sent",
+      status: messageId ? "sent" : "failed",
       whatsappAccountId: account._id
     });
     await newMessage.save();
@@ -438,9 +461,10 @@ export const sendChatImageMessage = async (req, res) => {
     });
 
     const updateFields = {
-      lastMessage: caption || "📷 Image",
+      lastMessage: caption || lastMsgIcon,
       lastMessageTime: new Date(),
-      whatsappAccountId: account._id
+      whatsappAccountId: account._id,
+      unreadCount: 0 // Auto-mark read on media reply
     };
 
     if (!existingConv || !existingConv.assignedTo) {
@@ -455,11 +479,11 @@ export const sendChatImageMessage = async (req, res) => {
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
-    await logActivity(req.user._id, "SEND_IMAGE", `Sent image: ${imageUrl}`, to);
+    await logActivity(req.user._id, isDocument ? "SEND_DOCUMENT" : "SEND_IMAGE", `Sent ${type}: ${imageUrl}`, to);
 
-    res.json({ success: true, message: newMessage });
+    res.json({ success: true, message: newMessage, conversation: populatedConv });
   } catch (err) {
-    console.error(`❌ Error in ${req.url}:`, err.response?.data || err);
+    console.error(`❌ Error in sendChatMedia:`, err);
     res.status(500).json({ error: err.message });
   }
 };

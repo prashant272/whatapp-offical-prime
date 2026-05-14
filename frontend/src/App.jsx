@@ -6,14 +6,14 @@ import TemplateManager from "./components/TemplateManager";
 import CampaignManager from "./components/CampaignManager";
 import ChatModule from "./components/ChatModule";
 import UserManager from "./components/UserManager";
-import ActivityLog from "./components/ActivityLog";
+import ActivityLog from "./components/ActivityLog/ActivityManager";
 import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
 import DashboardHome from "./components/DashboardHome";
 import AutoReplyManager from "./components/AutoReplyManager";
 import WhatsAppAccountSettings from "./components/WhatsAppAccountSettings";
 import FlowManager from "./components/FlowManager";
-import ContactManager from "./components/ContactManager";
+import ContactManager from "./components/ContactManager/ContactManagerMain";
 import CustomFieldManager from "./components/CustomFieldManager";
 import { WhatsAppAccountProvider, useWhatsAppAccount } from "./WhatsAppAccountContext";
 

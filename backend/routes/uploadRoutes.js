@@ -18,9 +18,12 @@ cloudinary.config({
 // Storage Engine
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: "whatsapp_templates",
-    allowed_formats: ["jpg", "png", "jpeg", "mp4", "pdf"]
+  params: async (req, file) => {
+    return {
+      folder: "whatsapp_templates",
+      resource_type: "auto", // Crucial for PDF/Non-image files
+      public_id: file.originalname.split('.')[0] + "_" + Date.now(),
+    };
   }
 });
 

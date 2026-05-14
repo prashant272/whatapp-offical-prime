@@ -196,7 +196,7 @@ const ChatModule = () => {
             if (res.data) {
               const chatToInsert = res.data;
               // Find the correct sorted position (by lastMessageTime)
-              const insertIndex = newConvs.findIndex(c => 
+              const insertIndex = newConvs.findIndex(c =>
                 new Date(c.lastMessageTime) < new Date(chatToInsert.lastMessageTime)
               );
               if (insertIndex === -1) {
@@ -435,12 +435,27 @@ const ChatModule = () => {
             imageUrl = uploadRes.data.url;
           }
 
+          const isDocument = file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp";
           const resultAction = await dispatch(sendReduxImage({
-            to: selectedChat.phone, imageUrl, caption, accountId: selectedChat.whatsappAccountId
+            to: selectedChat.phone, 
+            imageUrl, 
+            caption, 
+            accountId: selectedChat.whatsappAccountId,
+            type: isDocument ? "document" : "image",
+            filename: file.name
           }));
 
           if (sendReduxImage.fulfilled.match(resultAction)) {
-            dispatch(updateMessageStatus({ tempId, realMsg: resultAction.payload }));
+            const { message, conversation } = resultAction.payload;
+            dispatch(updateMessageStatus({ tempId, realMsg: message }));
+            
+            // Instantly update local conversations list to clear unread and move to top
+            if (conversation) {
+              setConversations(prev => {
+                const filtered = prev.filter(c => c._id !== conversation._id);
+                return [conversation, ...filtered];
+              });
+            }
             refetchConvs();
           } else {
             throw new Error(resultAction.payload || "Failed to send image");
@@ -468,7 +483,16 @@ const ChatModule = () => {
           }));
 
           if (sendReduxMessage.fulfilled.match(resultAction)) {
-            dispatch(updateMessageStatus({ tempId, realMsg: resultAction.payload }));
+            const { message, conversation } = resultAction.payload;
+            dispatch(updateMessageStatus({ tempId, realMsg: message }));
+
+            // Instantly update local conversations list to clear unread and move to top
+            if (conversation) {
+              setConversations(prev => {
+                const filtered = prev.filter(c => c._id !== conversation._id);
+                return [conversation, ...filtered];
+              });
+            }
             refetchConvs();
           } else {
             throw new Error(resultAction.payload || "Failed to send message");
@@ -501,7 +525,16 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
       if (res.data.success) {
-        dispatch(addMessage(res.data.message));
+        const { message, conversation } = res.data;
+        dispatch(addMessage(message));
+
+        // Instantly update local conversations list to clear unread and move to top
+        if (conversation) {
+          setConversations(prev => {
+            const filtered = prev.filter(c => c._id !== conversation._id);
+            return [conversation, ...filtered];
+          });
+        }
         refetchConvs();
 
         // Clear assignment notifications on template reply too
@@ -807,6 +840,14 @@ const ChatModule = () => {
     const socket = io(socketUrl, { query: { userId: currentUser._id, role: currentUser.role } });
 
     socket.on("new_message", ({ message, conversation }) => {
+      // RBAC: Executives should only see chats assigned to them
+      if (currentUser.role === "Executive") {
+        const assignedId = conversation.assignedTo?._id || conversation.assignedTo;
+        if (String(assignedId) !== String(currentUser._id)) {
+          return; // Ignore updates for chats not assigned to this executive
+        }
+      }
+
       setConversations(prev => {
         const incoming10 = String(conversation.phone).replace(/\D/g, "").slice(-10);
         const index = prev.findIndex(c => String(c.phone).replace(/\D/g, "").slice(-10) === incoming10);
@@ -817,14 +858,19 @@ const ChatModule = () => {
           const existing = prev[index];
           updatedConv = {
             ...existing,
-            ...conversation,
+            ...conversation, // This includes the new unreadCount from DB
             lastMessage: message.body,
             lastMessageTime: message.timestamp,
             lastCustomerMessageAt: message.direction === "inbound" ? message.timestamp : existing.lastCustomerMessageAt
           };
 
-          if (message.direction === "inbound") {
+          // If it's an inbound message and NOT the active chat, ensure unreadCount is at least incremented
+          // But since 'conversation' from socket already has updated count, we just use it.
+          // We only force increment if for some reason conversation object didn't have it.
+          if (message.direction === "inbound" && !isActiveChat && updatedConv.unreadCount <= existing.unreadCount) {
             updatedConv.unreadCount = (existing.unreadCount || 0) + 1;
+          } else if (isActiveChat) {
+            updatedConv.unreadCount = 0;
           }
 
           const filtered = prev.filter((_, i) => i !== index);
@@ -832,7 +878,7 @@ const ChatModule = () => {
         } else {
           updatedConv = {
             ...conversation,
-            unreadCount: (message.direction === "inbound") ? 1 : 0,
+            unreadCount: (message.direction === "inbound" && !isActiveChat) ? (conversation.unreadCount || 1) : 0,
             lastMessage: message.body,
             lastMessageTime: message.timestamp,
             lastCustomerMessageAt: message.direction === "inbound" ? message.timestamp : conversation.lastCustomerMessageAt
@@ -905,10 +951,16 @@ const ChatModule = () => {
     return () => clearInterval(timer);
   }, [messages]);
 
-  const handleImageUpload = (e) => {
+  const handleMediaUpload = (e) => {
     const file = e.target.files[0];
     if (!file || !selectedChat) return;
-    setPendingImage({ file, previewUrl: URL.createObjectURL(file) });
+    const isImage = file.type.startsWith("image/");
+    setPendingImage({ 
+      file, 
+      previewUrl: isImage ? URL.createObjectURL(file) : null,
+      isImage,
+      name: file.name 
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -982,7 +1034,7 @@ const ChatModule = () => {
         setShowQuickReplies={setShowQuickReplies} quickRepliesRef={quickRepliesRef}
         quickReplies={quickReplies} pendingImage={pendingImage}
         setPendingImage={setPendingImage} fileInputRef={fileInputRef}
-        handleImageUpload={handleImageUpload} setShowTemplateModal={setShowTemplateModal}
+        handleMediaUpload={handleMediaUpload} setShowTemplateModal={setShowTemplateModal}
         setShowContactInfo={setShowContactInfo} showContactInfo={showContactInfo}
         formatDateLabel={formatDateLabel}
       />

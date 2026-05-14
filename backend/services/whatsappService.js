@@ -92,6 +92,43 @@ export const sendImageMessage = async (account, to, imageUrl, caption = "") => {
   }
 };
 
+export const sendDocumentMessage = async (account, to, documentUrl, filename = "document.pdf", caption = "") => {
+  let cleanTo = to.toString().replace(/\D/g, "");
+  if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
+  
+  console.log(`📤 Attempting to send Document to ${cleanTo}`);
+  console.log(`📄 URL: ${documentUrl}`);
+  console.log(`📎 Filename: ${filename}`);
+
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${account.phoneNumberId}/messages`,
+      {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanTo,
+        type: "document",
+        document: { 
+          link: documentUrl, 
+          caption: caption || undefined,
+          filename: filename
+        },
+      },
+      { headers: getHeaders(account.accessToken) }
+    );
+    console.log(`✅ Document sent successfully! ID: ${res.data.messages?.[0]?.id}`);
+    return res.data;
+  } catch (error) {
+    const metaError = error.response?.data?.error;
+    if (metaError) {
+      console.error("❌ Meta API Error (Document):", JSON.stringify(metaError, null, 2));
+    } else {
+      console.error("❌ Network/Axios Error (Document):", error.message);
+    }
+    throw error;
+  }
+};
+
 export const getMediaUrl = async (account, mediaId) => {
   try {
     const res = await axios.get(`${BASE_URL}/${mediaId}`, { headers: getHeaders(account.accessToken) });
