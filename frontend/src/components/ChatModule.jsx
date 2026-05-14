@@ -321,7 +321,13 @@ const ChatModule = () => {
     if (selectedChat) {
       dispatch(setActiveChat(selectedChat));
       if (selectedChat.contact) {
-        setActiveContact(selectedChat.contact);
+        // If it's already an object, just use it
+        if (typeof selectedChat.contact === 'object') {
+          setActiveContact(selectedChat.contact);
+        } else {
+          // If it's a string ID, try to keep the old object if it matches, otherwise we might need a fetch
+          setActiveContact(prev => (prev && prev._id === selectedChat.contact) ? prev : { _id: selectedChat.contact });
+        }
       } else if (selectedChat.isNew) {
         const fetchContactByPhone = async () => {
           try {
@@ -663,11 +669,16 @@ const ChatModule = () => {
     }
   };
 
-  const fetchTimelineEntries = async (contactId) => {
-    if (!contactId) return;
+  const fetchTimelineEntries = async (idFromProp) => {
+    // Priority: 1. ID passed from prop, 2. activeContact ID/string, 3. selectedChat contact ID/string
+    const contactId = idFromProp || activeContact?._id || activeContact || selectedChat?.contact?._id || selectedChat?.contact;
+    if (!contactId || typeof contactId !== 'string' && !contactId?._id) return;
+    
+    const finalId = typeof contactId === 'string' ? contactId : contactId._id;
+
     try {
       setIsTimelineLoading(true);
-      const res = await api.get(`/timeline/${contactId}`, {
+      const res = await api.get(`/timeline/${finalId}`, {
         headers: { "x-whatsapp-account-id": selectedChat?.whatsappAccountId }
       });
       setTimelineEntries(res.data);
@@ -680,14 +691,15 @@ const ChatModule = () => {
 
   const handleAddTimeline = async (e) => {
     e?.preventDefault();
-    if (!newTimelineContent.trim() || !selectedChat?.contact?._id) return;
+    const contactId = selectedChat?.contact?._id || selectedChat?.contact;
+    if (!newTimelineContent.trim() || !contactId) return;
     try {
       const res = await api.post("/timeline", {
-        contactId: selectedChat?.contact?._id,
+        contactId,
         whatsappAccountId: selectedChat?.whatsappAccountId,
         content: newTimelineContent
       });
-      setTimelineEntries([res.data, ...timelineEntries]);
+      setTimelineEntries(prev => [res.data, ...prev]);
       setNewTimelineContent("");
     } catch (err) {
       alert("Error adding timeline: " + (err.response?.data?.error || err.message));
@@ -859,6 +871,7 @@ const ChatModule = () => {
           updatedConv = {
             ...existing,
             ...conversation, // This includes the new unreadCount from DB
+            contact: conversation.contact?._id ? conversation.contact : (existing.contact || conversation.contact), // Don't de-populate
             lastMessage: message.body,
             lastMessageTime: message.timestamp,
             lastCustomerMessageAt: message.direction === "inbound" ? message.timestamp : existing.lastCustomerMessageAt

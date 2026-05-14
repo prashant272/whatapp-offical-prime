@@ -21,9 +21,10 @@ const storage = new CloudinaryStorage({
   params: async (req, file) => {
     return {
       folder: "whatsapp_templates",
-      resource_type: "auto", // Crucial for PDF/Non-image files
-      access_mode: "public", // Ensure Meta can download it
+      resource_type: file.mimetype === "application/pdf" ? "raw" : "auto", // PDFs must be 'raw' to avoid 401 errors
+      access_mode: "public", 
       type: "upload",        // Explicitly public upload
+      allowed_formats: ["jpg", "png", "jpeg", "mp4", "pdf", "doc", "docx", "xls", "xlsx"],
       public_id: file.originalname.split('.')[0] + "_" + Date.now(),
     };
   }
