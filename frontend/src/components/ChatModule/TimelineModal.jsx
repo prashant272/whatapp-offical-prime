@@ -182,7 +182,7 @@ const TimelineModal = ({
                         </div>
                       </div>
                     </div>
-                    {currentUser?.role === "Admin" && (
+                    {(currentUser?.role === "Admin" || currentUser?.role === "Manager") && (
                       <div style={{ display: "flex", gap: "4px" }}>
                         <button onClick={() => handleEditStart(entry)} style={{ padding: "8px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer" }}>
                           <Pencil size={14} />

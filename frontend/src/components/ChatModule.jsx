@@ -128,9 +128,22 @@ const ChatModule = () => {
   const [pendingStatus, setPendingStatus] = useState("");
 
   const [activeReminders, setActiveReminders] = useState([]);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [currentReminder, setCurrentReminder] = useState(null);
   const [uiNotifications, setUiNotifications] = useState([]);
+
   const markNotificationsAsRead = () => {
     setUiNotifications([]);
+  };
+
+  const handleReminderAction = (action, reminder) => {
+    if (action === "chat") {
+      handleNotificationClick(reminder);
+      setShowReminderModal(false);
+    } else {
+      // Later - keep it in uiNotifications but close modal
+      setShowReminderModal(false);
+    }
   };
 
   const handleNotificationClick = (notif) => {
@@ -144,12 +157,11 @@ const ChatModule = () => {
       }
 
       // 2. Clear filters to ensure the chat is visible
-      setFilter("all");
-      setStatusFilter("all");
-      setSearchQuery("");
+      dispatch(setReduxFilter("all"));
+      dispatch(setReduxStatusFilter("all"));
+      dispatch(setReduxSearchQuery(""));
 
       // 3. Select and Navigate
-      setSelectedChat(target);
       if (target._id) {
         navigate(`/chats/${target._id}`);
       }
@@ -443,9 +455,9 @@ const ChatModule = () => {
 
           const isDocument = file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp";
           const resultAction = await dispatch(sendReduxImage({
-            to: selectedChat.phone, 
-            imageUrl, 
-            caption, 
+            to: selectedChat.phone,
+            imageUrl,
+            caption,
             accountId: selectedChat.whatsappAccountId,
             type: isDocument ? "document" : "image",
             filename: file.name
@@ -454,7 +466,7 @@ const ChatModule = () => {
           if (sendReduxImage.fulfilled.match(resultAction)) {
             const { message, conversation } = resultAction.payload;
             dispatch(updateMessageStatus({ tempId, realMsg: message }));
-            
+
             // Instantly update local conversations list to clear unread and move to top
             if (conversation) {
               setConversations(prev => {
@@ -500,6 +512,21 @@ const ChatModule = () => {
               });
             }
             refetchConvs();
+
+            // NEW: Clear follow-up notifications when message is sent
+            setUiNotifications(prev => prev.filter(n =>
+              !n.conversation || (String(n.conversation.phone).replace(/\D/g, "").slice(-10) !== String(selectedChat.phone).replace(/\D/g, "").slice(-10))
+            ));
+
+            // NEW: If Admin replies to an assigned chat, notify the specialist
+            const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
+            if (currentUser.role === "Admin" && assignedToId && String(assignedToId) !== String(currentUser._id)) {
+              api.post("/messages/notify-admin-reply", {
+                phone: selectedChat.phone,
+                assignedTo: assignedToId,
+                adminName: currentUser.name
+              }).catch(console.error);
+            }
           } else {
             throw new Error(resultAction.payload || "Failed to send message");
           }
@@ -623,10 +650,26 @@ const ChatModule = () => {
 
   const handleUpdateStatus = async (status, fTime = null) => {
     if (!selectedChat) return;
-    if (status.toLowerCase().includes("follow") && !fTime) {
+
+    // Check if status is Follow-up (case-insensitive check for 'follow')
+    const isFollowUp = status.toLowerCase().includes("follow");
+
+    if (isFollowUp && !fTime) {
       setPendingStatus(status);
-      setFollowUpDate(new Date().toISOString().split('T')[0]);
-      setFollowUpTime(new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit' }));
+
+      // Set default date to TODAY (YYYY-MM-DD)
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+      setFollowUpDate(today);
+
+      // Set default time to NOW (HH:mm)
+      const hours = now.getHours().toString().padStart(2, '0');
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      setFollowUpTime(`${hours}:${minutes}`);
+
+      // Reset activity
+      setFollowUpActivity("");
+
       setShowFollowUpModal(true);
       return;
     }
@@ -673,7 +716,7 @@ const ChatModule = () => {
     // Priority: 1. ID passed from prop, 2. activeContact ID/string, 3. selectedChat contact ID/string
     const contactId = idFromProp || activeContact?._id || activeContact || selectedChat?.contact?._id || selectedChat?.contact;
     if (!contactId || typeof contactId !== 'string' && !contactId?._id) return;
-    
+
     const finalId = typeof contactId === 'string' ? contactId : contactId._id;
 
     try {
@@ -701,6 +744,11 @@ const ChatModule = () => {
       });
       setTimelineEntries(prev => [res.data, ...prev]);
       setNewTimelineContent("");
+
+      // NEW: Clear follow-up notification when timeline is added
+      setUiNotifications(prev => prev.filter(n =>
+        !n.conversation || (String(n.conversation.phone).replace(/\D/g, "").slice(-10) !== String(selectedChat.phone).replace(/\D/g, "").slice(-10))
+      ));
     } catch (err) {
       alert("Error adding timeline: " + (err.response?.data?.error || err.message));
     }
@@ -939,7 +987,87 @@ const ChatModule = () => {
         };
         setUiNotifications(prev => [newNotif, ...prev]);
       }
-      refetchConvs();
+      // Local update instead of full refetch to keep list order stable
+      setConversations(prev => prev.map(c => c._id === conversation._id ? { ...c, ...conversation } : c));
+    });
+
+    socket.on("followup_reminder", ({ conversation }) => {
+      // Logic: Admins see all reminders. Executives only see theirs.
+      const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
+      const isMyReminder = !assignedToId || String(assignedToId) === String(currentUser._id);
+
+      if (currentUser.role !== "Admin" && !isMyReminder) return;
+
+      const contactName = conversation.contact?.name || conversation.phone;
+
+      // 1. Sound Alert
+      try {
+        startFollowUpAlarm();
+      } catch (e) { console.error("Sound error", e); }
+
+      // 2. Browser Notification
+      if (Notification.permission === "granted") {
+        new Notification("🔔 Follow-up Due!", {
+          body: `Time to follow up with: ${contactName}`,
+          icon: "/favicon.ico"
+        });
+      }
+
+      // 3. UI Notification Popup
+      const newNotif = {
+        id: Date.now(),
+        message: `🔔 Follow-up Due: ${contactName}`,
+        conversation: conversation,
+        type: "reminder"
+      };
+      setUiNotifications(prev => [newNotif, ...prev]);
+
+      // 4. Show BIG Center Modal
+      setCurrentReminder(newNotif);
+      setShowReminderModal(true);
+    });
+
+    socket.on("admin_replied_alert", ({ phone, adminName, conversation }) => {
+      // Logic: Don't show to the Admin who just replied
+      if (adminName === currentUser.name) return;
+
+      // Only show to the assigned specialist or other admins (if needed)
+      const assignedToId = typeof conversation?.assignedTo === 'object' ? conversation.assignedTo?._id : conversation?.assignedTo;
+      if (currentUser.role !== "Admin" && String(assignedToId) !== String(currentUser._id)) return;
+
+      const newNotif = {
+        id: Date.now(),
+        message: `👤 Admin (${adminName}) has replied to chat: ${phone}`,
+        type: "admin_reply"
+      };
+      setUiNotifications(prev => [newNotif, ...prev]);
+
+      // Auto-remove admin reply alert after 30s
+      setTimeout(() => {
+        setUiNotifications(prev => prev.filter(n => n.id !== newNotif.id));
+      }, 30000);
+    });
+
+    socket.on("missed_followup_alert", ({ conversation }) => {
+      // Admins see all, Executives see theirs
+      const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
+      if (currentUser.role !== "Admin" && String(assignedToId) !== String(currentUser._id)) return;
+
+      const contactName = conversation.contact?.name || conversation.phone;
+
+      // 1. Heavy Sound Alert
+      try {
+        startFollowUpAlarm();
+      } catch (e) { console.error("Sound error", e); }
+
+      // 2. Persistent Notification
+      const newNotif = {
+        id: Date.now(),
+        message: `⚠️ MISSED Follow-up: ${contactName}`,
+        conversation: conversation,
+        type: "missed_alert"
+      };
+      setUiNotifications(prev => [newNotif, ...prev]);
     });
 
     return () => socket.disconnect();
@@ -968,11 +1096,11 @@ const ChatModule = () => {
     const file = e.target.files[0];
     if (!file || !selectedChat) return;
     const isImage = file.type.startsWith("image/");
-    setPendingImage({ 
-      file, 
+    setPendingImage({
+      file,
       previewUrl: isImage ? URL.createObjectURL(file) : null,
       isImage,
-      name: file.name 
+      name: file.name
     });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -1115,6 +1243,46 @@ const ChatModule = () => {
         initialDate={followUpDate}
         initialTime={followUpTime}
       />
+
+      {/* NEW: Center Reminder Modal */}
+      {showReminderModal && currentReminder && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 11000, backdropFilter: "blur(4px)" }}>
+          <div style={{ background: "white", borderRadius: "20px", width: "420px", padding: "30px", textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,0.2)", animation: "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)" }}>
+            <div style={{ width: "80px", height: "80px", borderRadius: "50%", background: "#fff1f2", color: "#e11d48", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+              <Clock size={40} />
+            </div>
+            <h2 style={{ fontSize: "1.5rem", fontWeight: "800", color: "#1e293b", marginBottom: "10px" }}>Follow-up Due!</h2>
+            <p style={{ color: "#64748b", fontSize: "1rem", marginBottom: "25px", lineHeight: "1.5" }}>
+              It's time to follow up with <br />
+              <strong style={{ color: "#1e293b", fontSize: "1.1rem" }}>{currentReminder.message.split(": ")[1]}</strong>
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                onClick={() => handleReminderAction("later", currentReminder)}
+                style={{ flex: 1, padding: "14px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "white", color: "#64748b", fontWeight: "700", cursor: "pointer", transition: "all 0.2s" }}
+                onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+                onMouseOut={e => e.currentTarget.style.background = "white"}
+              >
+                Later
+              </button>
+              <button
+                onClick={() => handleReminderAction("chat", currentReminder)}
+                style={{ flex: 1, padding: "14px", borderRadius: "12px", border: "none", background: "#00a884", color: "white", fontWeight: "700", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,168,132,0.3)", transition: "all 0.2s" }}
+                onMouseOver={e => e.currentTarget.style.transform = "translateY(-2px)"}
+                onMouseOut={e => e.currentTarget.style.transform = "translateY(0)"}
+              >
+                Chat Now
+              </button>
+            </div>
+          </div>
+          <style>{`
+              @keyframes popIn {
+                from { transform: scale(0.8); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
+              }
+           `}</style>
+        </div>
+      )}
     </div>
   );
 };

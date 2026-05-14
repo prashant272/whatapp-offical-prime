@@ -62,6 +62,7 @@ export const initAutomationCron = () => {
           await Contact.findByIdAndUpdate(conv.contact, { status: "Missed Follow-up" });
 
           smartEmit("conversation_status_update", { phone: conv.phone, status: "Missed Follow-up" });
+          smartEmit("missed_followup_alert", { conversation: conv });
         }
       }
 

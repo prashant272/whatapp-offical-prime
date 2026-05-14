@@ -191,37 +191,45 @@ const ChatSidebar = ({
           <div style={{ display: "flex", gap: "15px", color: "var(--text-secondary)" }}>
             <Plus size={20} cursor="pointer" onClick={() => setShowNewChatModal(true)} />
             <div
-              style={{ position: "relative", cursor: "pointer" }}
+              style={{ position: "relative", cursor: "pointer", zIndex: 11000 }}
               ref={notifRef}
             >
-              <Bell size={20} onClick={() => setShowNotifList(!showNotifList)} />
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowNotifList(!showNotifList);
+                }}
+                style={{ background: "none", border: "none", padding: "8px", cursor: "pointer", color: "inherit", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <Bell size={20} />
+              </button>
               {uiNotifications?.length > 0 && (
                 <div style={{
-                  position: "absolute", top: "-8px", right: "-8px", background: "#ff4757",
+                  position: "absolute", top: "0px", right: "0px", background: "#ff4757",
                   width: "18px", height: "18px", borderRadius: "50%", border: "2px solid #f0f2f5",
                   display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.65rem",
-                  color: "white", fontWeight: "bold"
+                  color: "white", fontWeight: "bold", pointerEvents: "none"
                 }}>
                   {uiNotifications.length}
                 </div>
               )}
               {showNotifList && uiNotifications?.length > 0 && (
                 <div style={{
-                  position: "absolute", top: "30px", right: "0", background: "white", width: "250px",
-                  boxShadow: "0 4px 20px rgba(0,0,0,0.15)", borderRadius: "12px", padding: "10px",
-                  zIndex: 1000, border: "1px solid #eee"
+                  position: "absolute", top: "40px", right: "0", background: "white", width: "280px",
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.2)", borderRadius: "12px", padding: "12px",
+                  zIndex: 11001, border: "1px solid #eee", maxHeight: "400px", overflowY: "auto"
                 }}>
-                  <p style={{ margin: "0 0 10px 0", fontSize: "0.75rem", fontWeight: "bold", color: "#667781", borderBottom: "1px solid #eee", paddingBottom: "5px" }}>Notifications</p>
+                  <p style={{ margin: "0 0 12px 0", fontSize: "0.85rem", fontWeight: "800", color: "#111b21", borderBottom: "1px solid #f1f5f9", paddingBottom: "8px" }}>Notifications</p>
                   {uiNotifications.map(n => (
                     <div
                       key={n.id}
                       onClick={() => { handleNotificationClick(n); setShowNotifList(false); }}
-                      style={{ padding: "8px", borderRadius: "8px", fontSize: "0.8rem", marginBottom: "5px", cursor: "pointer", background: "#f8f9fa", border: "1px solid #eee" }}
-                      onMouseOver={e => e.currentTarget.style.background = "#e7fce3"}
-                      onMouseOut={e => e.currentTarget.style.background = "#f8f9fa"}
+                      style={{ padding: "10px", borderRadius: "10px", fontSize: "0.85rem", marginBottom: "8px", cursor: "pointer", background: "#f8f9fa", border: "1px solid #f1f5f9", transition: "all 0.2s" }}
+                      onMouseOver={e => { e.currentTarget.style.background = "#e7fce3"; e.currentTarget.style.borderColor = "#00a884"; }}
+                      onMouseOut={e => { e.currentTarget.style.background = "#f8f9fa"; e.currentTarget.style.borderColor = "#f1f5f9"; }}
                     >
-                      {n.message}
-                      <p style={{ margin: "4px 0 0 0", fontSize: "0.65rem", color: "#25d366", fontWeight: "bold" }}>Click to open chat</p>
+                      <div style={{ fontWeight: "600", color: "#111b21", marginBottom: "4px" }}>{n.message}</div>
+                      <p style={{ margin: 0, fontSize: "0.7rem", color: "#00a884", fontWeight: "700" }}>Tap to view chat →</p>
                     </div>
                   ))}
                   <button

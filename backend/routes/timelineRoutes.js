@@ -53,13 +53,13 @@ router.post("/", protect, async (req, res) => {
   }
 });
 
-// PUT (Edit) - Admin only
-router.put("/:id", protect, restrictTo("Admin"), async (req, res) => {
+// PUT (Edit) - Admin and Manager only
+router.put("/:id", protect, restrictTo("Admin", "Manager"), async (req, res) => {
   try {
     const { content } = req.body;
     const entry = await Timeline.findByIdAndUpdate(
       req.params.id,
-      { content },
+      { content, updatedAt: new Date() },
       { new: true }
     ).populate("createdBy", "name");
 
@@ -70,8 +70,8 @@ router.put("/:id", protect, restrictTo("Admin"), async (req, res) => {
   }
 });
 
-// DELETE - Admin only
-router.delete("/:id", protect, restrictTo("Admin"), async (req, res) => {
+// DELETE - Admin and Manager only
+router.delete("/:id", protect, restrictTo("Admin", "Manager"), async (req, res) => {
   try {
     const entry = await Timeline.findByIdAndDelete(req.params.id);
     if (!entry) return res.status(404).json({ error: "Entry not found" });

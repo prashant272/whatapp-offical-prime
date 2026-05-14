@@ -1,10 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Calendar, Clock, Send } from "lucide-react";
 
 const FollowUpModal = ({ isOpen, onClose, onConfirm, initialDate, initialTime }) => {
-  const [date, setDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
-  const [time, setTime] = useState(initialTime || "10:00");
+  const [date, setDate] = useState(initialDate || "");
+  const [time, setTime] = useState(initialTime || "");
   const [activity, setActivity] = useState("");
+
+  // Update local state whenever modal opens or props change
+  useEffect(() => {
+    if (isOpen) {
+      setDate(initialDate || new Date().toISOString().split('T')[0]);
+      setTime(initialTime || "10:00");
+      setActivity(""); // Clear activity on fresh open
+    }
+  }, [isOpen, initialDate, initialTime]);
 
   if (!isOpen) return null;
 
