@@ -13,6 +13,8 @@ const CustomFieldManager = () => {
     name: "",
     type: "TEXT",
     options: "",
+    sortOrder: 0,
+    optionsSortAlpha: false,
     whatsappAccountIds: []
   });
   const [editingField, setEditingField] = useState(null);
@@ -44,10 +46,12 @@ const CustomFieldManager = () => {
       const payload = {
         ...newField,
         options: ["SELECT", "COMBOBOX"].includes(newField.type) ? newField.options.split(",").map(o => o.trim()) : [],
+        sortOrder: Number(newField.sortOrder) || 0,
+        optionsSortAlpha: newField.optionsSortAlpha,
         whatsappAccountIds: newField.whatsappAccountIds.length > 0 ? newField.whatsappAccountIds : [activeAccount?._id]
       };
       await api.post("/custom-fields", payload);
-      setNewField({ label: "", name: "", type: "TEXT", options: "" });
+      setNewField({ label: "", name: "", type: "TEXT", options: "", sortOrder: 0, optionsSortAlpha: false, whatsappAccountIds: [] });
       setShowAddForm(false);
       fetchFields();
     } catch (err) {
@@ -67,7 +71,9 @@ const CustomFieldManager = () => {
         ...editingField,
         options: ["SELECT", "COMBOBOX"].includes(editingField.type) 
           ? (typeof editingField.options === 'string' ? editingField.options.split(",").map(o => o.trim()) : editingField.options)
-          : []
+          : [],
+        sortOrder: Number(editingField.sortOrder) || 0,
+        optionsSortAlpha: editingField.optionsSortAlpha || false,
       };
       await api.put(`/custom-fields/${editingField._id}`, payload);
       setEditingField(null);
@@ -153,20 +159,40 @@ const CustomFieldManager = () => {
                 <option value="COMBOBOX">Dropdown + Text</option>
               </select>
             </div>
-            {["SELECT", "COMBOBOX"].includes(newField.type) && (
-              <div>
-                <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Dropdown Options (Comma separated)</label>
-                <input 
-                  type="text" 
-                  placeholder="Option 1, Option 2, Option 3"
-                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
-                  value={newField.options} 
-                  onChange={e => setNewField({ ...newField, options: e.target.value })}
-                  required 
-                />
-              </div>
-            )}
+            <div>
+              <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Display Order (Position)</label>
+              <input 
+                type="number" 
+                min="0"
+                placeholder="0 = auto, 1 = first, 2 = second..."
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
+                value={newField.sortOrder} 
+                onChange={e => setNewField({ ...newField, sortOrder: e.target.value })}
+              />
+            </div>
           </div>
+          {["SELECT", "COMBOBOX"].includes(newField.type) && (
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Dropdown Options (Comma separated)</label>
+              <input 
+                type="text" 
+                placeholder="Option 1, Option 2, Option 3"
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
+                value={newField.options} 
+                onChange={e => setNewField({ ...newField, options: e.target.value })}
+                required 
+              />
+              <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", cursor: "pointer", fontSize: "0.85rem", fontWeight: "600", color: "#6366f1" }}>
+                <input 
+                  type="checkbox" 
+                  checked={newField.optionsSortAlpha} 
+                  onChange={e => setNewField({ ...newField, optionsSortAlpha: e.target.checked })} 
+                  style={{ width: "16px", height: "16px", accentColor: "#6366f1" }}
+                />
+                🔤 Auto-sort options A → Z (Alphabetically)
+              </label>
+            </div>
+          )}
 
           <div style={{ marginBottom: "1.5rem" }}>
             <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Active For Accounts</label>
@@ -208,100 +234,116 @@ const CustomFieldManager = () => {
         </form>
       )}
 
+      {/* ===== EDIT FIELD MODAL POPUP ===== */}
       {editingField && (
-        <form className="glass-card" onSubmit={handleUpdateField} style={{ marginBottom: "2rem", padding: "24px", border: "2px solid #6366f1" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-            <h4 style={{ margin: 0, color: "#6366f1" }}>Edit Field: {editingField.label}</h4>
-            <button type="button" onClick={() => setEditingField(null)} style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontWeight: "bold" }}>Cancel</button>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-            <div>
-              <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Field Label</label>
-              <input 
-                type="text" 
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
-                value={editingField.label} 
-                onChange={e => setEditingField({ ...editingField, label: e.target.value })}
-                required 
-              />
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.7)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(6px)" }}>
+          <form onSubmit={handleUpdateField} style={{ width: "560px", maxWidth: "95vw", maxHeight: "90vh", overflowY: "auto", background: "white", borderRadius: "20px", padding: "28px", boxShadow: "0 25px 50px rgba(0,0,0,0.4)", border: "2px solid #6366f1" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
+              <h4 style={{ margin: 0, color: "#6366f1", fontSize: "1.1rem", fontWeight: "800" }}>✏️ Edit Field: {editingField.label}</h4>
+              <button type="button" onClick={() => setEditingField(null)} style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "6px 12px", color: "#ef4444", cursor: "pointer", fontWeight: "700", fontSize: "0.8rem" }}>✕ Cancel</button>
             </div>
-            <div>
-              <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Internal Key (Cannot Change)</label>
-              <input 
-                type="text" 
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8" }} 
-                value={editingField.name} 
-                readOnly 
-              />
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
+              <div>
+                <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Field Label</label>
+                <input 
+                  type="text" 
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", boxSizing: "border-box" }} 
+                  value={editingField.label} 
+                  onChange={e => setEditingField({ ...editingField, label: e.target.value })}
+                  required 
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Internal Key (Cannot Change)</label>
+                <input 
+                  type="text" 
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", background: "#f8fafc", color: "#94a3b8", boxSizing: "border-box" }} 
+                  value={editingField.name} 
+                  readOnly 
+                />
+              </div>
             </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
-            <div>
-              <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Field Type</label>
-              <select 
-                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
-                value={editingField.type} 
-                onChange={e => setEditingField({ ...editingField, type: e.target.value })}
-              >
-                <option value="TEXT">Short Text</option>
-                <option value="NUMBER">Number</option>
-                <option value="DATE">Date</option>
-                <option value="SELECT">Dropdown (Options)</option>
-                <option value="COMBOBOX">Dropdown + Text</option>
-              </select>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
+              <div>
+                <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Field Type</label>
+                <select 
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
+                  value={editingField.type} 
+                  onChange={e => setEditingField({ ...editingField, type: e.target.value })}
+                >
+                  <option value="TEXT">Short Text</option>
+                  <option value="NUMBER">Number</option>
+                  <option value="DATE">Date</option>
+                  <option value="SELECT">Dropdown (Options)</option>
+                  <option value="COMBOBOX">Dropdown + Text</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Display Order (Position)</label>
+                <input 
+                  type="number" 
+                  min="0"
+                  placeholder="0 = auto, 1 = first, 2 = second..."
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", boxSizing: "border-box" }} 
+                  value={editingField.sortOrder || 0} 
+                  onChange={e => setEditingField({ ...editingField, sortOrder: e.target.value })}
+                />
+              </div>
             </div>
             {["SELECT", "COMBOBOX"].includes(editingField.type) && (
-              <div>
+              <div style={{ marginBottom: "1.5rem" }}>
                 <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Dropdown Options (Comma separated)</label>
                 <input 
                   type="text" 
                   placeholder="Option 1, Option 2, Option 3"
-                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", boxSizing: "border-box" }} 
                   value={Array.isArray(editingField.options) ? editingField.options.join(", ") : editingField.options} 
                   onChange={e => setEditingField({ ...editingField, options: e.target.value })}
                   required 
                 />
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", cursor: "pointer", fontSize: "0.85rem", fontWeight: "600", color: "#6366f1" }}>
+                  <input 
+                    type="checkbox" 
+                    checked={editingField.optionsSortAlpha || false} 
+                    onChange={e => setEditingField({ ...editingField, optionsSortAlpha: e.target.checked })} 
+                    style={{ width: "16px", height: "16px", accentColor: "#6366f1" }}
+                  />
+                  🔤 Auto-sort options A → Z (Alphabetically)
+                </label>
               </div>
             )}
-          </div>
-
-          <div style={{ marginBottom: "1.5rem" }}>
-            <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Active For Accounts</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-              {accounts.map(acc => (
-                <div 
-                  key={acc._id}
-                  onClick={() => {
-                    const ids = editingField.whatsappAccountIds?.includes(acc._id)
-                      ? editingField.whatsappAccountIds.filter(id => id !== acc._id)
-                      : [...(editingField.whatsappAccountIds || []), acc._id];
-                    setEditingField({ ...editingField, whatsappAccountIds: ids });
-                  }}
-                  style={{ 
-                    padding: "6px 12px", 
-                    borderRadius: "16px", 
-                    fontSize: "0.75rem", 
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    border: "1px solid",
-                    borderColor: editingField.whatsappAccountIds?.includes(acc._id) ? "#6366f1" : "#e2e8f0",
-                    background: editingField.whatsappAccountIds?.includes(acc._id) ? "rgba(99, 102, 241, 0.1)" : "white",
-                    color: editingField.whatsappAccountIds?.includes(acc._id) ? "#6366f1" : "#64748b",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "5px"
-                  }}
-                >
-                  <CheckSquare size={14} style={{ opacity: editingField.whatsappAccountIds?.includes(acc._id) ? 1 : 0.3 }} />
-                  {acc.name}
-                </div>
-              ))}
+            <div style={{ marginBottom: "1.5rem" }}>
+              <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Active For Accounts</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                {accounts.map(acc => (
+                  <div 
+                    key={acc._id}
+                    onClick={() => {
+                      const ids = editingField.whatsappAccountIds?.includes(acc._id)
+                        ? editingField.whatsappAccountIds.filter(id => id !== acc._id)
+                        : [...(editingField.whatsappAccountIds || []), acc._id];
+                      setEditingField({ ...editingField, whatsappAccountIds: ids });
+                    }}
+                    style={{ 
+                      padding: "6px 12px", borderRadius: "16px", fontSize: "0.75rem", fontWeight: "600",
+                      cursor: "pointer", border: "1px solid",
+                      borderColor: editingField.whatsappAccountIds?.includes(acc._id) ? "#6366f1" : "#e2e8f0",
+                      background: editingField.whatsappAccountIds?.includes(acc._id) ? "rgba(99, 102, 241, 0.1)" : "white",
+                      color: editingField.whatsappAccountIds?.includes(acc._id) ? "#6366f1" : "#64748b",
+                      display: "flex", alignItems: "center", gap: "5px"
+                    }}
+                  >
+                    <CheckSquare size={14} style={{ opacity: editingField.whatsappAccountIds?.includes(acc._id) ? 1 : 0.3 }} />
+                    {acc.name}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-          <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px", background: "#6366f1" }} disabled={loading}>
-            {loading ? <Loader2 size={18} className="animate-spin" /> : "Update Field Definition"}
-          </button>
-        </form>
+            <button type="submit" className="btn-primary" style={{ width: "100%", padding: "14px", background: "#6366f1" }} disabled={loading}>
+              {loading ? <Loader2 size={18} className="animate-spin" /> : "Update Field Definition"}
+            </button>
+          </form>
+        </div>
       )}
 
       {loading && fields.length === 0 ? (
@@ -312,6 +354,7 @@ const CustomFieldManager = () => {
             <thead style={{ background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
               <tr>
                 <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Field Details</th>
+                <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Order</th>
                 <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Type</th>
                 <th style={{ textAlign: "left", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Options</th>
                 <th style={{ textAlign: "right", padding: "16px 24px", color: "#64748b", fontWeight: "600" }}>Action</th>
@@ -328,6 +371,18 @@ const CustomFieldManager = () => {
                     <td style={{ padding: "16px 24px" }}>
                       <div style={{ fontWeight: "700", color: "#1e293b" }}>{field.label}</div>
                       <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Key: {field.name}</div>
+                      {field.optionsSortAlpha && <div style={{ fontSize: "0.65rem", color: "#6366f1", fontWeight: "700", marginTop: "2px" }}>🔤 A→Z Sorted</div>}
+                    </td>
+                    <td style={{ padding: "16px 24px" }}>
+                      <div style={{ 
+                        width: "32px", height: "32px", borderRadius: "8px", 
+                        background: field.sortOrder > 0 ? "#6366f1" : "#f1f5f9", 
+                        color: field.sortOrder > 0 ? "white" : "#94a3b8",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        fontWeight: "900", fontSize: "0.9rem"
+                      }}>
+                        {field.sortOrder > 0 ? field.sortOrder : "—"}
+                      </div>
                     </td>
                     <td style={{ padding: "16px 24px" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#64748b" }}>
@@ -344,7 +399,6 @@ const CustomFieldManager = () => {
                           onClick={() => {
                             setEditingField(field);
                             setShowAddForm(false);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
                           }}
                           style={{ background: "transparent", border: "none", color: "#6366f1", cursor: "pointer" }}
                           title="Edit Field"

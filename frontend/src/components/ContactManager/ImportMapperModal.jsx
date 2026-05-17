@@ -22,6 +22,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
   const today = new Date();
   const defaultBatchTag = `import-${today.getDate()}-${today.toLocaleString('en', { month: 'short' }).toLowerCase()}-${today.getFullYear()}`;
   const [batchTag, setBatchTag] = useState(defaultBatchTag);
+  const [defaultSector, setDefaultSector] = useState(""); // Override sector for all leads
 
   useEffect(() => {
     if (rawData && rawData.length > 0) {
@@ -54,7 +55,8 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       const contact = {
         name: row[mappings.name] || "Unknown",
         phone: phone,
-        sector: row[mappings.sector] || "Unassigned",
+        // If user picked a default sector, use it. Else use Excel column. Else "Unassigned"
+        sector: defaultSector || row[mappings.sector] || "Unassigned",
         tags: allTags,
         customFields: {}
       };
@@ -215,8 +217,28 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                     <MappingRow label="Sector" icon={<Layers size={14} />} value={mappings.sector} onChange={(v) => setMappings({ ...mappings, sector: v })} headers={headers} />
                   </div>
 
+                  {/* Default Sector Override */}
+                  <div style={{ marginTop: "16px", padding: "14px", background: "linear-gradient(135deg, #eff6ff, #e0f2fe)", borderRadius: "14px", border: "1.5px solid #93c5fd" }}>
+                    <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                      🏢 Bulk Assign Sector (Override)
+                    </label>
+                    <select
+                      value={defaultSector}
+                      onChange={e => setDefaultSector(e.target.value)}
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #93c5fd", fontSize: "0.85rem", fontWeight: "700", color: defaultSector ? "#1d4ed8" : "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer" }}
+                    >
+                      <option value="">-- Use Excel Column / Keep Original --</option>
+                      {sectors.map(s => (
+                        <option key={s._id || s.name} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+                    <p style={{ margin: "6px 0 0", fontSize: "0.72rem", color: "#60a5fa", fontWeight: "600" }}>
+                      {defaultSector ? `✅ All leads will be assigned to "${defaultSector}"` : "ℹ️ Leave blank to use Excel sector column"}
+                    </p>
+                  </div>
+
                   {/* Batch Tag Section */}
-                  <div style={{ marginTop: "20px", padding: "16px", background: "linear-gradient(135deg, #f0fdf4, #ecfdf5)", borderRadius: "14px", border: "1.5px solid #86efac" }}>
+                  <div style={{ marginTop: "12px", padding: "14px", background: "linear-gradient(135deg, #f0fdf4, #ecfdf5)", borderRadius: "14px", border: "1.5px solid #86efac" }}>
                     <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#16a34a", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                       🏷️ Campaign Batch Tag
                     </label>

@@ -702,8 +702,9 @@ const ChatModule = () => {
       const currentFields = activeContact?.customFields || {};
       const updatedFields = { ...currentFields, [fieldName]: value };
       const res = await api.put(`/contacts/${contactId}`, { customFields: updatedFields });
+      // Only update local contact state — do NOT refetchConvs() here as it causes
+      // the chat to scroll to the last message unnecessarily.
       setActiveContact(res.data);
-      refetchConvs();
     } catch (err) {
       console.error("Error updating field:", err);
       alert("Failed to save field.");

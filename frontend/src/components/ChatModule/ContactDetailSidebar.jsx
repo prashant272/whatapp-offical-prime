@@ -1,5 +1,99 @@
-import React, { memo } from "react";
-import { User, Clock, ChevronDown, Pencil, Loader2 } from "lucide-react";
+import React, { memo, useState, useCallback } from "react";
+import { User, Clock, ChevronDown, Pencil, Loader2, Plus, X } from "lucide-react";
+
+// ── Smart COMBOBOX: Dropdown + Dynamic Sub-Inputs ──────────────────────────
+const ComboboxWithNotes = ({ field, value, onChange, disabled }) => {
+  // Parse stored JSON value
+  let parsed = { option: "", notes: [""] };
+  try {
+    if (value && value.startsWith("{")) {
+      parsed = JSON.parse(value);
+      if (!parsed.notes || parsed.notes.length === 0) parsed.notes = [""];
+    } else if (value) {
+      parsed = { option: value, notes: [""] };
+    }
+  } catch { parsed = { option: value || "", notes: [""] }; }
+
+  const [localOption, setLocalOption] = useState(parsed.option);
+  const [localNotes, setLocalNotes] = useState(parsed.notes);
+
+  const commit = useCallback((opt, notes) => {
+    const jsonVal = JSON.stringify({ option: opt, notes });
+    onChange(jsonVal);
+  }, [onChange]);
+
+  const handleOptionChange = (opt) => {
+    setLocalOption(opt);
+    commit(opt, localNotes);
+  };
+
+  const handleNoteChange = (idx, val) => {
+    const updated = [...localNotes];
+    updated[idx] = val;
+    setLocalNotes(updated);
+  };
+
+  const handleNoteBlur = () => commit(localOption, localNotes);
+
+  const addNote = () => {
+    const updated = [...localNotes, ""];
+    setLocalNotes(updated);
+  };
+
+  const removeNote = (idx) => {
+    const updated = localNotes.filter((_, i) => i !== idx);
+    const final = updated.length === 0 ? [""] : updated;
+    setLocalNotes(final);
+    commit(localOption, final);
+  };
+
+  return (
+    <div>
+      {/* Dropdown */}
+      <div style={{ position: "relative", marginBottom: localOption ? "10px" : 0 }}>
+        <select
+          style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none", cursor: "pointer", appearance: "none" }}
+          value={localOption}
+          onChange={e => handleOptionChange(e.target.value)}
+          disabled={disabled}
+        >
+          <option value="">-- Select Option --</option>
+          {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+        <ChevronDown size={14} style={{ position: "absolute", right: 0, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+      </div>
+
+      {/* Sub-inputs (only when option selected) */}
+      {localOption && (
+        <div style={{ paddingLeft: "10px", borderLeft: "2px solid #e0f2fe", display: "flex", flexDirection: "column", gap: "6px" }}>
+          {localNotes.map((note, idx) => (
+            <div key={idx} style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <input
+                type="text"
+                value={note}
+                onChange={e => handleNoteChange(idx, e.target.value)}
+                onBlur={handleNoteBlur}
+                onKeyDown={e => e.key === "Enter" && handleNoteBlur()}
+                placeholder={`Detail ${idx + 1}...`}
+                disabled={disabled}
+                style={{ flex: 1, padding: "5px 8px", border: "1px solid #e2e8f0", borderRadius: "8px", fontSize: "0.85rem", fontWeight: "600", color: "#1e293b", outline: "none", background: "#f8fafc" }}
+              />
+              {localNotes.length > 1 && (
+                <button type="button" onClick={() => removeNote(idx)} style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "6px", padding: "4px", cursor: "pointer", color: "#ef4444", display: "flex", alignItems: "center" }}>
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+          ))}
+          <button type="button" onClick={addNote} style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: "4px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "4px 10px", fontSize: "0.75rem", fontWeight: "700", color: "#16a34a", cursor: "pointer", marginTop: "2px" }}>
+            <Plus size={12} /> Add Detail
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+// ───────────────────────────────────────────────────────────────────────────
 
 const ContactDetailSidebar = ({
   showContactInfo, setShowContactInfo,
@@ -160,7 +254,15 @@ const ContactDetailSidebar = ({
             {customFieldsDef.length === 0 ? (
               <p style={{ fontSize: "0.8rem", color: "#94a3b8", textAlign: "center", fontStyle: "italic", background: "#f8fafc", padding: "20px", borderRadius: "15px" }}>No custom attributes found.</p>
             ) : (
-              customFieldsDef.map(field => (
+              [...customFieldsDef]
+                .sort((a, b) => {
+                  // Fields with sortOrder=0 go last, others sort ascending
+                  if (a.sortOrder === 0 && b.sortOrder === 0) return 0;
+                  if (a.sortOrder === 0) return 1;
+                  if (b.sortOrder === 0) return -1;
+                  return a.sortOrder - b.sortOrder;
+                })
+                .map(field => (
                 <div key={field._id} style={{
                   background: "#ffffff",
                   borderRadius: "16px",
@@ -194,28 +296,19 @@ const ContactDetailSidebar = ({
                       <ChevronDown size={14} style={{ position: "absolute", right: "0", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
                     </div>
                   ) : field.type === "COMBOBOX" ? (
-                    <div style={{ position: "relative" }}>
-                      <input
-                        list={`list-${field._id}`}
-                        style={{ width: "100%", padding: "4px 0", background: "transparent", border: "none", borderBottom: "1.5px solid #f1f5f9", fontSize: "0.95rem", color: "#1e293b", fontWeight: "700", outline: "none" }}
-                        value={activeContact?.customFields?.[field.name] || ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setActiveContact(prev => ({
-                            ...prev,
-                            customFields: { ...prev.customFields, [field.name]: val }
-                          }));
-                        }}
-                        onBlur={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
-                        placeholder={`Select or type ${field.label.toLowerCase()}...`}
-                        disabled={isUpdatingField === field.name || !activeContact}
-                      />
-                      <datalist id={`list-${field._id}`}>
-                        {field.options.map(opt => <option key={opt} value={opt} />)}
-                      </datalist>
-                      <ChevronDown size={14} style={{ position: "absolute", right: "0", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
-                    </div>
+                    <ComboboxWithNotes
+                      field={field}
+                      value={activeContact?.customFields?.[field.name] || ""}
+                      onChange={(val) => {
+                        // Optimistically update local state
+                        setActiveContact(prev => ({
+                          ...prev,
+                          customFields: { ...prev.customFields, [field.name]: val }
+                        }));
+                        handleUpdateCustomField(activeContact?._id, field.name, val);
+                      }}
+                      disabled={isUpdatingField === field.name || !activeContact}
+                    />
                   ) : (
                     <input
                       type="text"

@@ -8,7 +8,9 @@ const customFieldSchema = new mongoose.Schema({
     enum: ["TEXT", "NUMBER", "DATE", "SELECT", "COMBOBOX"], 
     default: "TEXT" 
   },
-  options: [String], // For SELECT type
+  options: [String], // For SELECT/COMBOBOX type
+  sortOrder: { type: Number, default: 0 }, // Display position (1=first, 2=second...)
+  optionsSortAlpha: { type: Boolean, default: false }, // Sort COMBOBOX options A-Z
   whatsappAccountIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }],
   whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }, // Backward compatibility
   createdAt: { type: Date, default: Date.now }
