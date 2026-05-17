@@ -117,7 +117,7 @@ export const getContacts = async (req, res, next) => {
     if (onlyPhones === 'true') {
       const rawContacts = await Contact.find(query)
         .select("phone")
-        .sort({ createdAt: -1 })
+        .sort({ updatedAt: -1 })
         .skip(skip)
         .limit(limitInt)
         .lean();
@@ -131,13 +131,14 @@ export const getContacts = async (req, res, next) => {
     }
 
     const rawContacts = await Contact.find(query)
-      .select("name phone status sector tags isCampaignSent whatsappAccountId createdAt")
+      .select("name phone status sector tags isCampaignSent whatsappAccountId createdAt updatedAt customFields")
       .populate("assignedTo", "name")
       .populate("whatsappAccountId", "name")
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limitInt)
       .lean();
+
 
     // Optimized: Fetch all conversations for these contacts in ONE single query
     const contactIds = rawContacts.map(c => c._id);
@@ -218,21 +219,38 @@ export const importContacts = async (req, res, next) => {
 
     const validAccountId = (whatsappAccountId && whatsappAccountId !== "all") ? whatsappAccountId : null;
 
-    const bulkOps = contacts.map(c => ({
-      updateOne: {
-        filter: { phone: c.phone },
-        update: {
-          $set: {
-            name: c.name,
-            sector: c.sector,
-            whatsappAccountId: validAccountId || (c.whatsappAccountId !== "all" ? c.whatsappAccountId : null),
-            customFields: c.customFields
-          },
-          $addToSet: { tags: { $each: c.tags || [] } }
-        },
-        upsert: true
+    let importedCount = 0;
+
+    const bulkOps = contacts.map(c => {
+      const setObj = {
+        name: c.name,
+        sector: c.sector,
+        whatsappAccountId: validAccountId || (c.whatsappAccountId !== "all" ? c.whatsappAccountId : null),
+        updatedAt: new Date() // Force bump to top
+      };
+
+
+      // Merge custom fields using dot notation to prevent overwriting the whole Map
+      if (c.customFields && typeof c.customFields === 'object') {
+        Object.entries(c.customFields).forEach(([key, value]) => {
+          if (value !== undefined && value !== null) {
+            setObj[`customFields.${key}`] = String(value);
+          }
+        });
       }
-    }));
+
+      return {
+        updateOne: {
+          filter: { phone: c.phone },
+          update: {
+            $set: setObj,
+            $addToSet: { tags: { $each: c.tags || [] } }
+          },
+          upsert: true
+        }
+      };
+    });
+
 
     if (bulkOps.length > 0) {
       // Chunking bulkWrite to avoid hitting command size limits
@@ -262,10 +280,11 @@ export const importContacts = async (req, res, next) => {
         return {
           contactId: contact._id,
           whatsappAccountId: targetAccountId,
-          content: `Lead imported/updated via Excel (Tag: ${contacts.find(c => c.phone === contact.phone)?.tags[0] || "None"})`,
+          content: `Lead imported/updated via Excel (Tag: ${contacts.find(c => String(c.phone) === String(contact.phone))?.tags?.[0] || "None"})`,
           createdBy: req.user._id,
           timestamp: new Date()
         };
+
       }).filter(op => op !== null);
 
       if (timelineOps.length > 0) {
@@ -278,9 +297,26 @@ export const importContacts = async (req, res, next) => {
 
     res.json({ success: true, count: importedCount });
   } catch (err) {
+    console.error("❌ Import Error Details:", err);
     next(err);
   }
 };
+
+
+export const checkImportDuplicates = async (req, res, next) => {
+  try {
+    const { phones } = req.body;
+    if (!phones || !Array.isArray(phones)) {
+      return res.status(400).json({ error: "Invalid phones list" });
+    }
+
+    const existingContacts = await Contact.find({ phone: { $in: phones } }).select("phone name").lean();
+    res.json({ existingCount: existingContacts.length, duplicates: existingContacts });
+  } catch (err) {
+    next(err);
+  }
+};
+
 
 export const getUniqueTags = async (req, res, next) => {
   try {

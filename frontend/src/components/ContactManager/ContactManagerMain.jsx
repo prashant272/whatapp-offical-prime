@@ -10,6 +10,8 @@ import ContactTable from "./ContactTable";
 import ContactKanban from "./ContactKanban";
 import ContactFilters from "./ContactFilters";
 import ContactDrawer from "./ContactDrawer";
+import ImportMapperModal from "./ImportMapperModal";
+
 
 const ContactManagerMain = () => {
   const navigate = useNavigate();
@@ -43,8 +45,11 @@ const ContactManagerMain = () => {
   const [editingContact, setEditingContact] = useState(null);
   
   // Import state
+  const [showMapper, setShowMapper] = useState(false);
+  const [tempImportData, setTempImportData] = useState([]);
   const [importData, setImportData] = useState([]);
   const [importing, setImporting] = useState(false);
+
 
   const fetchContacts = useCallback(async (pageNum) => {
     setLoading(true);
@@ -147,10 +152,28 @@ const ContactManagerMain = () => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       const wb = XLSX.read(evt.target.result, { type: 'binary' });
-      setImportData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]));
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      setTempImportData(data);
+      setShowImportModal(false);
+      setShowMapper(true);
     };
     reader.readAsBinaryString(file);
   };
+
+  const handleMappingComplete = async (processedContacts) => {
+    setImporting(true);
+    try {
+      await api.post("/contacts/import", { contacts: processedContacts });
+      alert(`Successfully imported ${processedContacts.length} leads!`);
+      setShowMapper(false);
+      fetchContacts(1);
+    } catch (err) {
+      alert("Import failed. Please check your data format.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
 
   const processImport = async () => {
     if (importData.length === 0) return;
@@ -277,7 +300,7 @@ const ContactManagerMain = () => {
         />
       )}
 
-      {/* Import Modal */}
+      {/* Import Modal - Step 1: Select File */}
       {showImportModal && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 7000, backdropFilter: "blur(4px)" }}>
           <div style={{ width: "550px", padding: "2.5rem", background: "white", borderRadius: "20px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
@@ -289,18 +312,26 @@ const ContactManagerMain = () => {
               style={{ border: "3px dashed #eef2f6", padding: "40px", textAlign: "center", borderRadius: "15px", cursor: "pointer", background: "#f8fafc" }} 
               onClick={() => document.getElementById('import-file').click()}
             >
-              <p style={{ fontWeight: "800", color: "#1a1a1a" }}>{importData.length > 0 ? `${importData.length} leads loaded` : "Click to select Excel/CSV file"}</p>
+              <p style={{ fontWeight: "800", color: "#1a1a1a" }}>Click to select Excel/CSV file</p>
               <input id="import-file" type="file" accept=".xlsx, .xls, .csv" hidden onChange={handleFileUpload} />
             </div>
             <div style={{ display: "flex", gap: "15px", marginTop: "2.5rem" }}>
               <button onClick={() => setShowImportModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "2px solid #eee", background: "white", fontWeight: "800" }}>Cancel</button>
-              <button disabled={importData.length === 0 || importing} onClick={processImport} style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#2ecc71", color: "white", border: "none", fontWeight: "900" }}>
-                {importing ? "Importing..." : "Start Import"}
-              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Import Mapper - Step 2: Mapping Fields */}
+      <ImportMapperModal 
+        isOpen={showMapper}
+        onClose={() => setShowMapper(false)}
+        rawData={tempImportData}
+        onComplete={handleMappingComplete}
+        customFields={customFields}
+        sectors={sectors}
+      />
+
 
       <style>{`
         @keyframes slideInRight {

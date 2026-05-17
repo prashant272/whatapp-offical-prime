@@ -4,6 +4,8 @@ import api from "../api";
 import { Search, UserPlus, Filter, Download, Trash2, ChevronLeft, ChevronRight, Loader2, Layers, ExternalLink, Upload, FileSpreadsheet, User, Smartphone, History, Clock, Calendar, Pencil, Send } from "lucide-react";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 import { Link, useNavigate } from "react-router-dom";
+import ImportMapperModal from "./ContactManager/ImportMapperModal";
+
 
 // Optimized Row Component to prevent full table re-renders
 const ContactRow = memo(({ contact, isSelected, toggleSelect, handleContactClick, getStatusColor, customFields, navigate, activeAccount, switchAccount, handleDeleteContact, setEditingContact, setShowEditModal }) => {
@@ -56,6 +58,8 @@ const ContactManager = () => {
   const [loading, setLoading] = useState(false);
   const [showAllAccounts, setShowAllAccounts] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showMapper, setShowMapper] = useState(false);
+  const [tempImportData, setTempImportData] = useState([]);
   const [importData, setImportData] = useState([]);
   const [importing, setImporting] = useState(false);
   const [importTag, setImportTag] = useState(`Campaign_${new Date().toLocaleDateString().replace(/\//g, '_')}`);
@@ -214,10 +218,32 @@ const ContactManager = () => {
     const reader = new FileReader();
     reader.onload = (evt) => {
       const wb = XLSX.read(evt.target.result, { type: 'binary' });
-      setImportData(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]));
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      setTempImportData(data);
+      setShowImportModal(false);
+      setShowMapper(true);
     };
     reader.readAsBinaryString(file);
   };
+
+  const handleMappingComplete = async (processedContacts) => {
+    setImporting(true);
+    try {
+      await api.post("/contacts/import", { 
+        contacts: processedContacts, 
+        whatsappAccountId: showAllAccounts ? null : activeAccount?._id 
+      });
+      alert(`Successfully imported ${processedContacts.length} contacts!`);
+      setShowMapper(false);
+      fetchContacts(1);
+    } catch (err) {
+      console.error("Import error:", err);
+      alert("Import failed. Please check the data format.");
+    } finally {
+      setImporting(false);
+    }
+  };
+
 
   const handleContactClick = useCallback(async (contact) => {
     setSelectedContact(contact);
@@ -457,7 +483,7 @@ const ContactManager = () => {
         </div>
       </div>
 
-      {/* Modals & Overlays (Same as before but styled) */}
+      {/* Modals & Overlays */}
       {showImportModal && (
         <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5000, backdropFilter: "blur(4px)" }}>
           <div style={{ width: "550px", padding: "2.5rem", background: "white", borderRadius: "20px", boxShadow: "0 20px 50px rgba(0,0,0,0.3)" }}>
@@ -472,19 +498,27 @@ const ContactManager = () => {
               <div style={{ width: "60px", height: "60px", background: "rgba(46, 204, 113, 0.1)", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 15px" }}>
                 <Upload size={30} color="#2ecc71" />
               </div>
-              <p style={{ fontSize: "1rem", fontWeight: "800", color: "#1a1a1a" }}>{importData.length > 0 ? `${importData.length} leads loaded` : "Click to select file"}</p>
+              <p style={{ fontSize: "1rem", fontWeight: "800", color: "#1a1a1a" }}>Click to select Excel/CSV file</p>
               <p style={{ fontSize: "0.8rem", color: "#999", marginTop: "5px" }}>Supports .xlsx, .xls, .csv</p>
               <input id="import-file" type="file" accept=".xlsx, .xls, .csv" hidden onChange={handleFileUpload} />
             </div>
             <div style={{ display: "flex", gap: "15px", marginTop: "2.5rem" }}>
               <button onClick={() => setShowImportModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "2px solid #eee", background: "white", fontWeight: "800", cursor: "pointer" }}>Cancel</button>
-              <button disabled={importData.length === 0 || importing} onClick={processImport} style={{ flex: 1, padding: "12px", borderRadius: "10px", background: "#2ecc71", color: "white", border: "none", fontWeight: "900", cursor: "pointer", opacity: (importData.length === 0 || importing) ? 0.5 : 1 }}>
-                {importing ? "Importing..." : "Process Upload"}
-              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Import Mapper Modal */}
+      <ImportMapperModal 
+        isOpen={showMapper}
+        onClose={() => setShowMapper(false)}
+        rawData={tempImportData}
+        onComplete={handleMappingComplete}
+        customFields={customFields}
+        sectors={sectors}
+      />
+
 
       {/* Contact History Drawer (Side Panel) */}
       {showTimelineDrawer && (
