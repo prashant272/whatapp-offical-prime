@@ -94,9 +94,13 @@ const ContactDrawer = ({
                 <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
                   {timelineEntries.map((e, idx) => (
                     <div key={idx} style={{ position: "relative", paddingLeft: "30px", borderLeft: "2px solid #f0f0f0" }}>
-                      <div style={{ position: "absolute", left: "-7px", top: "0", width: "12px", height: "12px", borderRadius: "50%", background: "#2ecc71", border: "3px solid white" }}></div>
-                      <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "#333" }}>{e.content}</div>
-                      <div style={{ fontSize: "0.75rem", color: "#999", marginTop: "4px", fontWeight: "600" }}>{new Date(e.timestamp).toLocaleString()}</div>
+                      <div style={{ position: "absolute", left: "-7px", top: "0", width: "12px", height: "12px", borderRadius: "50%", background: e.isCampaign ? "#6366f1" : "#2ecc71", border: "3px solid white" }}></div>
+                      <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "#333", whiteSpace: "pre-wrap" }}>{e.content}</div>
+                      <div style={{ fontSize: "0.75rem", color: "#999", marginTop: "6px", fontWeight: "600", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                        <span>{new Date(e.timestamp).toLocaleString()}</span>
+                        {e.whatsappAccountName && <span style={{ background: e.isCampaign ? "#e0e7ff" : "#f1f5f9", color: e.isCampaign ? "#4338ca" : "#475569", padding: "2px 8px", borderRadius: "8px", fontWeight: "700" }}>📱 {e.whatsappAccountName}</span>}
+                        {e.createdBy?.name && <span style={{ color: "#64748b", fontWeight: "700" }}>👤 {e.createdBy.name}</span>}
+                      </div>
                     </div>
                   ))}
                 </div>

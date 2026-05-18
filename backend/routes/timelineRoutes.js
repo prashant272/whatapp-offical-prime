@@ -1,28 +1,72 @@
 import express from "express";
+import mongoose from "mongoose";
 import Timeline from "../models/Timeline.js";
+import Contact from "../models/Contact.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// GET all entries for a contact on a specific account
+// GET all manual timeline entries for a contact across ALL WhatsApp accounts
 router.get("/:contactId", protect, async (req, res) => {
   try {
-    // Note: accountId is usually attached via middleware or can be passed as query/header
-    // But since the contactId is already unique per account in this system, 
-    // fetching by contactId is sufficient. However, we'll verify account for safety.
-    const whatsappAccountId = req.headers["x-whatsapp-account-id"];
+    const { contactId } = req.params;
+    let phoneToSearch = null;
 
-    const query = { contactId: req.params.contactId };
-    if (whatsappAccountId) {
-      query.whatsappAccountId = whatsappAccountId;
+    if (mongoose.isValidObjectId(contactId)) {
+      const contact = await Contact.findById(contactId).select("phone").lean();
+      if (contact && contact.phone) {
+        phoneToSearch = contact.phone;
+      }
+    } else if (/\d{10}/.test(contactId)) {
+      phoneToSearch = contactId;
     }
 
-    const entries = await Timeline.find(query)
-      .populate("createdBy", "name")
-      .sort({ timestamp: -1 });
+    if (!phoneToSearch) {
+      const entries = await Timeline.find({ contactId })
+        .populate("createdBy", "name")
+        .populate("whatsappAccountId", "name phoneNumber")
+        .sort({ timestamp: -1 })
+        .limit(100)
+        .lean();
+      
+      const formatted = entries.map(e => ({
+        ...e,
+        whatsappAccountName: e.whatsappAccountId ? `${e.whatsappAccountId.name} (${e.whatsappAccountId.phoneNumber || ''})`.trim() : "Primary Account",
+        isCampaign: false
+      }));
+      return res.json(formatted);
+    }
 
-    res.json(entries);
+    const cleanPhone = phoneToSearch.replace(/\D/g, "");
+    const last10 = cleanPhone.slice(-10);
+    
+    // Exact indexed phone variations
+    const phoneVariations = [last10, `91${last10}`, `+91${last10}`, `+${last10}`];
+
+    // 1. Find matching contacts across all accounts using B-Tree index lookup ($in)
+    const matchingContacts = await Contact.find({
+      phone: { $in: phoneVariations }
+    }).select("_id phone whatsappAccountId").lean();
+
+    const contactIds = matchingContacts.map(c => c._id);
+
+    // 2. Fetch recent 100 Timeline entries across all WABA account Contact IDs
+    const timelineEntries = await Timeline.find({ contactId: { $in: contactIds } })
+      .populate("createdBy", "name")
+      .populate("whatsappAccountId", "name phoneNumber")
+      .sort({ timestamp: -1 })
+      .limit(100)
+      .lean();
+
+    const formattedTimeline = timelineEntries.map(e => ({
+      ...e,
+      whatsappAccountName: e.whatsappAccountId ? `${e.whatsappAccountId.name} (${e.whatsappAccountId.phoneNumber || ''})`.trim() : "Primary Account",
+      isCampaign: false
+    }));
+
+    res.json(formattedTimeline);
   } catch (error) {
+    console.error("Timeline Merge Error:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -41,13 +85,20 @@ router.post("/", protect, async (req, res) => {
       whatsappAccountId,
       content,
       createdBy: req.user._id,
-      timestamp: new Date() // Use system time as requested
+      timestamp: new Date()
     });
 
     await newEntry.save();
-    const populated = await newEntry.populate("createdBy", "name");
+    await newEntry.populate("createdBy", "name");
+    await newEntry.populate("whatsappAccountId", "name phoneNumber");
 
-    res.status(201).json(populated);
+    const formatted = {
+      ...newEntry.toObject(),
+      whatsappAccountName: newEntry.whatsappAccountId ? `${newEntry.whatsappAccountId.name} (${newEntry.whatsappAccountId.phoneNumber || ''})`.trim() : "Primary Account",
+      isCampaign: false
+    };
+
+    res.status(201).json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -61,10 +112,17 @@ router.put("/:id", protect, restrictTo("Admin", "Manager"), async (req, res) => 
       req.params.id,
       { content, updatedAt: new Date() },
       { new: true }
-    ).populate("createdBy", "name");
+    ).populate("createdBy", "name").populate("whatsappAccountId", "name phoneNumber");
 
     if (!entry) return res.status(404).json({ error: "Entry not found" });
-    res.json(entry);
+
+    const formatted = {
+      ...entry.toObject(),
+      whatsappAccountName: entry.whatsappAccountId ? `${entry.whatsappAccountId.name} (${entry.whatsappAccountId.phoneNumber || ''})`.trim() : "Primary Account",
+      isCampaign: false
+    };
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -176,13 +176,20 @@ const TimelineModal = ({
                         <User size={14} />
                       </div>
                       <div>
-                        <div style={{ fontWeight: "800", color: "#1e293b", fontSize: "0.95rem" }}>{entry.createdBy?.name || "System"}</div>
-                        <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "700" }}>
+                        <div style={{ fontWeight: "800", color: "#1e293b", fontSize: "0.95rem", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <span>{entry.createdBy?.name || "System"}</span>
+                          {entry.whatsappAccountName && (
+                            <span style={{ fontSize: "0.75rem", background: entry.isCampaign ? "#e0e7ff" : "#f1f5f9", color: entry.isCampaign ? "#4338ca" : "#475569", padding: "2px 8px", borderRadius: "10px", fontWeight: "700" }}>
+                              📱 {entry.whatsappAccountName}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: "0.75rem", color: "#94a3b8", fontWeight: "700", marginTop: "2px" }}>
                           {formatRelativeTime(entry.timestamp)}
                         </div>
                       </div>
                     </div>
-                    {(currentUser?.role === "Admin" || currentUser?.role === "Manager") && (
+                    {(currentUser?.role === "Admin" || currentUser?.role === "Manager") && !entry.isCampaign && (
                       <div style={{ display: "flex", gap: "4px" }}>
                         <button onClick={() => handleEditStart(entry)} style={{ padding: "8px", background: "none", border: "none", color: "#94a3b8", cursor: "pointer" }}>
                           <Pencil size={14} />
