@@ -220,11 +220,35 @@ export const startCampaign = async (req, res) => {
     if (!account) return res.status(400).json({ error: "Please select a valid sender account (cannot be 'all')" });
 
     const uniquePhones = [...new Set(contacts.map(c => normalizePhone(typeof c === 'object' ? c.phone : c)))];
-    const blockedContacts = await Contact.find({ phone: { $in: uniquePhones }, isBlocked: true }, 'phone');
+    
+    const excludeStatuses = ["stop messege", "stop message", "bad lead"];
+    const blockedContacts = await Contact.find({ 
+      phone: { $in: uniquePhones }, 
+      $or: [
+        { isBlocked: true },
+        { status: { $regex: new RegExp(`^(${excludeStatuses.join('|')})$`, 'i') } }
+      ]
+    }, 'phone status isBlocked');
+    
     const blockedPhones = new Set(blockedContacts.map(c => c.phone));
     const allowedPhones = uniquePhones.filter(phone => !blockedPhones.has(phone));
     
-    if (allowedPhones.length === 0) return res.status(400).json({ error: "All contacts are blocked or invalid." });
+    const blockedLogs = blockedContacts.map(c => {
+      let reason = "Blocked";
+      if (c.status && excludeStatuses.includes(c.status.toLowerCase())) {
+         reason = `Skipped: ${c.status}`;
+      } else if (c.isBlocked) {
+         reason = "Opted-out/Blocked";
+      }
+      return {
+        phone: c.phone,
+        status: "failed",
+        error: reason,
+        sentAt: new Date()
+      };
+    });
+
+    if (allowedPhones.length === 0 && blockedLogs.length === 0) return res.status(400).json({ error: "All contacts are invalid." });
 
     const template = await Template.findOne({ name: templateName, whatsappAccountId: account._id });
     if (!template) return res.status(404).json({ error: "Template not found" });
@@ -232,18 +256,25 @@ export const startCampaign = async (req, res) => {
     const campaign = new Campaign({
       name,
       template: template._id,
-      totalContacts: allowedPhones.length,
+      totalContacts: uniquePhones.length,
       contacts: allowedPhones.map(p => ({ phone: p })),
       templateComponents,
       whatsappAccountId: account._id,
-      status: "RUNNING",
-      startedAt: new Date()
+      status: allowedPhones.length === 0 ? "COMPLETED" : "RUNNING",
+      startedAt: new Date(),
+      failedCount: blockedLogs.length,
+      logs: blockedLogs
     });
+    if (allowedPhones.length === 0) {
+      campaign.completedAt = new Date();
+    }
     await campaign.save();
 
-    await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${allowedPhones.length} contacts and sector ${sector || 'None'}`, name);
+    await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${uniquePhones.length} contacts and sector ${sector || 'None'}`, name);
 
-    processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req, sector);
+    if (allowedPhones.length > 0) {
+      processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req, sector);
+    }
 
     res.status(202).json({ message: "Campaign started", campaignId: campaign._id });
   } catch (error) {
