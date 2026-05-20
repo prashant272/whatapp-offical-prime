@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Filter, Layers, List, LayoutGrid, Download, Upload, Plus } from "lucide-react";
+import { Search, Filter, Layers, List, LayoutGrid, Download, Upload, Plus, Send } from "lucide-react";
 
 const ContactFilters = ({ 
   filters, setFilters, handleSearch, viewMode, setViewMode, 

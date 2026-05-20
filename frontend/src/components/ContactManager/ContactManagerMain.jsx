@@ -11,7 +11,7 @@ import ContactKanban from "./ContactKanban";
 import ContactFilters from "./ContactFilters";
 import ContactDrawer from "./ContactDrawer";
 import ImportMapperModal from "./ImportMapperModal";
-
+import EditContactModal from "./EditContactModal";
 
 const ContactManagerMain = () => {
   const navigate = useNavigate();
@@ -330,6 +330,18 @@ const ContactManagerMain = () => {
         onComplete={handleMappingComplete}
         customFields={customFields}
         sectors={sectors}
+      />
+
+      <EditContactModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingContact(null);
+        }}
+        contact={editingContact}
+        onUpdate={handleUpdateContact}
+        sectors={sectors}
+        customFields={customFields}
       />
 
 

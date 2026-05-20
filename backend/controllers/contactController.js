@@ -2,6 +2,7 @@ import { verifyContacts } from "../services/whatsappService.js";
 import Contact from "../models/Contact.js";
 import Conversation from "../models/Conversation.js";
 import Timeline from "../models/Timeline.js";
+import { normalizePhone } from "../utils/phoneUtils.js";
 
 export const verifyNumbers = async (req, res, next) => {
   try {
@@ -140,25 +141,43 @@ export const getContacts = async (req, res, next) => {
       .lean();
 
 
-    // Optimized: Fetch all conversations for these contacts in ONE single query
-    const contactIds = rawContacts.map(c => c._id);
-    const convFilter = { contact: { $in: contactIds } };
+    // Optimized: Fetch all conversations for these contacts in ONE single query using phone
+    const phoneVariations = new Set();
+    rawContacts.forEach(c => {
+      if (!c.phone) return;
+      const clean = String(c.phone).replace(/[^0-9]/g, "");
+      phoneVariations.add(clean);
+      if (clean.length === 10) phoneVariations.add("91" + clean);
+      if (clean.length === 12 && clean.startsWith("91")) phoneVariations.add(clean.substring(2));
+      phoneVariations.add(c.phone); // Add original just in case
+    });
+    
+    const phones = Array.from(phoneVariations);
+    const convFilter = { phone: { $in: phones } };
     if (accountId && accountId !== "all") {
       convFilter.$or = [{ whatsappAccountId: accountId }, { whatsappAccountId: null }];
     }
     
-    const allConvs = await Conversation.find(convFilter).select("_id contact").lean();
+    const allConvs = await Conversation.find(convFilter).select("_id phone").lean();
     
-    // Create a lookup map: contactId -> conversationId
+    // Create a lookup map: phone -> conversationId
     const convMap = new Map();
     allConvs.forEach(conv => {
-      convMap.set(conv.contact.toString(), conv._id);
+      if (!conv.phone) return;
+      const clean = String(conv.phone).replace(/[^0-9]/g, "");
+      convMap.set(clean, conv._id);
+      if (clean.length === 10) convMap.set("91" + clean, conv._id);
+      if (clean.length === 12 && clean.startsWith("91")) convMap.set(clean.substring(2), conv._id);
+      convMap.set(conv.phone, conv._id);
     });
 
-    const contacts = rawContacts.map(contact => ({
-      ...contact,
-      conversationId: convMap.get(contact._id.toString()) || null
-    }));
+    const contacts = rawContacts.map(contact => {
+      const clean = String(contact.phone).replace(/[^0-9]/g, "");
+      return {
+        ...contact,
+        conversationId: convMap.get(contact.phone) || convMap.get(clean) || null
+      };
+    });
 
     res.json({
       contacts,
@@ -201,10 +220,15 @@ export const updateContact = async (req, res, next) => {
     const { id } = req.params;
     const updateData = req.body;
 
-    const contact = await Contact.findByIdAndUpdate(id, updateData, { new: true });
+    const contact = await Contact.findById(id);
     if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-    res.json(contact);
+    // Update ALL contact documents with the same phone number to sync across all WhatsApp accounts!
+    await Contact.updateMany({ phone: contact.phone }, { $set: updateData });
+
+    const updatedContact = await Contact.findById(id);
+
+    res.json(updatedContact);
   } catch (err) {
     next(err);
   }
@@ -222,13 +246,20 @@ export const importContacts = async (req, res, next) => {
     let importedCount = 0;
 
     const bulkOps = contacts.map(c => {
+      const normPhone = normalizePhone(c.phone);
+      
+      const newAccountId = validAccountId || (c.whatsappAccountId !== "all" ? c.whatsappAccountId : null);
+
       const setObj = {
         name: c.name,
         sector: c.sector,
-        whatsappAccountId: validAccountId || (c.whatsappAccountId !== "all" ? c.whatsappAccountId : null),
         updatedAt: new Date() // Force bump to top
       };
 
+      // Only overwrite whatsappAccountId if a specific account was chosen during import
+      if (newAccountId) {
+        setObj.whatsappAccountId = newAccountId;
+      }
 
       // Merge custom fields using dot notation to prevent overwriting the whole Map
       if (c.customFields && typeof c.customFields === 'object') {
@@ -239,11 +270,17 @@ export const importContacts = async (req, res, next) => {
         });
       }
 
+      const setOnInsertObj = {};
+      if (!newAccountId) {
+        setOnInsertObj.whatsappAccountId = null; // Default to Global if creating new lead
+      }
+
       return {
         updateOne: {
-          filter: { phone: c.phone },
+          filter: { phone: normPhone },
           update: {
             $set: setObj,
+            $setOnInsert: setOnInsertObj,
             $addToSet: { tags: { $each: c.tags || [] } }
           },
           upsert: true
@@ -263,7 +300,7 @@ export const importContacts = async (req, res, next) => {
       importedCount = bulkOps.length;
 
       // Log timeline for these contacts
-      const phones = contacts.map(c => c.phone);
+      const phones = contacts.map(c => normalizePhone(c.phone));
       const updatedContacts = [];
       for (let i = 0; i < phones.length; i += 10000) {
         const chunk = phones.slice(i, i + 10000);
