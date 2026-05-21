@@ -1,5 +1,5 @@
 import express from "express";
-import { getConversations, getMessages, sendMessage, updateConversationStatus, sendChatTemplateMessage, assignConversation, sendChatImageMessage, markAsRead, getConversationById } from "../controllers/chatController.js";
+import { getConversations, getMessages, sendMessage, updateConversationStatus, sendChatTemplateMessage, assignConversation, sendChatImageMessage, markAsRead, getConversationById, resolveConversationByPhone } from "../controllers/chatController.js";
 import { protect, restrictTo } from "../middleware/authMiddleware.js";
 
 import { smartEmit } from "../utils/socket.js";
@@ -7,6 +7,7 @@ import { smartEmit } from "../utils/socket.js";
 const router = express.Router();
 
 router.get("/conversations", protect, getConversations);
+router.get("/conversations/resolve", protect, resolveConversationByPhone);
 router.get("/messages/:phone", protect, getMessages);
 router.post("/messages/send", protect, sendMessage);
 router.post("/messages/send-image", protect, sendChatImageMessage);

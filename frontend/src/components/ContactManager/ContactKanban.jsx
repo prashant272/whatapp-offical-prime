@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { User, Smartphone, Send, MoreVertical, Star, GripVertical, Plus } from "lucide-react";
 
-const KanbanCard = ({ contact, handleContactClick, navigate, onDragStart }) => {
+const KanbanCard = ({ contact, handleContactClick, navigate, onDragStart, onOpenChat }) => {
   const priorityColors = {
     Hot: { bg: "#fee2e2", text: "#dc2626", dot: "#ef4444" },
     Warm: { bg: "#fef3c7", text: "#d97706", dot: "#f59e0b" },
@@ -44,7 +44,7 @@ const KanbanCard = ({ contact, handleContactClick, navigate, onDragStart }) => {
           )}
         </div>
         <button 
-          onClick={() => navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)}
+          onClick={() => onOpenChat ? onOpenChat(contact) : navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)}
           style={{ padding: "5px", borderRadius: "6px", border: "none", background: "#e7fce3", color: "#008069", cursor: "pointer" }}
         >
           <Send size={14} />
@@ -54,7 +54,7 @@ const KanbanCard = ({ contact, handleContactClick, navigate, onDragStart }) => {
   );
 };
 
-const KanbanColumn = ({ status, contacts, handleContactClick, navigate, onDrop, onDragOver, onDragStart }) => {
+const KanbanColumn = ({ status, contacts, handleContactClick, navigate, onDrop, onDragOver, onDragStart, onOpenChat }) => {
   return (
     <div 
       onDragOver={onDragOver}
@@ -81,6 +81,7 @@ const KanbanColumn = ({ status, contacts, handleContactClick, navigate, onDrop, 
             handleContactClick={handleContactClick} 
             navigate={navigate} 
             onDragStart={onDragStart}
+            onOpenChat={onOpenChat}
           />
         ))}
       </div>
@@ -88,7 +89,7 @@ const KanbanColumn = ({ status, contacts, handleContactClick, navigate, onDrop, 
   );
 };
 
-const ContactKanban = ({ contacts, customStatuses, handleContactClick, navigate, onUpdateStatus }) => {
+const ContactKanban = ({ contacts, customStatuses, handleContactClick, navigate, onUpdateStatus, onOpenChat }) => {
   const columns = useMemo(() => {
     const defaultStatuses = ["New", "Follow-up", "Interested", "Converted", "Closed"];
     const allStatuses = customStatuses.length > 0 ? customStatuses.map(s => s.name) : defaultStatuses;
@@ -141,6 +142,7 @@ const ContactKanban = ({ contacts, customStatuses, handleContactClick, navigate,
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          onOpenChat={onOpenChat}
         />
       ))}
     </div>

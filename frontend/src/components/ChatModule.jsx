@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import axios from "axios";
 import { Loader2, Clock, Check } from "lucide-react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
 import { io } from "socket.io-client";
 
@@ -39,6 +39,7 @@ import FollowUpModal from "./ChatModule/FollowUpModal";
 const ChatModule = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { accounts, activeAccount, switchAccount } = useWhatsAppAccount();
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -256,12 +257,14 @@ const ChatModule = () => {
     if (!chatId) return null;
     if (chatId.startsWith("new:")) {
       const phone = chatId.split(":")[1];
-      return { phone, status: "New", isNew: true, whatsappAccountId: activeAccount?._id };
+      const params = new URLSearchParams(location.search);
+      const accountId = params.get("accountId") || activeAccount?._id;
+      return { phone, status: "New", isNew: true, whatsappAccountId: accountId };
     }
     const found = conversations.find(c => c._id === chatId);
     if (found) return found;
     return { _id: chatId, isPlaceholder: true };
-  }, [chatId, conversations, activeAccount]);
+  }, [chatId, conversations, activeAccount, location.search]);
 
   const allStatusOptions = useMemo(() => {
     const combined = [...customStatuses];
@@ -332,6 +335,10 @@ const ChatModule = () => {
     selectedChatRef.current = selectedChat;
     if (selectedChat) {
       dispatch(setActiveChat(selectedChat));
+      if (selectedChat.whatsappAccountId && selectedChat.whatsappAccountId !== activeAccount?._id) {
+        const targetAcc = accounts.find(a => a._id === selectedChat.whatsappAccountId);
+        if (targetAcc) switchAccount(targetAcc);
+      }
       if (selectedChat.contact) {
         // If it's already an object, just use it
         if (typeof selectedChat.contact === 'object') {
@@ -360,6 +367,7 @@ const ChatModule = () => {
       } else {
         setActiveContact(null);
       }
+      if (!selectedChat.phone) return;
       fetchMessages(selectedChat.phone);
 
       // Mark as read in the BACKGROUND (backend only)

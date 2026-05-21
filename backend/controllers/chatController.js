@@ -13,6 +13,14 @@ const escapeRegex = (string) => {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 };
 
+const getPhoneCandidates = (phone) => {
+  const clean = String(phone || "").replace(/[^0-9]/g, "");
+  const candidates = new Set([String(phone || ""), clean]);
+  if (clean.length === 10) candidates.add(`91${clean}`);
+  if (clean.length === 12 && clean.startsWith("91")) candidates.add(clean.slice(2));
+  return Array.from(candidates).filter(Boolean);
+};
+
 export const getConversations = async (req, res) => {
   try {
     const { page = 1, limit = 20, status, assignedTo, sector, cursor, search, filter: typeFilter } = req.query;
@@ -223,6 +231,38 @@ export const getMessages = async (req, res) => {
   } catch (err) {
     console.error(`❌ Error in ${req.url}:`, err.response?.data || err);
     res.status(500).json({ error: err.message });
+  }
+};
+
+export const resolveConversationByPhone = async (req, res) => {
+  try {
+    const { phone, accountId } = req.query;
+    if (!phone) return res.status(400).json({ error: "Phone is required" });
+
+    const candidates = getPhoneCandidates(phone);
+    const clean = String(phone).replace(/[^0-9]/g, "");
+    const last10 = clean.slice(-10);
+
+    const phoneConditions = [{ phone: { $in: candidates } }];
+    if (last10) phoneConditions.push({ phone: { $regex: `${escapeRegex(last10)}$` } });
+
+    const filter = { $or: phoneConditions };
+    if (accountId) {
+      filter.whatsappAccountId = accountId;
+    }
+    if (req.user.role === "Executive") {
+      filter.assignedTo = req.user._id;
+    }
+
+    const conversation = await Conversation.findOne(filter)
+      .populate("contact")
+      .populate("assignedTo", "name")
+      .sort({ lastMessageTime: -1, updatedAt: -1 });
+
+    res.json({ conversation: conversation || null });
+  } catch (error) {
+    console.error("resolveConversationByPhone Error:", error);
+    res.status(500).json({ error: error.message });
   }
 };
 

@@ -4,7 +4,7 @@ import api from "../../api";
 
 const ContactDrawer = ({ 
   contact, onClose, loadingTimeline, timelineEntries, 
-  navigate, currentUser, onUpdateContact 
+  navigate, currentUser, onUpdateContact, onOpenChat
 }) => {
   const [activeTab, setActiveTab] = useState("timeline"); // timeline, notes, alarms
   const [noteContent, setNoteContent] = useState("");
@@ -189,7 +189,7 @@ const ContactDrawer = ({
         {/* Footer Actions */}
         <div style={{ padding: "1.5rem", borderTop: "1px solid #f0f0f0", display: "flex", gap: "12px" }}>
           <button 
-            onClick={() => navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)}
+            onClick={() => onOpenChat ? onOpenChat(contact) : navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)}
             style={{ flex: 1, padding: "14px", borderRadius: "12px", background: "#2ecc71", color: "white", border: "none", fontWeight: "900", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", boxShadow: "0 4px 12px rgba(46, 204, 113, 0.2)" }}
           >
             <Send size={20} /> Open WhatsApp

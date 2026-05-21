@@ -154,21 +154,27 @@ export const getContacts = async (req, res, next) => {
     
     const phones = Array.from(phoneVariations);
     const convFilter = { phone: { $in: phones } };
-    if (accountId && accountId !== "all") {
+    if (!isAll && accountId && accountId !== "all") {
       convFilter.$or = [{ whatsappAccountId: accountId }, { whatsappAccountId: null }];
     }
     
-    const allConvs = await Conversation.find(convFilter).select("_id phone").lean();
+    const allConvs = await Conversation.find(convFilter)
+      .select("_id phone whatsappAccountId lastMessageTime updatedAt")
+      .sort({ lastMessageTime: -1, updatedAt: -1 })
+      .lean();
     
     // Create a lookup map: phone -> conversationId
     const convMap = new Map();
     allConvs.forEach(conv => {
       if (!conv.phone) return;
       const clean = String(conv.phone).replace(/[^0-9]/g, "");
-      convMap.set(clean, conv._id);
-      if (clean.length === 10) convMap.set("91" + clean, conv._id);
-      if (clean.length === 12 && clean.startsWith("91")) convMap.set(clean.substring(2), conv._id);
-      convMap.set(conv.phone, conv._id);
+      const setIfMissing = (key) => {
+        if (key && !convMap.has(key)) convMap.set(key, conv._id);
+      };
+      setIfMissing(clean);
+      if (clean.length === 10) setIfMissing("91" + clean);
+      if (clean.length === 12 && clean.startsWith("91")) setIfMissing(clean.substring(2));
+      setIfMissing(conv.phone);
     });
 
     const contacts = rawContacts.map(contact => {

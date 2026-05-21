@@ -4,7 +4,7 @@ import { User, Smartphone, Layers, ExternalLink, Pencil, Trash2, Send, Star, Sti
 const ContactRow = memo(({ 
   contact, isSelected, toggleSelect, handleContactClick, 
   getStatusColor, customFields, navigate, handleDeleteContact, 
-  setEditingContact, setShowEditModal 
+  setEditingContact, setShowEditModal, onOpenChat
 }) => {
   const priorityColors = {
     Hot: { bg: "#fee2e2", text: "#dc2626", border: "#fca5a5" },
@@ -77,7 +77,7 @@ const ContactRow = memo(({
       <td style={{ padding: "10px 24px", textAlign: "right" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
           <button 
-            onClick={() => navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)} 
+            onClick={() => onOpenChat ? onOpenChat(contact) : navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)} 
             style={{ background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: "6px", padding: "5px", color: "#00a884", cursor: "pointer" }}
           >
             <Send size={14} />
@@ -105,7 +105,7 @@ const ContactTable = ({
   isAllSelectedOnPage, handleSelectAllOnPage, total, 
   isUniversalSelect, setIsUniversalSelect, setSelectedContactIds,
   handleContactClick, getStatusColor, customFields, navigate,
-  handleDeleteContact, setEditingContact, setShowEditModal
+  handleDeleteContact, setEditingContact, setShowEditModal, onOpenChat
 }) => {
   return (
     <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.04)" }}>
@@ -147,8 +147,9 @@ const ContactTable = ({
                 handleContactClick={handleContactClick}
                 getStatusColor={getStatusColor}
                 customFields={customFields}
-                navigate={navigate}
-                handleDeleteContact={handleDeleteContact}
+                    navigate={navigate}
+                    onOpenChat={onOpenChat}
+                    handleDeleteContact={handleDeleteContact}
                 setEditingContact={setEditingContact}
                 setShowEditModal={setShowEditModal}
               />

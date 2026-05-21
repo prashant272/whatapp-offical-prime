@@ -120,6 +120,39 @@ const ContactManagerMain = () => {
     }
   }, []);
 
+  const getContactAccountId = (contact) => {
+    const account = contact?.whatsappAccountId;
+    return typeof account === "object" ? account?._id : account;
+  };
+
+  const handleOpenChat = useCallback(async (contact) => {
+    const phone = contact?.phone;
+    if (!phone) return;
+
+    if (contact.conversationId) {
+      navigate(`/chats/${contact.conversationId._id || contact.conversationId}`);
+      return;
+    }
+
+    try {
+      const res = await api.get("/conversations/resolve", {
+        params: { phone },
+        headers: { "x-whatsapp-account-id": "all" }
+      });
+      const conversation = res.data?.conversation;
+      if (conversation?._id) {
+        navigate(`/chats/${conversation._id}`);
+        return;
+      }
+    } catch (err) {
+      console.error("Conversation resolve error:", err);
+    }
+
+    const accountId = getContactAccountId(contact) || activeAccount?._id;
+    const accountQuery = accountId ? `?accountId=${accountId}` : "";
+    navigate(`/chats/new:${phone}${accountQuery}`);
+  }, [activeAccount?._id, navigate]);
+
   const handleUpdateContact = (updated) => {
     setContacts(prev => prev.map(c => c._id === updated._id ? updated : c));
     setSelectedContact(updated);
@@ -243,6 +276,7 @@ const ContactManagerMain = () => {
             getStatusColor={getStatusColor}
             customFields={customFields}
             navigate={navigate}
+            onOpenChat={handleOpenChat}
             handleDeleteContact={async (id) => {
               if (window.confirm("Are you sure you want to delete this lead?")) {
                 await api.delete(`/contacts/${id}`);
@@ -258,6 +292,7 @@ const ContactManagerMain = () => {
             customStatuses={customStatuses}
             handleContactClick={handleContactClick}
             navigate={navigate}
+            onOpenChat={handleOpenChat}
             onUpdateStatus={handleUpdateStatus}
           />
         )}
@@ -296,6 +331,7 @@ const ContactManagerMain = () => {
           loadingTimeline={loadingTimeline}
           timelineEntries={timelineEntries}
           navigate={navigate}
+          onOpenChat={handleOpenChat}
           onUpdateContact={handleUpdateContact}
         />
       )}
