@@ -184,7 +184,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
         const finalSent = updatedCampaign?.sentCount || totalSentCount;
         const finalFailed = updatedCampaign?.failedCount || totalFailedCount;
-        const finalLogs = updatedCampaign?.logs || allLogs;
+        const finalLogs = updatedCampaign?.logs || currentLogs;
 
         const io = getIO();
         io.emit("campaign_progress", {
