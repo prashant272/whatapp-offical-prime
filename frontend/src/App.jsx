@@ -23,7 +23,6 @@ function AppContent() {
     const userInfo = localStorage.getItem("userInfo");
     return userInfo ? JSON.parse(userInfo) : null;
   });
-  const [stats, setStats] = useState({ sent: 0, delivered: 0, failed: 0 });
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [forceLogoutCountdown, setForceLogoutCountdown] = useState(null);
   const navigate = useNavigate();
@@ -82,25 +81,6 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, [forceLogoutCountdown]);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const fetchStats = async () => {
-      try {
-        const res = await api.get("/campaigns");
-        const allCampaigns = Array.isArray(res.data) ? res.data : [];
-        const sums = allCampaigns.reduce((acc, curr) => ({
-          sent: acc.sent + (curr.sentCount || 0),
-          delivered: acc.delivered + (curr.deliveredCount || 0),
-          failed: acc.failed + (curr.failedCount || 0)
-        }), { sent: 0, delivered: 0, failed: 0 });
-        setStats(sums);
-      } catch (err) {
-        console.error("Error fetching stats:", err);
-      }
-    };
-    fetchStats();
-  }, [location.pathname, user]);
 
   if (!user && location.pathname !== "/login") {
     return <Navigate to="/login" />;
@@ -146,7 +126,7 @@ function AppContent() {
             <span style={{ fontSize: "1.1rem" }}>⚠️</span>
             <span>You are currently logged in as <strong>{user?.name}</strong> ({user?.role}). Actions you perform will be logged as this user.</span>
           </div>
-          <button 
+          <button
             onClick={handleRevertImpersonate}
             style={{
               background: "white",
@@ -254,7 +234,7 @@ function AppContent() {
               flex: 1
             }}>
               <Routes>
-                <Route path="/" element={<DashboardHome stats={stats} user={user} />} />
+                <Route path="/" element={<DashboardHome user={user} />} />
                 <Route path="/templates" element={<TemplateManager />} />
                 <Route path="/campaigns" element={<CampaignManager />} />
                 <Route path="/chats" element={<ChatModule />} />

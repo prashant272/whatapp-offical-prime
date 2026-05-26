@@ -971,11 +971,11 @@ const ChatModule = () => {
     socket.on("status_update", ({ messageId, status }) => { dispatch(updateMessageStatus({ messageId, status })); });
     socket.on("conversation_status_update", ({ phone, status }) => { refetchConvs(); });
 
-    socket.on("chat_assigned", ({ conversation }) => {
+    socket.on("chat_assigned", ({ conversation, isNewAssignment = true }) => {
       const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
-      if (assignedToId === currentUser._id) {
+      if (assignedToId === currentUser._id && isNewAssignment) {
         const contactName = conversation.contact?.name || conversation.phone;
-
+        
         // 1. Browser Notification
         if (Notification.permission === "granted") {
           new Notification("New Chat Assigned", {

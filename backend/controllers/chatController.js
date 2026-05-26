@@ -562,7 +562,7 @@ export const assignConversation = async (req, res) => {
     await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName})`, phone);
 
     const populatedConv = await Conversation.findById(conversation._id).populate("assignedTo", "name").populate("contact");
-    smartEmit("chat_assigned", { conversation: populatedConv });
+    smartEmit("chat_assigned", { conversation: populatedConv, isNewAssignment: userId !== undefined });
 
     res.json({ message: "Conversation assigned", conversation: populatedConv });
   } catch (error) {

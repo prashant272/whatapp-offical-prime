@@ -26,6 +26,7 @@ import timelineRoutes from "./routes/timelineRoutes.js";
 import keywordRuleRoutes from "./routes/keywordRuleRoutes.js";
 import quickReplyRoutes from "./routes/quickReplyRoutes.js";
 import callRoutes from "./routes/callRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 import { protect, restrictTo } from "./middleware/authMiddleware.js";
 import { attachWhatsAppAccount } from "./middleware/accountMiddleware.js";
 import { errorHandler } from "./utils/errorHandler.js";
@@ -81,11 +82,12 @@ app.use("/api/timeline", timelineRoutes);
 app.use("/api/keyword-rules", keywordRuleRoutes);
 app.use("/api/quick-replies", quickReplyRoutes);
 app.use("/api/calls", callRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 app.get("/", (req, res) => {
-  res.status(200).json({ 
+  res.status(200).json({
     message: "WhatsApp Dashboard API is Running",
-    status: "UP", 
+    status: "UP",
     timestamp: new Date()
   });
 });
