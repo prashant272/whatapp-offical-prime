@@ -48,7 +48,23 @@ const ContactRow = memo(({
         </div>
       </td>
       <td style={{ padding: "10px 20px" }}>
-        <div style={{ fontWeight: "700", color: "#00a884", fontSize: "0.7rem" }}>{contact.whatsappAccountId?.name || "Global"}</div>
+        <div style={{ fontWeight: "700", color: "#00a884", fontSize: "0.7rem", display: "flex", alignItems: "center", gap: "6px" }}>
+          <span>{contact.whatsappAccountId?.name || "Global"}</span>
+          {contact.accountsData && contact.accountsData.length > 1 && (
+            <span style={{ 
+              background: "#e0f2fe", 
+              color: "#0369a1", 
+              padding: "2px 6px", 
+              borderRadius: "4px", 
+              fontSize: "0.58rem", 
+              fontWeight: "900",
+              textTransform: "uppercase",
+              letterSpacing: "0.2px"
+            }}>
+              +{contact.accountsData.length - 1} More
+            </span>
+          )}
+        </div>
         <div style={{ color: "#94a3b8", fontSize: "0.65rem", fontWeight: "600" }}>{contact.sector || "Unassigned"}</div>
       </td>
       <td style={{ padding: "10px 20px" }}>

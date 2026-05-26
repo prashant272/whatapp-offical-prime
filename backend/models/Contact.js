@@ -54,10 +54,26 @@ const contactSchema = new mongoose.Schema({
     lastSentAt: { type: Date, default: Date.now }
   }],
   isCampaignSent: { type: Boolean, default: false },
-  isCampaignFailed: { type: Boolean, default: false }
+  isCampaignFailed: { type: Boolean, default: false },
+  
+  // Nested account-specific details to support multiple sender accounts on one global contact
+  accountsData: [{
+    whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
+    assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    sourceCampaign: { type: String, default: null },
+    status: { type: String, default: null },
+    isCampaignSent: { type: Boolean, default: false },
+    isCampaignFailed: { type: Boolean, default: false },
+    statusUpdatedAt: { type: Date, default: null },
+    followUpsLog: [{ 
+      ruleId: { type: mongoose.Schema.Types.ObjectId, ref: "FollowUpRule" },
+      lastSentAt: { type: Date, default: Date.now }
+    }]
+  }]
 }, { timestamps: true });
 
-contactSchema.index({ phone: 1, whatsappAccountId: 1 }, { unique: true });
+contactSchema.index({ phone: 1 }, { unique: true });
+contactSchema.index({ "accountsData.whatsappAccountId": 1 });
 contactSchema.index({ whatsappAccountId: 1, createdAt: -1 });
 contactSchema.index({ sector: 1 });
 contactSchema.index({ status: 1 });

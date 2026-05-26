@@ -378,6 +378,7 @@ const ContactManagerMain = () => {
         onUpdate={handleUpdateContact}
         sectors={sectors}
         customFields={customFields}
+        customStatuses={customStatuses}
       />
 
 

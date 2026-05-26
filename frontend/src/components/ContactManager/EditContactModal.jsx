@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, User, Smartphone, Save } from "lucide-react";
 import api from "../../api";
 
-const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, customFields }) => {
+const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, customFields, customStatuses = [] }) => {
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -92,6 +92,18 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, customF
                 <option value="Cold">Cold</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Status</label>
+            <select 
+              value={formData.status} 
+              onChange={e => setFormData({...formData, status: e.target.value})}
+              style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
+            >
+              <option value="">Unassigned</option>
+              {customStatuses.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+            </select>
           </div>
 
           {customFields && customFields.length > 0 && (

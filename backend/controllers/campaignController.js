@@ -63,10 +63,9 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             const stripped = logPhone.replace(/^91/, "");
             const withCode = logPhone.startsWith("91") ? logPhone : `91${logPhone}`;
 
-            // Try to find contact with any of the formats
+             // Try to find contact with any of the formats globally (prevent duplicate creations)
             contactObj = await Contact.findOne({ 
-              phone: { $in: [logPhone, stripped, withCode] }, 
-              whatsappAccountId: account._id 
+              phone: { $in: [logPhone, stripped, withCode] }
             });
 
             if (!contactObj) {
@@ -77,16 +76,47 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
                 sourceCampaign: campaign.name,
                 sector: sectorName || "Unassigned",
                 isCampaignSent: isSent,
-                isCampaignFailed: isFailed
+                isCampaignFailed: isFailed,
+                status: isSent ? "sent" : (isFailed ? "failed" : null),
+                accountsData: [{
+                  whatsappAccountId: account._id,
+                  sourceCampaign: campaign.name,
+                  isCampaignSent: isSent,
+                  isCampaignFailed: isFailed,
+                  status: isSent ? "sent" : (isFailed ? "failed" : null),
+                  statusUpdatedAt: new Date()
+                }]
               });
               await contactObj.save();
             } else {
-              // ALWAYS update to LATEST status — overwrite previous result
+              // Contact already exists globally. Find or create account-specific details entry in accountsData.
+              if (!contactObj.accountsData) contactObj.accountsData = [];
+              
+              let accEntry = contactObj.accountsData.find(a => a.whatsappAccountId?.toString() === account._id.toString());
+              if (!accEntry) {
+                accEntry = {
+                  whatsappAccountId: account._id,
+                  sourceCampaign: campaign.name,
+                  isCampaignSent: isSent,
+                  isCampaignFailed: isFailed,
+                  status: isSent ? "sent" : (isFailed ? "failed" : null),
+                  statusUpdatedAt: new Date()
+                };
+                contactObj.accountsData.push(accEntry);
+              } else {
+                accEntry.isCampaignSent = isSent;
+                accEntry.isCampaignFailed = isFailed;
+                accEntry.status = isSent ? "sent" : (isFailed ? "failed" : null);
+                if (!accEntry.sourceCampaign) accEntry.sourceCampaign = campaign.name;
+                accEntry.statusUpdatedAt = new Date();
+              }
+
+              // ALWAYS update top-level status/campaign fallbacks as well for backwards compatibility
               contactObj.isCampaignSent = isSent;
               contactObj.isCampaignFailed = isFailed;
-              
               if (!contactObj.sourceCampaign) contactObj.sourceCampaign = campaign.name;
               if (sectorName && contactObj.sector !== sectorName) contactObj.sector = sectorName;
+              contactObj.whatsappAccountId = account._id;
               
               await contactObj.save();
             }

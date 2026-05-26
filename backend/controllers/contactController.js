@@ -132,9 +132,11 @@ export const getContacts = async (req, res, next) => {
     }
 
     const rawContacts = await Contact.find(query)
-      .select("name phone status sector tags isCampaignSent whatsappAccountId createdAt updatedAt customFields")
+      .select("name phone status sector tags isCampaignSent whatsappAccountId createdAt updatedAt customFields accountsData")
       .populate("assignedTo", "name")
       .populate("whatsappAccountId", "name")
+      .populate("accountsData.whatsappAccountId", "name phoneNumber")
+      .populate("accountsData.assignedTo", "name")
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limitInt)
@@ -179,9 +181,32 @@ export const getContacts = async (req, res, next) => {
 
     const contacts = rawContacts.map(contact => {
       const clean = String(contact.phone).replace(/[^0-9]/g, "");
+      const topConvId = convMap.get(contact.phone) || convMap.get(clean) || null;
+
+      // Attach specific conversationId inside accountsData
+      let updatedAccountsData = [];
+      if (contact.accountsData && contact.accountsData.length > 0) {
+        updatedAccountsData = contact.accountsData.map(acc => {
+          const accId = acc.whatsappAccountId?._id?.toString() || acc.whatsappAccountId?.toString();
+          // Find conversation matching this whatsappAccountId and phone
+          const matchedConv = allConvs.find(conv => {
+            const convClean = String(conv.phone).replace(/[^0-9]/g, "");
+            const contactClean = String(contact.phone).replace(/[^0-9]/g, "");
+            const isPhoneMatch = conv.phone === contact.phone || convClean === contactClean;
+            const isAccountMatch = conv.whatsappAccountId?.toString() === accId;
+            return isPhoneMatch && isAccountMatch;
+          });
+          return {
+            ...acc,
+            conversationId: matchedConv?._id || null
+          };
+        });
+      }
+
       return {
         ...contact,
-        conversationId: convMap.get(contact.phone) || convMap.get(clean) || null
+        conversationId: topConvId,
+        accountsData: updatedAccountsData
       };
     });
 
@@ -199,10 +224,31 @@ export const getContacts = async (req, res, next) => {
 export const getContactById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const contact = await Contact.findById(id);
-    if (!contact) return res.status(404).json({ error: "Contact not found" });
+    const contactObj = await Contact.findById(id)
+      .populate("assignedTo", "name")
+      .populate("whatsappAccountId", "name")
+      .populate("accountsData.whatsappAccountId", "name phoneNumber")
+      .populate("accountsData.assignedTo", "name")
+      .lean();
+    if (!contactObj) return res.status(404).json({ error: "Contact not found" });
+
+    // Fetch conversations for this contact's phone
+    const clean = String(contactObj.phone).replace(/[^0-9]/g, "");
+    const allConvs = await Conversation.find({ phone: { $in: [contactObj.phone, clean] } }).lean();
+
+    // Map conversationId to accountsData
+    if (contactObj.accountsData && contactObj.accountsData.length > 0) {
+      contactObj.accountsData = contactObj.accountsData.map(acc => {
+        const accId = acc.whatsappAccountId?._id?.toString() || acc.whatsappAccountId?.toString();
+        const matchedConv = allConvs.find(conv => conv.whatsappAccountId?.toString() === accId);
+        return {
+          ...acc,
+          conversationId: matchedConv?._id || null
+        };
+      });
+    }
     
-    res.json(contact);
+    res.json(contactObj);
   } catch (err) {
     next(err);
   }
@@ -231,6 +277,11 @@ export const updateContact = async (req, res, next) => {
 
     // Update ALL contact documents with the same phone number to sync across all WhatsApp accounts!
     await Contact.updateMany({ phone: contact.phone }, { $set: updateData });
+
+    // SYNC: Update all conversations for this phone number to keep sector global
+    if (updateData.sector !== undefined) {
+      await Conversation.updateMany({ phone: contact.phone }, { $set: { sector: updateData.sector || "Unassigned" } });
+    }
 
     const updatedContact = await Contact.findById(id);
 
@@ -483,6 +534,12 @@ export const bulkUpdateContacts = async (req, res, next) => {
     const variationsArray = Array.from(phoneVariations);
 
     await Contact.updateMany(
+      { phone: { $in: variationsArray } },
+      { $set: { sector: sector } }
+    );
+
+    // SYNC: Update all conversations for these phone numbers to keep sector global
+    await Conversation.updateMany(
       { phone: { $in: variationsArray } },
       { $set: { sector: sector } }
     );

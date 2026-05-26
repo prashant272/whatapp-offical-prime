@@ -45,35 +45,33 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
         boxShadow: isCollapsed ? "none" : "0 4px 12px rgba(0,0,0,0.02)",
         position: "relative"
       }}>
-        {/* Toggle Button - ONLY IN CHAT TAB */}
-        {isChatTab && (
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            style={{
-              position: "absolute",
-              right: isCollapsed ? "50%" : "-15px",
-              top: isCollapsed ? "10px" : "50%",
-              transform: isCollapsed ? "translateX(50%)" : "translateY(-50%)",
-              width: "28px",
-              height: "28px",
-              borderRadius: "50%",
-              background: "white",
-              border: "1px solid #e2e8f0",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              zIndex: 10,
-              boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
-              transition: "0.3s"
-            }}
-            onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
-            onMouseOut={e => e.currentTarget.style.background = "white"}
-            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {isCollapsed ? <Menu size={14} color="#64748b" /> : <ChevronLeft size={14} color="#64748b" />}
-          </button>
-        )}
+        {/* Toggle Button - GLOBALLY ACCESSIBLE */}
+        <button
+          onClick={() => setIsCollapsed(!isCollapsed)}
+          style={{
+            position: "absolute",
+            right: isCollapsed ? "50%" : "-15px",
+            top: isCollapsed ? "10px" : "50%",
+            transform: isCollapsed ? "translateX(50%)" : "translateY(-50%)",
+            width: "28px",
+            height: "28px",
+            borderRadius: "50%",
+            background: "white",
+            border: "1px solid #e2e8f0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            zIndex: 10,
+            boxShadow: "0 2px 5px rgba(0,0,0,0.1)",
+            transition: "0.3s"
+          }}
+          onMouseOver={e => e.currentTarget.style.background = "#f8fafc"}
+          onMouseOut={e => e.currentTarget.style.background = "white"}
+          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isCollapsed ? <Menu size={14} color="#64748b" /> : <ChevronLeft size={14} color="#64748b" />}
+        </button>
 
         <div style={{ marginBottom: isCollapsed ? "0.8rem" : "12px", textAlign: isCollapsed ? "center" : "left", marginTop: isCollapsed ? "40px" : "0" }}>
           <h2 style={{ display: "flex", flexDirection: "column", gap: "0px", margin: 0 }}>

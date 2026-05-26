@@ -543,6 +543,11 @@ export const assignConversation = async (req, res) => {
       { new: true }
     ).populate("assignedTo", "name");
 
+    // SYNC: Update all conversations for this phone number to keep sector global
+    if (sector !== undefined) {
+      await Conversation.updateMany({ phone }, { $set: { sector: sector || "Unassigned" } });
+    }
+
     // SYNC: Update the master Contact record as well
     if (conversation && conversation.contact) {
       const contactUpdate = {};
