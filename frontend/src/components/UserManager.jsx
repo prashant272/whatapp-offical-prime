@@ -144,15 +144,16 @@ const UserManager = () => {
           <div key={u._id} className="glass-card" style={{ 
             padding: "1.5rem", 
             position: "relative",
-            background: "white",
+            background: u.isActive === false ? "#f8fafc" : "white",
             borderRadius: "20px",
             boxShadow: "0 4px 20px rgba(0,0,0,0.04)",
-            border: "1px solid #e2e8f0",
+            border: u.isActive === false ? "1.5px dashed #cbd5e1" : "1px solid #e2e8f0",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
             minHeight: "190px",
-            transition: "transform 0.2s, box-shadow 0.2s"
+            transition: "transform 0.2s, box-shadow 0.2s",
+            opacity: u.isActive === false ? 0.75 : 1
           }}>
             {/* Top Row: Avatar and User Details */}
             <div style={{ display: "flex", gap: "15px", alignItems: "flex-start", marginBottom: "1.5rem" }}>
@@ -160,21 +161,28 @@ const UserManager = () => {
                 width: "52px", 
                 height: "52px", 
                 borderRadius: "14px", 
-                background: `${getRoleColor(u.role)}10`, 
+                background: u.isActive === false ? "#f1f5f9" : `${getRoleColor(u.role)}10`, 
                 display: "flex", 
                 alignItems: "center", 
                 justifyContent: "center", 
-                border: `1.5px solid ${getRoleColor(u.role)}25`,
+                border: u.isActive === false ? "1.5px solid #cbd5e1" : `1.5px solid ${getRoleColor(u.role)}25`,
                 flexShrink: 0
               }}>
-                <User size={24} style={{ color: getRoleColor(u.role) }} />
+                <User size={24} style={{ color: u.isActive === false ? "#94a3b8" : getRoleColor(u.role) }} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <h4 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700", color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</h4>
-                <p style={{ margin: "2px 0 0", fontSize: "0.85rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</p>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", marginTop: "8px", background: `${getRoleColor(u.role)}15`, padding: "4px 10px", borderRadius: "20px" }}>
-                  <Shield size={12} style={{ color: getRoleColor(u.role) }} />
-                  <span style={{ fontSize: "0.7rem", fontWeight: "800", color: getRoleColor(u.role), letterSpacing: "0.5px" }}>{u.role.toUpperCase()}</span>
+                <h4 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700", color: u.isActive === false ? "#64748b" : "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.name}</h4>
+                <p style={{ margin: "2px 0 0", fontSize: "0.85rem", color: "#94a3b8", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</p>
+                <div style={{ display: "inline-flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", background: u.isActive === false ? "#e2e8f0" : `${getRoleColor(u.role)}15`, padding: "4px 10px", borderRadius: "20px" }}>
+                    <Shield size={12} style={{ color: u.isActive === false ? "#64748b" : getRoleColor(u.role) }} />
+                    <span style={{ fontSize: "0.7rem", fontWeight: "800", color: u.isActive === false ? "#64748b" : getRoleColor(u.role), letterSpacing: "0.5px" }}>{u.role.toUpperCase()}</span>
+                  </div>
+                  {u.isActive === false && (
+                    <div style={{ display: "inline-flex", alignItems: "center", background: "#fee2e2", color: "#ef4444", padding: "4px 10px", borderRadius: "20px", fontSize: "0.7rem", fontWeight: "800", letterSpacing: "0.5px" }}>
+                      DEACTIVATED
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -190,17 +198,19 @@ const UserManager = () => {
             }}>
               {u.role !== "Admin" ? (
                 <>
+                  {/* Impersonate Button (Only clickable if active) */}
                   <button
-                    onClick={() => handleImpersonate(u)}
-                    title="Direct Login to user panel"
+                    onClick={() => u.isActive !== false && handleImpersonate(u)}
+                    disabled={u.isActive === false}
+                    title={u.isActive === false ? "Cannot login to a deactivated user" : "Direct Login to user panel"}
                     style={{ 
-                      background: "rgba(0, 168, 132, 0.08)", 
+                      background: u.isActive === false ? "rgba(226, 232, 240, 0.5)" : "rgba(0, 168, 132, 0.08)", 
                       border: "none", 
-                      color: "#00a884", 
+                      color: u.isActive === false ? "#cbd5e1" : "#00a884", 
                       width: "36px", 
                       height: "36px", 
                       borderRadius: "10px", 
-                      cursor: "pointer", 
+                      cursor: u.isActive === false ? "not-allowed" : "pointer", 
                       display: "flex", 
                       alignItems: "center", 
                       justifyContent: "center",
@@ -210,13 +220,14 @@ const UserManager = () => {
                     <LogIn size={16} />
                   </button>
 
+                  {/* Enable/Disable status toggle (ALWAYS ACTIVE) */}
                   <button
                     onClick={() => toggleUserStatus(u)}
-                    title={u.isActive === false ? "Enable User" : "Disable User"}
+                    title={u.isActive === false ? "Activate/Enable User" : "Deactivate/Disable User"}
                     style={{ 
-                      background: u.isActive === false ? "rgba(100, 116, 139, 0.08)" : "rgba(239, 68, 68, 0.08)", 
+                      background: u.isActive === false ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.08)", 
                       border: "none", 
-                      color: u.isActive === false ? "#64748b" : "#ef4444", 
+                      color: u.isActive === false ? "#10b981" : "#ef4444", 
                       width: "36px", 
                       height: "36px", 
                       borderRadius: "10px", 
@@ -227,9 +238,10 @@ const UserManager = () => {
                       transition: "background 0.2s" 
                     }}
                   >
-                    <Power size={16} />
+                    <Power size={16} style={{ filter: u.isActive === false ? "drop-shadow(0 0 4px rgba(16, 185, 129, 0.3))" : "none" }} />
                   </button>
 
+                  {/* Edit button */}
                   <button
                     onClick={() => {
                       setEditingUser({
@@ -260,6 +272,7 @@ const UserManager = () => {
                     <Pencil size={16} />
                   </button>
 
+                  {/* Delete button */}
                   <button
                     onClick={() => handleDelete(u._id)}
                     title="Delete User"
@@ -284,35 +297,6 @@ const UserManager = () => {
                 <span style={{ fontSize: "0.8rem", color: "#94a3b8", fontStyle: "italic", padding: "8px 0" }}>System Administrator (Locked)</span>
               )}
             </div>
-
-            {u.isActive === false && (
-              <div style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: "rgba(255, 255, 255, 0.75)",
-                borderRadius: "20px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                pointerEvents: "none"
-              }}>
-                <span style={{ 
-                  background: "#64748b", 
-                  color: "white", 
-                  padding: "6px 16px", 
-                  borderRadius: "20px", 
-                  fontSize: "0.75rem", 
-                  fontWeight: "800", 
-                  textTransform: "uppercase", 
-                  letterSpacing: "1px", 
-                  pointerEvents: "auto", 
-                  boxShadow: "0 4px 10px rgba(0,0,0,0.15)" 
-                }}>Deactivated</span>
-              </div>
-            )}
           </div>
         ))}
       </div>
