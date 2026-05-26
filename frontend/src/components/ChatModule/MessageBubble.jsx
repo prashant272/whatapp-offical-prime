@@ -45,6 +45,21 @@ const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUr
               {btn.text}
             </div>
           ))}
+
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "4px", marginTop: "2px" }}>
+            <span style={{ fontSize: "0.65rem", color: "#667781" }}>{new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+            {msg.direction === "outbound" && (
+              <span style={{ 
+                color: msg.status === "read" ? "#53bdeb" : (msg.status === "failed" ? "#f15c5c" : "#8696a0"),
+                display: "flex",
+                alignItems: "center"
+              }}>
+                {msg.status === "sent" && <Check size={14} />}
+                {(msg.status === "delivered" || msg.status === "read") && <CheckCheck size={15} />}
+                {msg.status === "failed" && <AlertCircle size={14} />}
+              </span>
+            )}
+          </div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>

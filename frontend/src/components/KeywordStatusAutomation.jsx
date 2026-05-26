@@ -149,12 +149,15 @@ const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
               <label style={{ fontSize: "12px", fontWeight: "800", color: "#94a3b8", display: "block", marginBottom: "8px", textTransform: "uppercase" }}>KEYWORD</label>
               <input 
                 type="text" 
-                placeholder="e.g. interested, call me" 
+                placeholder="e.g. interested, call me, or * for any message" 
                 value={formData.keyword}
                 onChange={(e) => setFormData({ ...formData, keyword: e.target.value })}
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1.5px solid #e2e8f0", outline: "none", fontSize: "15px" }}
                 required
               />
+              <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "5px", fontStyle: "italic" }}>
+                Use <strong>*</strong> to match <strong>any</strong> incoming message.
+              </p>
             </div>
             <div>
               <label style={{ fontSize: "12px", fontWeight: "800", color: "#94a3b8", display: "block", marginBottom: "8px", textTransform: "uppercase" }}>TARGET STATUS</label>

@@ -206,10 +206,16 @@ export const handleWebhook = async (req, res) => {
 
         let matchingRule = null;
         let highestRuleScore = 0;
+        let wildcardRule = null;
 
         for (const rule of allRules) {
           let currentScore = 0;
-          const keyword = rule.keyword.toLowerCase();
+          const keyword = rule.keyword.trim().toLowerCase();
+
+          if (keyword === "*") {
+            wildcardRule = rule;
+            continue;
+          }
 
           if (textContent === keyword) {
             currentScore = 1.0;
@@ -239,6 +245,15 @@ export const handleWebhook = async (req, res) => {
           
           if (matchingRule.assignedTo) {
             contact.assignedTo = matchingRule.assignedTo;
+          }
+        } else if (wildcardRule) {
+          console.log(`🤖 Wildcard Rule matched for any message -> ${wildcardRule.targetStatus}`);
+          contact.status = wildcardRule.targetStatus;
+          contact.statusUpdatedAt = new Date();
+          statusUpdated = true;
+          
+          if (wildcardRule.assignedTo) {
+            contact.assignedTo = wildcardRule.assignedTo;
           }
         } else if (textContent === "stop") {
           contact.isBlocked = true; // Prevents the Cron Job and Campaigns from messaging this number

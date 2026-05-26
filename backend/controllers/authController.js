@@ -12,12 +12,16 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (user && (await user.comparePassword(password))) {
+      if (user.isActive === false) {
+        return res.status(403).json({ error: "Your account is disabled. Please contact the administrator." });
+      }
       await logActivity(user._id, "LOGIN", "User logged into dashboard");
       res.json({
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
+        isActive: user.isActive !== false,
         token: generateToken(user._id)
       });
     } else {

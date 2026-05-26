@@ -189,11 +189,15 @@ const CampaignManager = () => {
     let targetPhones = [];
     if (filterType === "all") {
       targetPhones = (camp.contacts || []).map(c => c.phone);
+      if (targetPhones.length === 0 && camp.logs && camp.logs.length > 0) {
+        targetPhones = camp.logs.map(l => l.phone);
+      }
     } else if (filterType === "failed") {
       targetPhones = (camp.logs || []).filter(l => l.status === "failed").map(l => l.phone);
     } else if (filterType === "sent") {
       targetPhones = (camp.logs || []).filter(l => l.status !== "failed").map(l => l.phone);
     }
+    targetPhones = targetPhones.filter(Boolean);
 
     if (targetPhones.length === 0) {
       alert(`No contacts found matching the filter: ${filterType}`);
@@ -203,6 +207,7 @@ const CampaignManager = () => {
     setSelectedTemplate(template);
     setNewCampaign({
       name: `${camp.name} - ${filterType.toUpperCase()}`,
+      type: camp.type || "MESSAGE",
       templateName: tName,
       contactsRaw: targetPhones.join("\n"),
       delay: 2,
@@ -227,6 +232,30 @@ const CampaignManager = () => {
         }
       });
     }
+
+    // Recover from previous templateComponents if available
+    if (camp.templateComponents && camp.templateComponents.length > 0) {
+      camp.templateComponents.forEach(comp => {
+        if (comp.type === "body" && comp.parameters) {
+          comp.parameters.forEach((param, idx) => {
+            vars[`BODY_${idx + 1}`] = param.text || "";
+          });
+        } else if (comp.type === "header" && comp.parameters) {
+          comp.parameters.forEach((param, idx) => {
+            if (param.type === "image") {
+              vars[`HEADER_IMAGE`] = param.image?.link || "";
+            } else if (param.type === "video") {
+              vars[`HEADER_VIDEO`] = param.video?.link || "";
+            } else if (param.type === "document") {
+              vars[`HEADER_DOCUMENT`] = param.document?.link || "";
+            } else {
+              vars[`HEADER_${idx + 1}`] = param.text || "";
+            }
+          });
+        }
+      });
+    }
+
     setTemplateVars(vars);
     setExistingNumbers([]);
     setShowRecampaignModal(false);
@@ -576,7 +605,17 @@ const CampaignManager = () => {
       await api.post("/campaigns", payload);
       alert("Campaign launched!");
       setShowCreate(false);
-      setNewCampaign({ name: "", templateName: "", contactsRaw: "", delay: 2, sector: "" });
+      setNewCampaign({
+        name: "",
+        type: "MESSAGE",
+        templateName: "",
+        contactsRaw: "",
+        delay: 2,
+        sector: "",
+        whatsappAccountId: activeAccount?._id || ""
+      });
+      setSelectedTemplate(null);
+      setTemplateVars({});
       fetchData();
     } catch (err) {
       alert("Error launching campaign: " + (err.response?.data?.error || err.message));

@@ -10,6 +10,10 @@ const userSchema = new mongoose.Schema({
     enum: ["Admin", "Manager", "Executive"], 
     default: "Executive" 
   },
+  isActive: {
+    type: Boolean,
+    default: true
+  },
   createdAt: { type: Date, default: Date.now }
 });
 
