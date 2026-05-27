@@ -67,6 +67,9 @@ export const handleWebhook = async (req, res) => {
             $setOnInsert: { 
               messageId: status.id, 
               direction: "outbound",
+              from: "me",
+              to: status.recipient_id || "",
+              body: "Template Message", // placeholder body in case we don't have it yet
               whatsappAccountId: account._id
             }
           },

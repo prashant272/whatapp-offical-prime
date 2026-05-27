@@ -213,7 +213,7 @@ const ContactDetailSidebar = ({
             <div style={{ position: "relative" }}>
               <select
                 style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
-                value={selectedChat.sector || "Unassigned"}
+                value={activeContact?.sector || selectedChat.sector || "Unassigned"}
                 onChange={(e) => handleAssign(undefined, e.target.value)}
               >
                 <option value="Unassigned">Unassigned</option>
