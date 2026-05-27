@@ -30,7 +30,7 @@ const contactSchema = new mongoose.Schema({
 
   // --- ADVANCED CRM FIELDS ---
   // Priority: 'Hot', 'Warm', 'Cold' or numerical score
-  priority: { type: String, enum: ["Hot", "Warm", "Cold", null], default: null },
+  priority: { type: String, enum: ["Hot", "Warm", "Cold", null, ""], default: null },
   
   // Internal tracking notes (Array of objects to keep history)
   internalNotes: [{
@@ -80,8 +80,19 @@ contactSchema.index({ status: 1 });
 contactSchema.index({ assignedTo: 1 });
 contactSchema.index({ isCampaignSent: 1, isCampaignFailed: 1 });
 
+// Pre-validate hook to clean data before validation runs
+contactSchema.pre("validate", function(next) {
+  if (this.priority === "") {
+    this.priority = null;
+  }
+  next();
+});
+
 // Normalize phone to 12 digits (with 91) before saving
 contactSchema.pre("save", function(next) {
+  if (this.priority === "") {
+    this.priority = null;
+  }
   if (this.phone) {
     let clean = this.phone.toString().replace(/\D/g, ""); // Remove non-digits
     if (clean.length === 10) clean = "91" + clean;
