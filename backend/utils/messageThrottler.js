@@ -27,8 +27,11 @@ export const throttleCampaign = async (account, contacts, templateName, sendFunc
           continue;
         }
 
-        // Handle Time Window (8 AM - 7 PM) - Using IST (India Time)
-        const istHour = parseInt(new Date().toLocaleString("en-US", { hour: 'numeric', hour12: false, timeZone: "Asia/Kolkata" }));
+        // Handle Time Window (8 AM - 7 PM) - Using IST (India Time) (Robust math offset to avoid AM/PM locale parsing issues in Node.js)
+        const dateNow = new Date();
+        const utcTime = dateNow.getTime() + (dateNow.getTimezoneOffset() * 60000);
+        const istDate = new Date(utcTime + (3600000 * 5.5)); // India Standard Time (UTC + 5:30)
+        const istHour = istDate.getHours();
         const isOutsideWindow = istHour < 8 || istHour >= 19;
 
         if (isOutsideWindow && !campaign.allowOutsideHours) {

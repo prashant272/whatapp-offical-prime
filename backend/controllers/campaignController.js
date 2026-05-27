@@ -449,6 +449,7 @@ export const getCampaignDetails = async (req, res) => {
   try {
     const { id } = req.params;
     const campaign = await Campaign.findById(id)
+      .select("-contacts") // Exclude heavy contacts list to make loading logs instant
       .populate("template")
       .populate("whatsappAccountId", "name");
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });

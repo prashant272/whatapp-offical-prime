@@ -22,6 +22,7 @@ const CampaignManager = () => {
   const [templateVars, setTemplateVars] = useState({});
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedLogs, setSelectedLogs] = useState([]);
+  const [visibleLogsCount, setVisibleLogsCount] = useState(150);
   const [logSearch, setLogSearch] = useState("");
   const [showAllCampaigns, setShowAllCampaigns] = useState(false);
   const [newCampaign, setNewCampaign] = useState({
@@ -1348,7 +1349,7 @@ const CampaignManager = () => {
                   style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "0.85rem" }}
                 />
                 <button
-                  onClick={() => { setShowLogsModal(false); setLogSearch(""); }}
+                  onClick={() => { setShowLogsModal(false); setLogSearch(""); setVisibleLogsCount(150); }}
                   style={{ background: "#eee", border: "none", padding: "8px 15px", borderRadius: "8px", cursor: "pointer", fontWeight: "bold" }}
                 >
                   Close
@@ -1375,14 +1376,15 @@ const CampaignManager = () => {
                     [...selectedLogs]
                       .filter(log => log.phone.toLowerCase().includes(logSearch.toLowerCase()))
                       .reverse()
+                      .slice(0, visibleLogsCount)
                       .map((log, idx) => (
                         <tr key={idx} style={{ borderBottom: "1px solid #f8f9fa" }}>
                           <td style={{ padding: "12px 25px", fontWeight: "600" }}>{log.phone}</td>
                           <td style={{ padding: "12px 25px" }}>
                             <span style={{
                               padding: "4px 8px", borderRadius: "6px", fontSize: "0.75rem", fontWeight: "bold",
-                              background: log.status === "sent" ? "#e7fce3" : "#fff5f5",
-                              color: log.status === "sent" ? "#008069" : "#ff4757"
+                              background: ["sent", "delivered", "read"].includes(log.status) ? "#e7fce3" : "#fff5f5",
+                              color: ["sent", "delivered", "read"].includes(log.status) ? "#008069" : "#ff4757"
                             }}>
                               {log.status.toUpperCase()}
                             </span>
@@ -1398,6 +1400,17 @@ const CampaignManager = () => {
                   )}
                 </tbody>
               </table>
+              {selectedLogs.filter(log => log.phone.toLowerCase().includes(logSearch.toLowerCase())).length > visibleLogsCount && (
+                <div style={{ textAlign: "center", padding: "20px", background: "#f8f9fa", borderTop: "1px solid #eee" }}>
+                  <button
+                    type="button"
+                    onClick={() => setVisibleLogsCount(prev => prev + 250)}
+                    style={{ padding: "8px 24px", background: "linear-gradient(135deg, #00a884, #008069)", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "0.85rem", boxShadow: "0 2px 8px rgba(0,168,132,0.2)" }}
+                  >
+                    Load More Logs (+250)
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

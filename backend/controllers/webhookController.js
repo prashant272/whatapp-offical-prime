@@ -56,55 +56,85 @@ export const handleWebhook = async (req, res) => {
 
       if (status) {
         console.log(`📈 Status Update: ${status.status} for ${status.id}`);
+        const updateFields = { status: status.status };
+        if (status.status === "failed" && status.errors && status.errors[0]) {
+          updateFields.error = status.errors[0].message || status.errors[0].title || "Delivery Failed";
+        }
         const updatedMsg = await Message.findOneAndUpdate(
           { messageId: status.id },
-          { status: status.status },
+          updateFields,
           { new: true }
         );
 
-        // SYNC WITH CAMPAIGN LOGS
+        // SYNC WITH CAMPAIGN LOGS (ATOMIC UPDATE TO PREVENT CONCURRENCY OVERWRITES)
         if (updatedMsg && updatedMsg.campaignId) {
-          const campaign = await Campaign.findById(updatedMsg.campaignId);
-          if (campaign) {
-            // Use fuzzy matching for phone numbers in logs
+          try {
             const targetPhone = updatedMsg.to.replace(/\D/g, "");
-            const logIndex = campaign.logs.findIndex(l => {
-              const cleanLogPhone = l.phone.replace(/\D/g, "");
-              return cleanLogPhone.endsWith(targetPhone.slice(-10));
-            });
+            const stripped = targetPhone.replace(/^91/, "");
+            const withCode = targetPhone.startsWith("91") ? targetPhone : `91${targetPhone}`;
+            const targetPhoneFormats = [targetPhone, stripped, withCode];
 
-            if (logIndex !== -1) {
-              const oldStatus = campaign.logs[logIndex].status;
+            // 1. Fetch matching log entry and old status using MongoDB positional projection ($)
+            const campaignForCount = await Campaign.findOne(
+              { _id: updatedMsg.campaignId, "logs.phone": { $in: targetPhoneFormats } },
+              { "logs.$": 1, sentCount: 1, failedCount: 1, status: 1 }
+            );
+
+            if (campaignForCount && campaignForCount.logs && campaignForCount.logs[0]) {
+              const matchedLog = campaignForCount.logs[0];
+              const oldStatus = matchedLog.status;
               const newStatus = status.status;
 
-              // If status changed to failed, update counts
-              if (newStatus === "failed" && oldStatus !== "failed") {
-                campaign.failedCount = (campaign.failedCount || 0) + 1;
-                campaign.sentCount = Math.max(0, (campaign.sentCount || 0) - 1);
-              }
+              // Only update if status has actually changed
+              if (oldStatus !== newStatus) {
+                const updateQuery = {};
+                const incQuery = {};
 
-              campaign.logs[logIndex].status = newStatus;
-              if (status.errors && status.errors[0]) {
-                campaign.logs[logIndex].error = status.errors[0].message;
-              } else if (newStatus === "failed") {
-                campaign.logs[logIndex].error = "Delivery Failed";
+                // Update failed/sent counts atomically
+                if (newStatus === "failed" && oldStatus !== "failed") {
+                  incQuery.failedCount = 1;
+                  incQuery.sentCount = -1;
+                } else if (oldStatus === "failed" && newStatus !== "failed") {
+                  incQuery.failedCount = -1;
+                  incQuery.sentCount = 1;
+                }
+
+                updateQuery.$set = {
+                  "logs.$.status": newStatus,
+                  "logs.$.error": (status.errors && status.errors[0])
+                    ? status.errors[0].message
+                    : (newStatus === "failed" ? "Delivery Failed" : undefined)
+                };
+
+                if (Object.keys(incQuery).length > 0) {
+                  updateQuery.$inc = incQuery;
+                }
+
+                // 2. Perform atomic update using positional operator $
+                const updatedCampaign = await Campaign.findOneAndUpdate(
+                  { _id: updatedMsg.campaignId, "logs._id": matchedLog._id },
+                  updateQuery,
+                  { new: true }
+                );
+
+                if (updatedCampaign) {
+                  // Emit campaign update
+                  getIO().emit("campaign_progress", {
+                    campaignId: updatedCampaign._id,
+                    sentCount: updatedCampaign.sentCount,
+                    failedCount: updatedCampaign.failedCount,
+                    status: updatedCampaign.status,
+                    logs: updatedCampaign.logs,
+                    whatsappAccountId: account._id
+                  });
+                }
               }
-              
-              campaign.markModified("logs");
-              await campaign.save();
-              
-              // Emit campaign update
-              getIO().emit("campaign_progress", {
-                campaignId: campaign._id,
-                sentCount: campaign.sentCount,
-                failedCount: campaign.failedCount,
-                status: campaign.status,
-                logs: campaign.logs,
-                whatsappAccountId: account._id
-              });
             }
+          } catch (syncErr) {
+            console.error("⚠️ Error syncing webhook status with campaign logs:", syncErr.message);
           }
         }
+
 
         // Notify UI about status update
         const io = getIO();
