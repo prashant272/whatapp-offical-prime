@@ -1423,7 +1423,7 @@ const CampaignManager = () => {
                             </span>
                           </td>
                           <td style={{ padding: "12px 25px", fontSize: "0.85rem", color: log.error ? "#ff4757" : "#667781" }}>
-                            {log.error || (log.messageId ? `Message ID: ${log.messageId}` : "Delivered successfully")}
+                             {log.error || (log.status === "delivered" ? "Delivered successfully" : log.status === "read" ? "Read" : "Sent (Pending Delivery)")}
                           </td>
                           <td style={{ padding: "12px 25px", fontSize: "0.75rem", color: "#999" }}>
                             {log.sentAt ? new Date(log.sentAt).toLocaleString() : "-"}

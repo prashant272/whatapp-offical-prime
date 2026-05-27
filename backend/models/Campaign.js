@@ -15,6 +15,7 @@ const campaignSchema = new mongoose.Schema({
     phone: String,
     status: String,
     error: String,
+    messageId: String,
     sentAt: { type: Date, default: Date.now }
   }],
   templateComponents: { type: Array, default: [] },
