@@ -124,10 +124,38 @@ const CampaignManager = () => {
     const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
     const socket = io(socketUrl);
 
-    socket.on("campaign_progress", ({ campaignId, sentCount, failedCount, status, logs }) => {
-      setCampaigns(prev => prev.map(c =>
-        c._id === campaignId ? { ...c, sentCount, failedCount, status, logs } : c
-      ));
+    socket.on("campaign_progress", ({ campaignId, sentCount, failedCount, status, latestLog }) => {
+      setCampaigns(prev => prev.map(c => {
+        if (c._id === campaignId) {
+          let updatedLogs = c.logs;
+          if (c.logs && latestLog) {
+            const phoneStr = latestLog.phone.toString();
+            const existsIdx = c.logs.findIndex(l => l.phone.toString() === phoneStr);
+            if (existsIdx >= 0) {
+              updatedLogs = [...c.logs];
+              updatedLogs[existsIdx] = { ...updatedLogs[existsIdx], ...latestLog };
+            } else {
+              updatedLogs = [...c.logs, latestLog];
+            }
+          }
+          return { ...c, sentCount, failedCount, status, logs: updatedLogs };
+        }
+        return c;
+      }));
+
+      // Also dynamically update active logs modal in real-time
+      if (latestLog) {
+        setSelectedLogs(prev => {
+          const phoneStr = latestLog.phone.toString();
+          const existsIdx = prev.findIndex(l => l.phone.toString() === phoneStr);
+          if (existsIdx >= 0) {
+            const updated = [...prev];
+            updated[existsIdx] = { ...updated[existsIdx], ...latestLog };
+            return updated;
+          }
+          return [latestLog, ...prev];
+        });
+      }
     });
 
     if (activeAccount) {
@@ -1379,7 +1407,7 @@ const CampaignManager = () => {
                     </tr>
                   ) : (
                     [...selectedLogs]
-                      .filter(log => log.phone.toLowerCase().includes(logSearch.toLowerCase()))
+                      .filter(log => log.phone && log.phone.toLowerCase().includes(logSearch.toLowerCase()))
                       .reverse()
                       .slice(0, visibleLogsCount)
                       .map((log, idx) => (
@@ -1405,7 +1433,7 @@ const CampaignManager = () => {
                   )}
                 </tbody>
               </table>
-              {selectedLogs.filter(log => log.phone.toLowerCase().includes(logSearch.toLowerCase())).length > visibleLogsCount && (
+              {selectedLogs.filter(log => log.phone && log.phone.toLowerCase().includes(logSearch.toLowerCase())).length > visibleLogsCount && (
                 <div style={{ textAlign: "center", padding: "20px", background: "#f8f9fa", borderTop: "1px solid #eee" }}>
                   <button
                     type="button"

@@ -240,9 +240,8 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         const updatedCampaign = await Campaign.findByIdAndUpdate(campaign._id, updateOps, { new: true });
 
         const currentStatus = updatedCampaign?.status || (isFinished ? "COMPLETED" : "RUNNING");
-        const finalSent = updatedCampaign?.sentCount || totalSentCount;
+         const finalSent = updatedCampaign?.sentCount || totalSentCount;
         const finalFailed = updatedCampaign?.failedCount || totalFailedCount;
-        const finalLogs = updatedCampaign?.logs || currentLogs;
 
         const io = getIO();
         io.emit("campaign_progress", {
@@ -250,7 +249,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           sentCount: finalSent,
           failedCount: finalFailed,
           status: currentStatus,
-          logs: finalLogs,
+          latestLog: latestLog,
           whatsappAccountId: account._id
         });
       },

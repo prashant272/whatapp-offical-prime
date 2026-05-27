@@ -130,7 +130,7 @@ export const handleWebhook = async (req, res) => {
                 updateQuery.$set = {
                   "logs.$.status": newStatus,
                   "logs.$.error": (status.errors && status.errors[0])
-                    ? status.errors[0].message
+                    ? (status.errors[0].message || status.errors[0].title || "Delivery Failed")
                     : (newStatus === "failed" ? "Delivery Failed" : undefined)
                 };
 
@@ -152,7 +152,14 @@ export const handleWebhook = async (req, res) => {
                     sentCount: updatedCampaign.sentCount,
                     failedCount: updatedCampaign.failedCount,
                     status: updatedCampaign.status,
-                    logs: updatedCampaign.logs,
+                    latestLog: {
+                      phone: matchedLog.phone,
+                      status: newStatus,
+                      error: (status.errors && status.errors[0])
+                        ? (status.errors[0].message || status.errors[0].title || "Delivery Failed")
+                        : (newStatus === "failed" ? "Delivery Failed" : undefined),
+                      sentAt: matchedLog.sentAt
+                    },
                     whatsappAccountId: account._id
                   });
                 }
