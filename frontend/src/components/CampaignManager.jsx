@@ -624,8 +624,13 @@ const CampaignManager = () => {
   };
 
   const isNightTime = () => {
-    const hours = new Date().getHours();
-    return hours < 8 || hours >= 19;
+    try {
+      const hours = parseInt(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }), 10);
+      return hours < 8 || hours >= 19;
+    } catch (e) {
+      const hours = new Date().getHours();
+      return hours < 8 || hours >= 19;
+    }
   };
 
   return (

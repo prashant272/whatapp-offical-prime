@@ -27,11 +27,15 @@ export const throttleCampaign = async (account, contacts, templateName, sendFunc
           continue;
         }
 
-        // Handle Time Window (8 AM - 7 PM) - Using IST (India Time) (Robust math offset to avoid AM/PM locale parsing issues in Node.js)
+        // Handle Time Window (8 AM - 7 PM) - Using IST (India Time) (Robust and 100% timezone-independent extraction via Intl)
         const dateNow = new Date();
-        const utcTime = dateNow.getTime() + (dateNow.getTimezoneOffset() * 60000);
-        const istDate = new Date(utcTime + (3600000 * 5.5)); // India Standard Time (UTC + 5:30)
-        const istHour = istDate.getHours();
+        let istHour = 12; // Fallback
+        try {
+          istHour = parseInt(dateNow.toLocaleString("en-US", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }), 10);
+        } catch (timeErr) {
+          const utcTime = dateNow.getTime() + (dateNow.getTimezoneOffset() * 60000);
+          istHour = new Date(utcTime + (3600000 * 5.5)).getHours();
+        }
         const isOutsideWindow = istHour < 8 || istHour >= 19;
 
         if (isOutsideWindow && !campaign.allowOutsideHours) {

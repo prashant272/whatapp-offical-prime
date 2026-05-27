@@ -62,21 +62,49 @@ export const handleWebhook = async (req, res) => {
         }
         const updatedMsg = await Message.findOneAndUpdate(
           { messageId: status.id },
-          updateFields,
-          { new: true }
+          { 
+            $set: updateFields,
+            $setOnInsert: { 
+              messageId: status.id, 
+              direction: "outbound",
+              whatsappAccountId: account._id
+            }
+          },
+          { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
         // SYNC WITH CAMPAIGN LOGS (ATOMIC UPDATE TO PREVENT CONCURRENCY OVERWRITES)
-        if (updatedMsg && updatedMsg.campaignId) {
+        let campaignId = updatedMsg?.campaignId;
+        let targetPhone = updatedMsg?.to?.replace(/\D/g, "");
+
+        if (!campaignId) {
           try {
-            const targetPhone = updatedMsg.to.replace(/\D/g, "");
-            const stripped = targetPhone.replace(/^91/, "");
-            const withCode = targetPhone.startsWith("91") ? targetPhone : `91${targetPhone}`;
-            const targetPhoneFormats = [targetPhone, stripped, withCode];
+            const campaignByMsgId = await Campaign.findOne(
+              { "logs.messageId": status.id },
+              { _id: 1, "logs.$": 1 }
+            );
+            if (campaignByMsgId) {
+              campaignId = campaignByMsgId._id;
+              if (campaignByMsgId.logs && campaignByMsgId.logs[0]) {
+                targetPhone = campaignByMsgId.logs[0].phone;
+              }
+              console.log(`🎯 Match found directly by logs.messageId: ${status.id} inside Campaign ID: ${campaignId}`);
+            }
+          } catch (findErr) {
+            console.error("⚠️ Error looking up campaign by message ID:", findErr.message);
+          }
+        }
+
+        if (campaignId && targetPhone) {
+          try {
+            const targetPhoneStr = targetPhone.replace(/\D/g, "");
+            const stripped = targetPhoneStr.replace(/^91/, "");
+            const withCode = targetPhoneStr.startsWith("91") ? targetPhoneStr : `91${targetPhoneStr}`;
+            const targetPhoneFormats = [targetPhoneStr, stripped, withCode];
 
             // 1. Fetch matching log entry and old status using MongoDB positional projection ($)
             const campaignForCount = await Campaign.findOne(
-              { _id: updatedMsg.campaignId, "logs.phone": { $in: targetPhoneFormats } },
+              { _id: campaignId, "logs.phone": { $in: targetPhoneFormats } },
               { "logs.$": 1, sentCount: 1, failedCount: 1, status: 1 }
             );
 
@@ -112,7 +140,7 @@ export const handleWebhook = async (req, res) => {
 
                 // 2. Perform atomic update using positional operator $
                 const updatedCampaign = await Campaign.findOneAndUpdate(
-                  { _id: updatedMsg.campaignId, "logs._id": matchedLog._id },
+                  { _id: campaignId, "logs._id": matchedLog._id },
                   updateQuery,
                   { new: true }
                 );
@@ -134,7 +162,6 @@ export const handleWebhook = async (req, res) => {
             console.error("⚠️ Error syncing webhook status with campaign logs:", syncErr.message);
           }
         }
-
 
         // Notify UI about status update
         const io = getIO();

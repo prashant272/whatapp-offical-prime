@@ -41,8 +41,8 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         ? (acc, phone) => initiateWhatsAppCall(acc, phone, "audio")
         : sendTemplateMessage,
       async (currentSuccess, currentFailure, currentLogs, latestLog) => {
-        const deltaSuccess = currentSuccess - lastReportedSuccess;
-        const deltaFailure = currentFailure - lastReportedFailure;
+        let actualDeltaSuccess = currentSuccess - lastReportedSuccess;
+        let actualDeltaFailure = currentFailure - lastReportedFailure;
         
         // Use atomic increments to avoid race conditions with webhooks
         // And use $push with $each to append ONLY the NEW logs since the last update
@@ -54,6 +54,28 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
 
         if (latestLog) {
           let contactObj = null;
+
+          // Check if there is already a message in the DB (upserted by webhook)
+          if (latestLog.messageId) {
+            try {
+              const existingMsgDb = await Message.findOne({ messageId: latestLog.messageId });
+              if (existingMsgDb) {
+                latestLog.status = existingMsgDb.status;
+                if (existingMsgDb.error) {
+                  latestLog.error = existingMsgDb.error;
+                }
+              }
+            } catch (dbErr) {
+              console.error("⚠️ Error checking existing message for campaign status sync:", dbErr.message);
+            }
+          }
+
+          // Adjust counts if the webhook already failed this message
+          if (latestLog.status === "failed" && actualDeltaSuccess > 0) {
+            actualDeltaFailure = actualDeltaFailure + actualDeltaSuccess;
+            actualDeltaSuccess = 0;
+          }
+
           const SUCCESS_STATUSES = ["sent", "delivered", "read"];
           const isSent = SUCCESS_STATUSES.includes(latestLog.status);
           const isFailed = latestLog.status === "failed";
@@ -122,7 +144,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             }
           }
 
-          if (isSent) {
+          if ((isSent || isFailed) && latestLog.messageId) {
             let messageBody = `Campaign [${campaign.name}]: ${template.name}`;
             
             const bodyComp = template.components.find(c => c.type === "BODY");
@@ -146,8 +168,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               }
             }
 
-            const newMessage = new Message({
-              messageId: latestLog.messageId,
+            const messageData = {
               from: "me",
               to: latestLog.phone,
               body: messageBody,
@@ -156,10 +177,17 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               campaignId: campaign._id,
               templateData: { name: template.name, components: templateComponents },
               mediaUrl: mediaUrl,
-              direction: "outbound",
-              status: "sent"
-            });
-            await newMessage.save();
+              direction: "outbound"
+            };
+
+            const updatedMsg = await Message.findOneAndUpdate(
+              { messageId: latestLog.messageId },
+              {
+                $setOnInsert: { status: isSent ? "sent" : "failed" },
+                $set: messageData
+              },
+              { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
 
             const normalizedPhone = latestLog.phone.toString().replace(/\D/g, "");
             const convFilter = { phone: normalizedPhone };
@@ -172,14 +200,14 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               { 
                 contact: contactObj?._id || null,
                 whatsappAccountId: account._id,
-                lastMessage: newMessage.body, 
+                lastMessage: updatedMsg.body, 
                 lastMessageTime: new Date(),
                 unreadCount: 0
               },
               { upsert: true, new: true }
             ).populate("contact");
 
-            smartEmit("new_message", { message: newMessage, conversation: updatedConv, whatsappAccountId: account._id });
+            smartEmit("new_message", { message: updatedMsg, conversation: updatedConv, whatsappAccountId: account._id });
           }
         } // end if (latestLog)
 
@@ -189,8 +217,8 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
         
         const updateOps = {
           $inc: { 
-            sentCount: deltaSuccess, 
-            failedCount: deltaFailure 
+            sentCount: actualDeltaSuccess, 
+            failedCount: actualDeltaFailure 
           },
           $set: {
             ...(isFinished ? { status: "COMPLETED", completedAt: new Date() } : {})
