@@ -143,7 +143,7 @@ export const handleWebhook = async (req, res) => {
 
                 // 2. Perform atomic update using positional operator $
                 const updatedCampaign = await Campaign.findOneAndUpdate(
-                  { _id: campaignId, "logs._id": matchedLog._id },
+                  { _id: campaignId, "logs.phone": matchedLog.phone },
                   updateQuery,
                   { new: true }
                 );
