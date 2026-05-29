@@ -345,11 +345,12 @@ export const handleWebhook = async (req, res) => {
         conversation.lastCustomerMessageAt = new Date();
         conversation.unreadCount += 1;
         
-        // Step 5: If a keyword rule matched, update the Conversation status and assignment too!
+        // Step 5: If a keyword or wildcard rule matched, update the Conversation status and assignment too!
         if (statusUpdated) {
           conversation.status = contact.status;
-          if (matchingRule?.assignedTo) {
-            conversation.assignedTo = matchingRule.assignedTo;
+          const targetAssignee = (matchingRule && matchingRule.assignedTo) || (wildcardRule && wildcardRule.assignedTo);
+          if (targetAssignee) {
+            conversation.assignedTo = targetAssignee;
           }
         }
 

@@ -461,14 +461,30 @@ const ChatModule = () => {
             imageUrl = uploadRes.data.url;
           }
 
-          const isDocument = file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp";
+          let isDocument = false;
+          let filename = "image.jpg";
+          
+          if (file) {
+            isDocument = file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp";
+            filename = file.name;
+          } else if (pendingImage.isRemote) {
+            const urlLower = pendingImage.remoteUrl.toLowerCase();
+            if (urlLower.endsWith(".pdf") || urlLower.endsWith(".doc") || urlLower.endsWith(".docx") || urlLower.endsWith(".xls") || urlLower.endsWith(".xlsx")) {
+              isDocument = true;
+              filename = "document.file"; 
+            } else {
+              isDocument = false;
+              filename = "image.jpg";
+            }
+          }
+
           const resultAction = await dispatch(sendReduxImage({
             to: selectedChat.phone,
             imageUrl,
             caption,
             accountId: selectedChat.whatsappAccountId,
             type: isDocument ? "document" : "image",
-            filename: file.name
+            filename: filename
           }));
 
           if (sendReduxImage.fulfilled.match(resultAction)) {
