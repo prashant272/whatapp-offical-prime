@@ -115,7 +115,7 @@ export const getConversations = async (req, res) => {
       .skip(skip)
       .limit(Number(limit));
 
-    // Fallback: If searching and we have room in the list, search for matching Contacts 
+    // Fallback: If searching and we have room in the list, search for matching Contacts
     // who don't have a conversation record yet in this account context
     // RBAC: Executives should NOT see unassigned contacts in search fallback
     if (search && req.user.role !== "Executive" && conversations.length < Number(limit)) {
@@ -312,7 +312,7 @@ export const sendMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Step 5: Claim the Customer/Contact! 
+    // Step 5: Claim the Customer/Contact!
     if (updatedConv && updatedConv.contact) {
       const contactUpdate = { whatsappAccountId: account._id };
       // Also sync assignment to contact record
@@ -384,7 +384,7 @@ export const sendChatTemplateMessage = async (req, res) => {
 
     if (!account) throw new Error("No active WhatsApp account found");
 
-    const template = await Template.findOne({ name: templateName });
+    const template = await Template.findOne({ name: templateName, whatsappAccountId: account._id });
     const lang = template ? template.language : "en_US";
 
     const metaRes = await sendTemplateMessage(account, to, templateName, lang, templateComponents);
@@ -459,9 +459,9 @@ export const sendChatImageMessage = async (req, res) => {
     if (!account) throw new Error("No active WhatsApp account found");
 
     // Detect if it's a document based on URL or provided type
-    const isDocument = providedType === "document" || 
-                       imageUrl.toLowerCase().endsWith(".pdf") || 
-                       imageUrl.toLowerCase().endsWith(".doc") || 
+    const isDocument = providedType === "document" ||
+                       imageUrl.toLowerCase().endsWith(".pdf") ||
+                       imageUrl.toLowerCase().endsWith(".doc") ||
                        imageUrl.toLowerCase().endsWith(".docx") ||
                        imageUrl.toLowerCase().endsWith(".xlsx") ||
                        imageUrl.toLowerCase().endsWith(".xls");

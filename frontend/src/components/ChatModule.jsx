@@ -202,12 +202,18 @@ const ChatModule = () => {
       const currentChatId = window.location.pathname.split("/").pop();
 
       if (!cursor) {
-        const isPresent = newConvs.find(c => c._id === currentChatId);
-        if (!isPresent && currentChatId && currentChatId.length > 10) {
+        const isPresent = newConvs.find(c => c._id === currentChatId || c.phone === currentChatId);
+        if (!isPresent && currentChatId && currentChatId.length > 5) {
           try {
-            const res = await api.get(`/conversations/${currentChatId}`);
-            if (res.data) {
-              const chatToInsert = res.data;
+            let res;
+            if (/^[0-9a-fA-F]{24}$/.test(currentChatId)) {
+              res = await api.get(`/conversations/${currentChatId}`);
+            } else {
+              res = await api.get(`/conversations/resolve?phone=${currentChatId}&accountId=${activeAccount?._id}`);
+            }
+            const chatData = res.data?.conversation || res.data;
+            if (chatData && chatData._id) {
+              const chatToInsert = chatData;
               // Find the correct sorted position (by lastMessageTime)
               const insertIndex = newConvs.findIndex(c =>
                 new Date(c.lastMessageTime) < new Date(chatToInsert.lastMessageTime)
@@ -261,8 +267,13 @@ const ChatModule = () => {
       const accountId = params.get("accountId") || activeAccount?._id;
       return { phone, status: "New", isNew: true, whatsappAccountId: accountId };
     }
-    const found = conversations.find(c => c._id === chatId);
+    const found = conversations.find(c => c._id === chatId || c.phone === chatId);
     if (found) return found;
+    
+    // If it's a phone number (not a 24-char ObjectId)
+    if (!/^[0-9a-fA-F]{24}$/.test(chatId)) {
+      return { phone: chatId, status: "New", isPlaceholder: true, whatsappAccountId: activeAccount?._id };
+    }
     return { _id: chatId, isPlaceholder: true };
   }, [chatId, conversations, activeAccount, location.search]);
 
@@ -401,11 +412,11 @@ const ChatModule = () => {
   const handleAssign = async (userId, sector) => {
     if (!selectedChat) return;
     try {
-      const res = await api.patch(`/conversations/assign`, {
-        phone: selectedChat.phone,
-        userId: userId !== undefined ? userId : selectedChat.assignedTo?._id,
-        sector: sector !== undefined ? sector : selectedChat.sector
-      }, {
+      const payload = { phone: selectedChat.phone };
+      if (userId !== undefined) payload.userId = userId;
+      if (sector !== undefined) payload.sector = sector;
+
+      const res = await api.patch(`/conversations/assign`, payload, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
       });
 
@@ -415,10 +426,12 @@ const ChatModule = () => {
       setConversations(prev => prev.map(c => c._id === updatedConv._id ? { ...c, ...updatedConv } : c));
 
       if (activeContact && (activeContact._id === updatedConv.contact?._id || activeContact._id === updatedConv.contact)) {
+        const updatedContactObj = typeof updatedConv.contact === 'object' ? updatedConv.contact : {};
         setActiveContact(prev => ({
           ...prev,
+          ...updatedContactObj,
           assignedTo: updatedConv.assignedTo,
-          sector: updatedConv.sector
+          sector: updatedContactObj.sector || updatedConv.sector || prev.sector
         }));
       }
       // refetchConvs(); // Removed to prevent disappearing from list when filters are active
@@ -463,7 +476,7 @@ const ChatModule = () => {
 
           let isDocument = false;
           let filename = "image.jpg";
-          
+
           if (file) {
             isDocument = file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp";
             filename = file.name;
@@ -471,7 +484,7 @@ const ChatModule = () => {
             const urlLower = pendingImage.remoteUrl.toLowerCase();
             if (urlLower.endsWith(".pdf") || urlLower.endsWith(".doc") || urlLower.endsWith(".docx") || urlLower.endsWith(".xls") || urlLower.endsWith(".xlsx")) {
               isDocument = true;
-              filename = "document.file"; 
+              filename = "document.file";
             } else {
               isDocument = false;
               filename = "image.jpg";
@@ -991,7 +1004,7 @@ const ChatModule = () => {
       const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
       if (assignedToId === currentUser._id && isNewAssignment) {
         const contactName = conversation.contact?.name || conversation.phone;
-        
+
         // 1. Browser Notification
         if (Notification.permission === "granted") {
           new Notification("New Chat Assigned", {

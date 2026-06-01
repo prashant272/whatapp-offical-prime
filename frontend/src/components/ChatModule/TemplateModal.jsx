@@ -62,7 +62,7 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
     if (!preset) return null;
     // If template is already populated as an object
     if (preset.template && typeof preset.template === "object") return preset.template;
-    
+
     const tName = preset.templateName || preset.template; // fallback
     if (!tName) return null;
 
@@ -76,7 +76,7 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
   const getPresetData = (preset) => {
     const template = getTemplateForPreset(preset);
     const config = preset.config || {};
-    
+
     // Extract variables (BODY_1, BODY_2...)
     const vars = [];
     Object.keys(config).forEach(key => {
@@ -242,8 +242,8 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
                     <button
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploadingImage}
-                      style={{ 
-                        padding: "10px 15px", background: "#f1f5f9", border: "1.5px solid #e2e8f0", 
+                      style={{
+                        padding: "10px 15px", background: "#f1f5f9", border: "1.5px solid #e2e8f0",
                         borderRadius: "10px", cursor: "pointer", color: "#475569",
                         display: "flex", alignItems: "center", gap: "6px", fontSize: "0.85rem", fontWeight: "700"
                       }}
@@ -290,7 +290,7 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11, 27, 33, 0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, backdropFilter: "blur(8px)" }}>
       <div style={{ background: "white", borderRadius: "28px", width: "900px", maxWidth: "95%", height: "85vh", display: "flex", overflow: "hidden", boxShadow: "0 25px 70px rgba(0,0,0,0.4)" }}>
-        
+
         {/* Left Side: List */}
         <div style={{ width: "380px", borderRight: "1px solid #f1f5f9", display: "flex", flexDirection: "column", background: "#ffffff" }}>
           <div style={{ padding: "24px", background: "#f8fafc", borderBottom: "1px solid #f1f5f9" }}>
@@ -335,10 +335,10 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
             {activeTab === "presets" ? (
               filteredPresets.length > 0 ? (
                 filteredPresets.map(p => (
-                  <div 
-                    key={p._id} 
-                    onClick={() => handleSelectItem(p, "preset")} 
-                    style={{ 
+                  <div
+                    key={p._id}
+                    onClick={() => handleSelectItem(p, "preset")}
+                    style={{
                       padding: "14px", borderRadius: "16px", cursor: "pointer", border: "2px solid",
                       borderColor: selectedItem?._id === p._id ? "#00a884" : "#f1f5f9",
                       background: selectedItem?._id === p._id ? "#f0fdf4" : "#ffffff",
@@ -362,10 +362,10 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
               )
             ) : (
               filteredTemplates.map(t => (
-                <div 
-                  key={t.name} 
-                  onClick={() => handleSelectItem(t, "template")} 
-                  style={{ 
+                <div
+                  key={t.name}
+                  onClick={() => handleSelectItem(t, "template")}
+                  style={{
                     padding: "14px", borderRadius: "16px", cursor: "pointer", border: "2px solid",
                     borderColor: selectedItem?.name === t.name ? "#00a884" : "#f1f5f9",
                     background: selectedItem?.name === t.name ? "#f0fdf4" : "#ffffff",
