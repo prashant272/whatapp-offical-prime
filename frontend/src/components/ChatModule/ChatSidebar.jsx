@@ -194,7 +194,7 @@ const ChatSidebar = ({
               style={{ position: "relative", cursor: "pointer", zIndex: 11000 }}
               ref={notifRef}
             >
-              <button 
+              <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowNotifList(!showNotifList);

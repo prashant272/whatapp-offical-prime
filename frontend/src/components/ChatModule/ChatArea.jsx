@@ -2,6 +2,7 @@ import React, { memo } from "react";
 import { MessageSquare, Clock, Send, Paperclip, Smile, Zap, Loader2, MoreVertical, Plus, Phone, Video } from "lucide-react";
 import MessageBubble from "./MessageBubble";
 import api from "../../api";
+import logo from "../../assets/logo.png";
 
 const COMMON_EMOJIS = ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇", "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚", "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩", "🥳", "😏", "😒", "😞", "😔", "😟", "😕", "🙁", "☹️", "😣", "😖", "😫", "😩", "🥺", "😢", "😭", "😤", "😠", "😡", "🤬", "🤯", "😳", "🥵", "🥶", "😱", "😨", "😰", "😥", "😓", "🤗", "🤔", "🤭", "🤫", "🤥", "😶", "😐", "😑", "😬", "🙄", "😯", "😦", "😧", "😮", "😲", "🥱", "😴", "🤤", "😪", "😵", "🤐", "🥴", "🤢", "🤮", "🤧", "😷", "🤒", "🤕", "🤑", "🤠", "😈", "👿", "👹", "👺", "🤡", "👻", "💀", "☠️", "👽", "👾", "🤖", "🎃", "😺", "😸", "😹", "😻", "😼", "😽", "🙀", "😿", "😾", "🤲", "👐", "🙌", "👏", "🤝", "👍", "👎", "👊", "✊", "🤛", "🤜", "🤞", "✌️", "🤟", "🤘", "👌", "🤌", "🤏", "👈", "👉", "👆", "👇", "☝️", "✋", "🤚", "🖐", "🖖", "👋", "🤙", "💪", "🦾", "🖕", "✍️", "🙏", "FOOT", "🦵", "🦿", "💄", "💋", "👄", "🦷", "👅", "👂", "🦻", "👃", "👣", "👁", "👀", "🧠", "🫀", "🫁", "🦴", "💩", "🔥", "✨", "🌟", "⭐", "🌈", "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"];
 
@@ -33,15 +34,15 @@ const ChatArea = ({
 
   if (!selectedChat) {
     return (
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8696a0", background: "#f8f9fa" }}>
-        <div style={{ width: "250px", height: "250px", borderRadius: "50%", background: "rgba(0,0,0,0.03)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "2rem" }}>
-          <MessageSquare size={100} style={{ opacity: 0.1 }} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8696a0", background: "#f8f9fa", padding: "2rem" }}>
+        <div style={{ width: "250px", height: "250px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.5rem" }}>
+          <img src={logo} alt="Prime Impact Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
         </div>
-        <h2 style={{ color: "var(--text-primary)", fontWeight: "300" }}>Prime Impact Solutions</h2>
-        <p style={{ maxWidth: "400px", textAlign: "center", lineHeight: "1.6", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+        <h2 style={{ color: "var(--text-primary)", fontWeight: "700", marginBottom: "0.5rem", fontSize: "1.8rem" }}>Prime Impact whatsApp API</h2>
+        <p style={{ maxWidth: "450px", textAlign: "center", lineHeight: "1.6", fontSize: "0.95rem", color: "var(--text-secondary)" }}>
           Power your business with the official WhatsApp Business API.
           <br />
-          Prime Impact Solutions helps you automate conversations, run campaigns, and scale customer engagement effortlessly.
+          Prime Impact helps you automate conversations, run campaigns, and scale customer engagement effortlessly.
         </p>
         <div style={{ marginTop: "auto", paddingBottom: "2rem", display: "flex", alignItems: "center", gap: "8px", fontSize: "0.8rem", color: "var(--text-secondary)" }}>
           <Clock size={14} /> End-to-end encrypted
