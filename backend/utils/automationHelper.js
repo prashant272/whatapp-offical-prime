@@ -1,7 +1,7 @@
 import AutoReply from "../models/AutoReply.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
-import { sendTextMessage } from "../services/whatsappService.js";
+import { sendTextMessage, sendImageMessage } from "../services/whatsappService.js";
 import Flow from "../models/Flow.js";
 import { smartEmit } from "./socket.js";
 import { normalizePhone } from "./phoneUtils.js";
@@ -135,8 +135,17 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     // --- DELAY LOGIC ---
-    const delayMs = (bestMatch.delay || 0) * 1000;
-    return await sendDelayedMessage(account, phone, bestMatch.response, contact, delayMs);
+    if (bestMatch.replies && bestMatch.replies.length > 0) {
+      let currentCumulativeDelay = 0;
+      for (const reply of bestMatch.replies) {
+        currentCumulativeDelay += (reply.delay || 0) * 1000;
+        await sendSingleAutoReplyMessage(account, phone, reply, contact, currentCumulativeDelay);
+      }
+      return true;
+    } else {
+      const delayMs = (bestMatch.delay || 0) * 1000;
+      return await sendDelayedMessage(account, phone, bestMatch.response, contact, delayMs);
+    }
   } catch (error) {
     console.error("❌ Automation processing error:", error);
     return false;
@@ -170,6 +179,78 @@ async function sendDelayedMessage(account, phone, text, contact, delayMs) {
         {
           whatsappAccountId: account?._id,
           lastMessage: text,
+          lastMessageTime: new Date()
+        },
+        { new: true, upsert: true, sort: { lastMessageTime: -1 } }
+      ).populate("contact");
+
+      smartEmit("new_message", { message: newMessage, conversation: updatedConv });
+    } catch (err) {
+      console.error("Automation delay error:", err);
+    }
+  }, delayMs);
+  return true;
+}
+
+/**
+ * Helper to send a single auto-reply message (text, image, or linked quick reply) with a delay
+ */
+async function sendSingleAutoReplyMessage(account, phone, reply, contact, delayMs) {
+  setTimeout(async () => {
+    try {
+      let metaRes = null;
+      let textToSend = "";
+      let mediaUrlToSend = "";
+      let type = reply.type || "text";
+
+      if (type === "text") {
+        textToSend = reply.text;
+        metaRes = await sendTextMessage(account, phone, textToSend);
+      } else if (type === "image") {
+        textToSend = reply.text || ""; // Caption
+        mediaUrlToSend = reply.mediaUrl;
+        metaRes = await sendImageMessage(account, phone, mediaUrlToSend, textToSend);
+      } else if (type === "quick_reply") {
+        const QuickReply = (await import("../models/QuickReply.js")).default;
+        const qr = await QuickReply.findById(reply.quickReplyId);
+        if (qr) {
+          textToSend = qr.content || "";
+          mediaUrlToSend = qr.mediaUrl || "";
+          if (mediaUrlToSend) {
+            type = "image";
+            metaRes = await sendImageMessage(account, phone, mediaUrlToSend, textToSend);
+          } else {
+            type = "text";
+            metaRes = await sendTextMessage(account, phone, textToSend);
+          }
+        } else {
+          console.warn(`⚠️ QuickReply with ID ${reply.quickReplyId} not found`);
+          return;
+        }
+      }
+
+      const messageId = metaRes?.messages?.[0]?.id;
+
+      const newMessage = new Message({
+        messageId,
+        from: "me",
+        to: phone,
+        body: textToSend || `Sent ${type}`,
+        mediaUrl: mediaUrlToSend || undefined,
+        type: type,
+        direction: "outbound",
+        status: "sent",
+        isAutomated: true,
+        whatsappAccountId: account?._id
+      });
+      await newMessage.save();
+
+      const normalizedPhone = normalizePhone(phone);
+      const updatedConv = await Conversation.findOneAndUpdate(
+        { phone: normalizedPhone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
+        {
+          whatsappAccountId: account?._id,
+          lastMessage: textToSend || `Sent ${type}`,
           lastMessageTime: new Date()
         },
         { new: true, upsert: true, sort: { lastMessageTime: -1 } }

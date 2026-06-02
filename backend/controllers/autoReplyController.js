@@ -12,8 +12,8 @@ export const getAutoReplies = async (req, res) => {
 
 export const createAutoReply = async (req, res) => {
   try {
-    const { keyword, response, matchType, delay, whatsappAccountIds } = req.body;
-    const reply = new AutoReply({ keyword, response, matchType, delay, whatsappAccountIds });
+    const { keyword, response, matchType, delay, whatsappAccountIds, replies } = req.body;
+    const reply = new AutoReply({ keyword, response, matchType, delay, whatsappAccountIds, replies });
     await reply.save();
     
     await logActivity(req.user._id, "CREATE_AUTOREPLY", `Created auto-reply for: ${keyword}`);
