@@ -39,6 +39,8 @@ const AutoReplyManager = () => {
   const [customStatuses, setCustomStatuses] = useState([]);
   const [quickReplies, setQuickReplies] = useState([]);
   const [uploadingIndex, setUploadingIndex] = useState(null);
+  const [blockConfig, setBlockConfig] = useState({ isEnabled: false, blockedStatuses: [] });
+  const [savingBlockConfig, setSavingBlockConfig] = useState(false);
 
   const [formData, setFormData] = useState({
     keyword: "",
@@ -59,6 +61,7 @@ const AutoReplyManager = () => {
     fetchExecutives();
     fetchCustomStatuses();
     fetchQuickReplies();
+    fetchBlockConfig();
   }, []);
 
   const fetchExecutives = async () => {
@@ -80,6 +83,33 @@ const AutoReplyManager = () => {
       const { data } = await axios.get(`${API_BASE}/api/quick-replies`, config);
       setQuickReplies(Array.isArray(data) ? data : []);
     } catch (err) { console.error(err); }
+  };
+
+  const fetchBlockConfig = async () => {
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/campaigns/block-config`, config);
+      if (data) {
+        setBlockConfig({
+          isEnabled: data.isEnabled || false,
+          blockedStatuses: data.blockedStatuses || []
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching block config:", err);
+    }
+  };
+
+  const handleSaveBlockConfig = async (e) => {
+    e.preventDefault();
+    setSavingBlockConfig(true);
+    try {
+      await axios.post(`${API_BASE}/api/campaigns/block-config`, blockConfig, config);
+      alert("Stop Campaign configuration saved successfully!");
+    } catch (err) {
+      alert("Error saving configuration: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSavingBlockConfig(false);
+    }
   };
 
   const fetchReplies = async () => {
@@ -367,6 +397,24 @@ const AutoReplyManager = () => {
             <Key size={18} />
             Status Automations
           </button>
+          <button
+            onClick={() => setActiveTab("stop_campaign")}
+            style={{
+              background: activeTab === "stop_campaign" ? "#00a884" : "transparent",
+              color: activeTab === "stop_campaign" ? "white" : "#54656f",
+              border: "none",
+              padding: "10px 20px",
+              borderRadius: "20px",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            <XCircle size={18} />
+            Stop Campaign Rules
+          </button>
         </div>
 
         {activeTab === "keywords" ? (
@@ -517,6 +565,130 @@ const AutoReplyManager = () => {
           <FollowUpAutomation />
         ) : activeTab === "status_automation" ? (
           <KeywordStatusAutomation users={executives} statusOptions={customStatuses} />
+        ) : activeTab === "stop_campaign" ? (
+          <div style={{ background: "white", padding: "30px", borderRadius: "16px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
+            <h2 style={{ margin: "0 0 10px 0", fontSize: "18px", fontWeight: "700", color: "#111b21", display: "flex", alignItems: "center", gap: "8px" }}>
+              <XCircle color="#ff4757" size={24} /> Stop Campaign Settings
+            </h2>
+            <p style={{ color: "#667781", fontSize: "14px", margin: "0 0 25px 0" }}>
+              Configure which contact status groups should be excluded from receiving mass campaign messages.
+            </p>
+
+            <form onSubmit={handleSaveBlockConfig}>
+              {/* Toggle Switch */}
+              <div style={{ display: "flex", alignItems: "center", gap: "15px", marginBottom: "25px", background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #e9edef" }}>
+                <label style={{ position: "relative", display: "inline-block", width: "48px", height: "24px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={blockConfig.isEnabled}
+                    onChange={(e) => setBlockConfig({ ...blockConfig, isEnabled: e.target.checked })}
+                    style={{ opacity: 0, width: 0, height: 0 }}
+                  />
+                  <span style={{
+                    position: "absolute",
+                    cursor: "pointer",
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    backgroundColor: blockConfig.isEnabled ? "#00a884" : "#ccc",
+                    transition: "0.4s",
+                    borderRadius: "24px"
+                  }} />
+                  <span style={{
+                    position: "absolute",
+                    content: '""',
+                    height: "18px", width: "18px",
+                    left: "3px", bottom: "3px",
+                    backgroundColor: "white",
+                    transition: "0.4s",
+                    borderRadius: "50%",
+                    transform: blockConfig.isEnabled ? "translateX(24px)" : "none"
+                  }} />
+                </label>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: "15px", fontWeight: "700", color: "#111b21" }}>Custom Block Statuses</h4>
+                  <p style={{ margin: "3px 0 0 0", fontSize: "13px", color: "#667781" }}>
+                    Enable this to choose custom statuses to block. Otherwise, only default statuses (Stop Message, Bad Lead) are blocked.
+                  </p>
+                </div>
+              </div>
+
+              {/* Status List Selection */}
+              {blockConfig.isEnabled && (
+                <div style={{ marginBottom: "30px", animation: "fadeIn 0.2s ease" }}>
+                  <label style={{ display: "block", fontSize: "13px", color: "#00a884", marginBottom: "12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px" }}>
+                    Exclude Contacts With These Statuses:
+                  </label>
+                  
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", background: "#f8f9fa", padding: "20px", borderRadius: "12px", border: "1px solid #e9edef" }}>
+                    {customStatuses.map(status => {
+                      const isChecked = blockConfig.blockedStatuses.includes(status.name);
+                      return (
+                        <div
+                          key={status._id}
+                          onClick={() => {
+                            const updated = isChecked
+                              ? blockConfig.blockedStatuses.filter(s => s !== status.name)
+                              : [...blockConfig.blockedStatuses, status.name];
+                            setBlockConfig({ ...blockConfig, blockedStatuses: updated });
+                          }}
+                          style={{
+                            padding: "10px 15px",
+                            borderRadius: "10px",
+                            border: "1px solid",
+                            borderColor: isChecked ? "#00a884" : "#d1d7db",
+                            background: isChecked ? "#e7fce3" : "white",
+                            color: isChecked ? "#008069" : "#54656f",
+                            fontWeight: "600",
+                            fontSize: "13px",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          <CheckCircle2 size={16} style={{ opacity: isChecked ? 1 : 0.3 }} />
+                          {status.name}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Info alerts */}
+              <div style={{ display: "flex", gap: "12px", background: "#e3f2fd", borderLeft: "4px solid #1976d2", padding: "15px", borderRadius: "8px", marginBottom: "30px" }}>
+                <AlertCircle color="#1976d2" size={20} />
+                <div style={{ fontSize: "13px", color: "#1976d2", lineHeight: "1.5" }}>
+                  <strong>Rule Summary:</strong>
+                  {blockConfig.isEnabled ? (
+                    <span> Campaigns will run normally but will automatically skip any contacts matching the checked statuses ({blockConfig.blockedStatuses.length === 0 ? "none selected yet" : blockConfig.blockedStatuses.join(", ")}).</span>
+                  ) : (
+                    <span> Campaigns will run using default blocking. Any contacts who replied 'stop' (Blocked), or have status 'Stop Message' or 'Bad Lead' will be skipped.</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Submit button */}
+              <button
+                type="submit"
+                disabled={savingBlockConfig}
+                style={{
+                  background: "#00a884",
+                  color: "white",
+                  border: "none",
+                  padding: "12px 24px",
+                  borderRadius: "8px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                {savingBlockConfig ? "Saving..." : "Save Stop Campaign Rules"}
+              </button>
+            </form>
+          </div>
         ) : (
           <QuickReplyManager />
         )}

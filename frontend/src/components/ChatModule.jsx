@@ -409,12 +409,13 @@ const ChatModule = () => {
     }
   }, [showContactInfo, selectedChat?._id, selectedChat?.phone]);
 
-  const handleAssign = async (userId, sector) => {
+  const handleAssign = async (userId, sector, subsector) => {
     if (!selectedChat) return;
     try {
       const payload = { phone: selectedChat.phone };
       if (userId !== undefined) payload.userId = userId;
       if (sector !== undefined) payload.sector = sector;
+      if (subsector !== undefined) payload.subsector = subsector;
 
       const res = await api.patch(`/conversations/assign`, payload, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
@@ -431,7 +432,8 @@ const ChatModule = () => {
           ...prev,
           ...updatedContactObj,
           assignedTo: updatedConv.assignedTo,
-          sector: updatedContactObj.sector || updatedConv.sector || prev.sector
+          sector: updatedContactObj.sector || updatedConv.sector || prev.sector,
+          subsector: updatedContactObj.subsector || updatedConv.subsector || prev.subsector
         }));
       }
       // refetchConvs(); // Removed to prevent disappearing from list when filters are active

@@ -36,7 +36,7 @@ export const getContacts = async (req, res, next) => {
   try {
     const accountId = req.headers["x-whatsapp-account-id"];
     const { 
-      search, status, tag, sector, showAllAccounts, 
+      search, status, tag, sector, subsector, showAllAccounts, 
       page = 1, limit = 50, skip: skipParam, onlyPhones, 
       assignedUsers, excludeUsers,
       statuses, excludeStatuses,
@@ -84,6 +84,7 @@ export const getContacts = async (req, res, next) => {
 
     if (tag) query.tags = { $in: [tag] };
     if (sector) query.sector = sector;
+    if (subsector) query.subsector = subsector;
 
     if (campaignStatus) {
       const statusArr = Array.isArray(campaignStatus) ? campaignStatus : campaignStatus.split(',');
@@ -132,7 +133,7 @@ export const getContacts = async (req, res, next) => {
     }
 
     const rawContacts = await Contact.find(query)
-      .select("name phone status sector tags isCampaignSent whatsappAccountId createdAt updatedAt customFields accountsData")
+      .select("name phone status sector subsector tags isCampaignSent whatsappAccountId createdAt updatedAt customFields accountsData")
       .populate("assignedTo", "name")
       .populate("whatsappAccountId", "name")
       .populate("accountsData.whatsappAccountId", "name phoneNumber")
@@ -278,9 +279,12 @@ export const updateContact = async (req, res, next) => {
     // Update ALL contact documents with the same phone number to sync across all WhatsApp accounts!
     await Contact.updateMany({ phone: contact.phone }, { $set: updateData });
 
-    // SYNC: Update all conversations for this phone number to keep sector global
+    // SYNC: Update all conversations for this phone number to keep sector and subsector global
     if (updateData.sector !== undefined) {
       await Conversation.updateMany({ phone: contact.phone }, { $set: { sector: updateData.sector || "Unassigned" } });
+    }
+    if (updateData.subsector !== undefined) {
+      await Conversation.updateMany({ phone: contact.phone }, { $set: { subsector: updateData.subsector || "Unassigned" } });
     }
 
     const updatedContact = await Contact.findById(id);
@@ -495,7 +499,7 @@ export const checkExistingConversations = async (req, res, next) => {
     // Fetch contact details (sectors) for matched numbers
     const contactsInfo = await Contact.find({
       phone: { $in: variationsArray }
-    }).select("phone sector").lean();
+    }).select("phone sector subsector").lean();
 
     const result = matchedOriginals.map(original => {
       const clean = String(original).replace(/[^0-9]/g, "");
@@ -505,7 +509,8 @@ export const checkExistingConversations = async (req, res, next) => {
       });
       return {
         phone: original,
-        sector: contact?.sector || "Unassigned"
+        sector: contact?.sector || "Unassigned",
+        subsector: contact?.subsector || "Unassigned"
       };
     });
 
@@ -517,9 +522,17 @@ export const checkExistingConversations = async (req, res, next) => {
 
 export const bulkUpdateContacts = async (req, res, next) => {
   try {
-    const { phones, sector } = req.body;
-    if (!phones || !Array.isArray(phones) || !sector) {
-      return res.status(400).json({ error: "Phones list and sector are required" });
+    const { phones, sector, subsector } = req.body;
+    if (!phones || !Array.isArray(phones)) {
+      return res.status(400).json({ error: "Phones list is required" });
+    }
+
+    const updateFields = {};
+    if (sector !== undefined) updateFields.sector = sector || "Unassigned";
+    if (subsector !== undefined) updateFields.subsector = subsector || "Unassigned";
+
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({ error: "Sector or Subsector is required for update" });
     }
 
     // Numbers variations to be safe
@@ -535,16 +548,16 @@ export const bulkUpdateContacts = async (req, res, next) => {
 
     await Contact.updateMany(
       { phone: { $in: variationsArray } },
-      { $set: { sector: sector } }
+      { $set: updateFields }
     );
 
-    // SYNC: Update all conversations for these phone numbers to keep sector global
+    // SYNC: Update all conversations for these phone numbers to keep sector/subsector global
     await Conversation.updateMany(
       { phone: { $in: variationsArray } },
-      { $set: { sector: sector } }
+      { $set: updateFields }
     );
 
-    res.json({ success: true, message: `Updated ${phones.length} contacts to sector: ${sector}` });
+    res.json({ success: true, message: `Updated ${phones.length} contacts details successfully` });
   } catch (err) {
     next(err);
   }

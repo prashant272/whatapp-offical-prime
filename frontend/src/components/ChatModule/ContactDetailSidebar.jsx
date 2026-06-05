@@ -214,7 +214,7 @@ const ContactDetailSidebar = ({
               <select
                 style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
                 value={activeContact?.sector || selectedChat.sector || "Unassigned"}
-                onChange={(e) => handleAssign(undefined, e.target.value)}
+                onChange={(e) => handleAssign(undefined, e.target.value, "Unassigned")}
               >
                 <option value="Unassigned">Unassigned</option>
                 {sectors.map(s => (
@@ -224,6 +224,26 @@ const ContactDetailSidebar = ({
               <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
             </div>
           </div>
+
+          {/* Subsector Dropdown */}
+          {(activeContact?.sector || selectedChat.sector) && (activeContact?.sector || selectedChat.sector) !== "Unassigned" && (
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Subsector</label>
+              <div style={{ position: "relative" }}>
+                <select
+                  style={{ width: "100%", padding: "10px 12px", background: "#ffffff", border: "1.5px solid #e2e8f0", borderRadius: "12px", color: "#1e293b", fontSize: "0.9rem", fontWeight: "600", outline: "none", cursor: "pointer", appearance: "none" }}
+                  value={activeContact?.subsector || selectedChat.subsector || "Unassigned"}
+                  onChange={(e) => handleAssign(undefined, undefined, e.target.value)}
+                >
+                  <option value="Unassigned">Unassigned</option>
+                  {(sectors.find(s => s.name === (activeContact?.sector || selectedChat.sector))?.subsectors || []).map(sub => (
+                    <option key={sub} value={sub}>{sub}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+              </div>
+            </div>
+          )}
 
           <div>
             <label style={{ color: "#64748b", fontSize: "0.65rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Assigned Specialist</label>

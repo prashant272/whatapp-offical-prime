@@ -4,6 +4,7 @@ import Contact from "../models/Contact.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
+import CampaignBlockConfig from "../models/CampaignBlockConfig.js";
 import { throttleCampaign } from "../utils/messageThrottler.js";
 import { sendTemplateMessage } from "../services/whatsappService.js";
 import { initiateWhatsAppCall } from "../services/callingService.js";
@@ -14,7 +15,7 @@ import { getIO, smartEmit } from "../utils/socket.js";
 // Global set to track which campaigns have active throttlers running in memory
 const activeThrottlers = new Set();
 
-const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req, sectorName) => {
+const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req, sectorName, subsectorName) => {
   if (!template) {
     console.error(`❌ Campaign Execution Error: Template missing for campaign "${campaign.name}"`);
     return;
@@ -97,6 +98,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
                 whatsappAccountId: account._id,
                 sourceCampaign: campaign.name,
                 sector: sectorName || "Unassigned",
+                subsector: subsectorName || "Unassigned",
                 isCampaignSent: isSent,
                 isCampaignFailed: isFailed,
                 status: isSent ? "sent" : (isFailed ? "failed" : null),
@@ -138,6 +140,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               contactObj.isCampaignFailed = isFailed;
               if (!contactObj.sourceCampaign) contactObj.sourceCampaign = campaign.name;
               if (sectorName && contactObj.sector !== sectorName) contactObj.sector = sectorName;
+              if (subsectorName && contactObj.subsector !== subsectorName) contactObj.subsector = subsectorName;
               contactObj.whatsappAccountId = account._id;
               
               await contactObj.save();
@@ -202,7 +205,9 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
                 whatsappAccountId: account._id,
                 lastMessage: updatedMsg.body, 
                 lastMessageTime: new Date(),
-                unreadCount: 0
+                unreadCount: 0,
+                sector: sectorName || "Unassigned",
+                subsector: subsectorName || "Unassigned"
               },
               { upsert: true, new: true }
             ).populate("contact");
@@ -265,7 +270,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
 
 export const startCampaign = async (req, res) => {
   try {
-    let { name, templateName, contacts, templateComponents, whatsappAccountId, delay, sector } = req.body;
+    let { name, templateName, contacts, templateComponents, whatsappAccountId, delay, sector, subsector } = req.body;
     
     let accountId = whatsappAccountId;
     if (!accountId || accountId === "all") {
@@ -278,12 +283,23 @@ export const startCampaign = async (req, res) => {
 
     const uniquePhones = [...new Set(contacts.map(c => normalizePhone(typeof c === 'object' ? c.phone : c)))];
     
-    const excludeStatuses = ["stop messege", "stop message", "bad lead"];
+    let excludeStatuses = ["stop messege", "stop message", "bad lead"];
+    try {
+      const blockConfig = await CampaignBlockConfig.findOne({ key: "default" });
+      if (blockConfig && blockConfig.isEnabled && blockConfig.blockedStatuses && blockConfig.blockedStatuses.length > 0) {
+        excludeStatuses = blockConfig.blockedStatuses;
+      }
+    } catch (err) {
+      console.error("Error loading campaign block config:", err.message);
+    }
+
+    const excludePattern = excludeStatuses.map(status => status.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('|');
+    
     const blockedContacts = await Contact.find({ 
       phone: { $in: uniquePhones }, 
       $or: [
         { isBlocked: true },
-        { status: { $regex: new RegExp(`^(${excludeStatuses.join('|')})$`, 'i') } }
+        { status: { $regex: new RegExp(`^(${excludePattern})$`, 'i') } }
       ]
     }, 'phone status isBlocked');
     
@@ -292,7 +308,7 @@ export const startCampaign = async (req, res) => {
     
     const blockedLogs = blockedContacts.map(c => {
       let reason = "Blocked";
-      if (c.status && excludeStatuses.includes(c.status.toLowerCase())) {
+      if (c.status && excludeStatuses.some(st => st.toLowerCase() === c.status.toLowerCase())) {
          reason = `Skipped: ${c.status}`;
       } else if (c.isBlocked) {
          reason = "Opted-out/Blocked";
@@ -320,7 +336,9 @@ export const startCampaign = async (req, res) => {
       status: allowedPhones.length === 0 ? "COMPLETED" : "RUNNING",
       startedAt: new Date(),
       failedCount: blockedLogs.length,
-      logs: blockedLogs
+      logs: blockedLogs,
+      sector,
+      subsector
     });
     if (allowedPhones.length === 0) {
       campaign.completedAt = new Date();
@@ -330,7 +348,7 @@ export const startCampaign = async (req, res) => {
     await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${uniquePhones.length} contacts and sector ${sector || 'None'}`, name);
 
     if (allowedPhones.length > 0) {
-      processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req, sector);
+      processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req, sector, subsector);
     }
 
     res.status(202).json({ message: "Campaign started", campaignId: campaign._id });
@@ -386,7 +404,7 @@ export const updateCampaignStatus = async (req, res) => {
       const remainingContacts = (campaign.contacts || []).filter(c => !attemptedPhones.has(c.phone));
 
       if (remainingContacts.length > 0) {
-        processCampaignExecution(campaign, account, remainingContacts, campaign.template, templateComponents, 2, req);
+        processCampaignExecution(campaign, account, remainingContacts, campaign.template, templateComponents, 2, req, campaign.sector, campaign.subsector);
       }
     }
 
@@ -443,7 +461,7 @@ export const retryFailedContacts = async (req, res) => {
     const lastMsg = await Message.findOne({ to: { $in: failedPhones }, whatsappAccountId: account._id }).sort({ createdAt: -1 });
     const templateComponents = lastMsg?.templateData?.components || [];
 
-    processCampaignExecution(campaign, account, failedPhones.map(p => ({ phone: p })), campaign.template, templateComponents, 2, req);
+    processCampaignExecution(campaign, account, failedPhones.map(p => ({ phone: p })), campaign.template, templateComponents, 2, req, campaign.sector, campaign.subsector);
 
     res.json({ message: "Retrying failed contacts", count: failedPhones.length });
   } catch (error) {
@@ -481,6 +499,33 @@ export const getCampaignDetails = async (req, res) => {
       .populate("whatsappAccountId", "name");
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
     res.json(campaign);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getCampaignBlockConfig = async (req, res) => {
+  try {
+    let config = await CampaignBlockConfig.findOne({ key: "default" });
+    if (!config) {
+      config = new CampaignBlockConfig({ key: "default", isEnabled: false, blockedStatuses: [] });
+      await config.save();
+    }
+    res.json(config);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const updateCampaignBlockConfig = async (req, res) => {
+  try {
+    const { isEnabled, blockedStatuses } = req.body;
+    let config = await CampaignBlockConfig.findOneAndUpdate(
+      { key: "default" },
+      { isEnabled, blockedStatuses },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+    res.json(config);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
