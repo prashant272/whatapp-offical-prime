@@ -60,6 +60,7 @@ export const sendTextMessage = async (account, to, text, quotedMessageId = null)
     if (quotedMessageId) {
       payload.context = { message_id: quotedMessageId };
     }
+    console.log(`📤 Sending payload to Meta:`, JSON.stringify(payload, null, 2));
     const res = await axios.post(
       `${BASE_URL}/${account.phoneNumberId}/messages`,
       payload,

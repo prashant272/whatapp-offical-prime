@@ -275,7 +275,9 @@ export const sendMessage = async (req, res) => {
 
     if (!account) throw new Error("No active WhatsApp account found");
 
+    console.log(`📤 sendMessage controller called: body="${body}", to="${to}", quotedMessageId="${quotedMessageId}"`);
     const metaRes = await sendTextMessage(account, to, body, quotedMessageId);
+    console.log("📤 Meta API Response:", JSON.stringify(metaRes));
     const messageId = metaRes.messages?.[0]?.id;
 
     let quotedMessageBody = null;

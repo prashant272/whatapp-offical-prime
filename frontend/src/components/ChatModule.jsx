@@ -538,6 +538,7 @@ const ChatModule = () => {
         dispatch(addMessage(optimisticMsg));
         setNewMessage("");
         const replyId = replyToMessage ? replyToMessage.messageId : null;
+        console.log("DEBUG SENDING REPLY: replyToMessage is", replyToMessage, "replyId is", replyId);
         setReplyToMessage(null);
 
         try {
