@@ -16,7 +16,10 @@ const messageSchema = new mongoose.Schema({
   whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
   campaignId: { type: mongoose.Schema.Types.ObjectId, ref: "Campaign" },
   status: { type: String, default: "sent" },
-  error: { type: String }
+  error: { type: String },
+  reaction: { type: String, default: null },
+  quotedMessageId: { type: String },
+  quotedMessageBody: { type: String }
 }, { timestamps: true });
 
 messageSchema.index({ whatsappAccountId: 1, timestamp: -1 });

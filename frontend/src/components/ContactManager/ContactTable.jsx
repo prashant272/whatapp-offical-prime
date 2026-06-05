@@ -1,10 +1,11 @@
 import React, { memo } from "react";
-import { User, Smartphone, Layers, ExternalLink, Pencil, Trash2, Send, Star, StickyNote, Bell } from "lucide-react";
+import { User, Smartphone, Layers, ExternalLink, Pencil, Trash2, Send, Star, StickyNote, Bell, RotateCcw } from "lucide-react";
 
 const ContactRow = memo(({ 
   contact, isSelected, toggleSelect, handleContactClick, 
   getStatusColor, customFields, navigate, handleDeleteContact, 
-  setEditingContact, setShowEditModal, onOpenChat
+  setEditingContact, setShowEditModal, onOpenChat,
+  deleted, handleRestoreContact
 }) => {
   const priorityColors = {
     Hot: { bg: "#fee2e2", text: "#dc2626", border: "#fca5a5" },
@@ -92,24 +93,45 @@ const ContactRow = memo(({
       ))}
       <td style={{ padding: "10px 24px", textAlign: "right" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
-          <button 
-            onClick={() => onOpenChat ? onOpenChat(contact) : navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)} 
-            style={{ background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: "6px", padding: "5px", color: "#00a884", cursor: "pointer" }}
-          >
-            <Send size={14} />
-          </button>
-          <button 
-            onClick={() => { setEditingContact({ ...contact }); setShowEditModal(true); }} 
-            style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "5px", color: "#475569", cursor: "pointer" }}
-          >
-            <Pencil size={14} />
-          </button>
-          <button 
-            onClick={() => handleDeleteContact(contact._id)} 
-            style={{ background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "8px", padding: "5px", color: "#ef4444", cursor: "pointer" }}
-          >
-            <Trash2 size={14} />
-          </button>
+          {deleted ? (
+            <>
+              <button 
+                onClick={() => handleRestoreContact(contact._id)} 
+                title="Restore Lead"
+                style={{ background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: "6px", padding: "5px", color: "#00a884", cursor: "pointer" }}
+              >
+                <RotateCcw size={14} />
+              </button>
+              <button 
+                onClick={() => handleDeleteContact(contact._id)} 
+                title="Delete Permanently"
+                style={{ background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "8px", padding: "5px", color: "#ef4444", cursor: "pointer" }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          ) : (
+            <>
+              <button 
+                onClick={() => onOpenChat ? onOpenChat(contact) : navigate(`/chats/${contact.conversationId || `new:${contact.phone}`}`)} 
+                style={{ background: "#f0fdf4", border: "1px solid #dcfce7", borderRadius: "6px", padding: "5px", color: "#00a884", cursor: "pointer" }}
+              >
+                <Send size={14} />
+              </button>
+              <button 
+                onClick={() => { setEditingContact({ ...contact }); setShowEditModal(true); }} 
+                style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "5px", color: "#475569", cursor: "pointer" }}
+              >
+                <Pencil size={14} />
+              </button>
+              <button 
+                onClick={() => handleDeleteContact(contact._id)} 
+                style={{ background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "8px", padding: "5px", color: "#ef4444", cursor: "pointer" }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </>
+          )}
         </div>
       </td>
     </tr>
@@ -121,7 +143,8 @@ const ContactTable = ({
   isAllSelectedOnPage, handleSelectAllOnPage, total, 
   isUniversalSelect, setIsUniversalSelect, setSelectedContactIds,
   handleContactClick, getStatusColor, customFields, navigate,
-  handleDeleteContact, setEditingContact, setShowEditModal, onOpenChat
+  handleDeleteContact, setEditingContact, setShowEditModal, onOpenChat,
+  deleted, handleRestoreContact
 }) => {
   return (
     <div style={{ background: "white", borderRadius: "16px", border: "1px solid #e2e8f0", display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.04)" }}>
@@ -163,11 +186,13 @@ const ContactTable = ({
                 handleContactClick={handleContactClick}
                 getStatusColor={getStatusColor}
                 customFields={customFields}
-                    navigate={navigate}
-                    onOpenChat={onOpenChat}
-                    handleDeleteContact={handleDeleteContact}
+                navigate={navigate}
+                onOpenChat={onOpenChat}
+                handleDeleteContact={handleDeleteContact}
                 setEditingContact={setEditingContact}
                 setShowEditModal={setShowEditModal}
+                deleted={deleted}
+                handleRestoreContact={handleRestoreContact}
               />
             ))}
           </tbody>

@@ -13,7 +13,7 @@ import ContactDrawer from "./ContactDrawer";
 import ImportMapperModal from "./ImportMapperModal";
 import EditContactModal from "./EditContactModal";
 
-const ContactManagerMain = () => {
+const ContactManagerMain = ({ deleted = false }) => {
   const navigate = useNavigate();
   const { activeAccount } = useWhatsAppAccount();
   
@@ -58,6 +58,9 @@ const ContactManagerMain = () => {
       queryParams.append("page", pageNum);
       queryParams.append("limit", limit);
       queryParams.append("showAllAccounts", "true");
+      if (deleted) {
+        queryParams.append("deleted", "true");
+      }
       
       const res = await api.get(`/contacts?${queryParams.toString()}`);
       setContacts(res.data.contacts || []);
@@ -67,11 +70,26 @@ const ContactManagerMain = () => {
     } finally {
       setLoading(false);
     }
-  }, [filters, limit]);
+  }, [filters, limit, deleted]);
 
   useEffect(() => {
     fetchContacts(page);
-  }, [page, limit, filters]);
+  }, [page, limit, filters, deleted]);
+
+  useEffect(() => {
+    setPage(1);
+    setSelectedContactIds(new Set());
+    setIsUniversalSelect(false);
+  }, [deleted]);
+
+  const handleRestoreContact = async (id) => {
+    try {
+      await api.patch(`/contacts/${id}`, { isDeleted: false });
+      fetchContacts(page);
+    } catch (err) {
+      alert("Failed to restore contact");
+    }
+  };
 
   const fetchMetadata = async () => {
     try {
@@ -247,6 +265,7 @@ const ContactManagerMain = () => {
         setShowImportModal={setShowImportModal}
         selectedCount={isUniversalSelect ? total : selectedContactIds.size}
         handleSendCampaign={() => navigate("/campaigns", { state: { bulkIds: Array.from(selectedContactIds), isUniversal: isUniversalSelect, filters } })}
+        deleted={deleted}
       />
 
       <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
@@ -278,13 +297,15 @@ const ContactManagerMain = () => {
             navigate={navigate}
             onOpenChat={handleOpenChat}
             handleDeleteContact={async (id) => {
-              if (window.confirm("Are you sure you want to delete this lead?")) {
+              if (window.confirm(deleted ? "Are you sure you want to permanently delete this lead? This cannot be undone." : "Are you sure you want to delete this lead?")) {
                 await api.delete(`/contacts/${id}`);
                 fetchContacts(page);
               }
             }}
             setEditingContact={setEditingContact}
             setShowEditModal={setShowEditModal}
+            deleted={deleted}
+            handleRestoreContact={handleRestoreContact}
           />
         ) : (
           <ContactKanban 

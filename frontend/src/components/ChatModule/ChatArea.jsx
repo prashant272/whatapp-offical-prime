@@ -15,7 +15,7 @@ const ChatArea = ({
   showQuickReplies, setShowQuickReplies, quickRepliesRef, quickReplies,
   pendingImage, setPendingImage, fileInputRef, handleMediaUpload,
   setShowTemplateModal, setShowContactInfo, showContactInfo,
-  formatDateLabel
+  formatDateLabel, replyToMessage, setReplyToMessage
 }) => {
   const handleInitiateCall = async (type) => {
     try {
@@ -211,6 +211,7 @@ const ChatArea = ({
                 formatWhatsAppText={formatWhatsAppText}
                 getProxiedUrl={getProxiedUrl}
                 templates={templates}
+                onReply={setReplyToMessage}
               />
             ))}
           </div>
@@ -289,31 +290,52 @@ const ChatArea = ({
             </div>
           )}
 
-          {/* Image/Media Preview Area */}
-          {pendingImage && (
-            <div style={{ padding: "10px 16px", background: "#f0f2f5", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "15px" }}>
-              <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "10px", overflow: "hidden", border: "2px solid #00a884", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", background: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                {pendingImage.isImage ? (
-                  <img src={pendingImage.previewUrl} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#00a884" }}>
-                    <Paperclip size={24} />
-                    <span style={{ fontSize: "0.6rem", fontWeight: "800" }}>DOC</span>
-                  </div>
-                )}
+            {/* Reply Preview Area */}
+            {replyToMessage && (
+              <div style={{ padding: "10px 16px", background: "#f0f2f5", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "15px" }}>
+                <div style={{ borderLeft: "4px solid #00a884", paddingLeft: "10px", flex: 1, overflow: "hidden" }}>
+                  <p style={{ margin: 0, fontSize: "0.75rem", fontWeight: "800", color: "#00a884" }}>
+                    Replying to {replyToMessage.from === "me" ? "yourself" : (selectedChat.contact?.name || selectedChat.phone)}
+                  </p>
+                  <p style={{ margin: 0, fontSize: "0.85rem", color: "#54656f", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {replyToMessage.body}
+                  </p>
+                </div>
                 <button
-                  onClick={() => setPendingImage(null)}
-                  style={{ position: "absolute", top: "2px", right: "2px", background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: "18px", height: "18px", cursor: "pointer", fontSize: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}
-                >✕</button>
+                  type="button"
+                  onClick={() => setReplyToMessage(null)}
+                  style={{ background: "none", border: "none", color: "#667781", cursor: "pointer", display: "flex", alignItems: "center" }}
+                >
+                  <Plus size={18} style={{ transform: "rotate(45deg)" }} />
+                </button>
               </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "700", color: "#111b21" }}>{pendingImage.isImage ? "Image selected" : "Document selected"}</p>
-                <p style={{ margin: 0, fontSize: "0.75rem", color: "#667781", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "200px" }}>
-                  {pendingImage.name || (pendingImage.isImage ? "Ready to send" : "document.pdf")}
-                </p>
+            )}
+
+            {/* Image/Media Preview Area */}
+            {pendingImage && (
+              <div style={{ padding: "10px 16px", background: "#f0f2f5", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "15px" }}>
+                <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "10px", overflow: "hidden", border: "2px solid #00a884", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", background: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {pendingImage.isImage ? (
+                    <img src={pendingImage.previewUrl} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#00a884" }}>
+                      <Paperclip size={24} />
+                      <span style={{ fontSize: "0.65rem", fontWeight: "800" }}>DOC</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setPendingImage(null)}
+                    style={{ position: "absolute", top: "2px", right: "2px", background: "rgba(0,0,0,0.6)", color: "white", border: "none", borderRadius: "50%", width: "18px", height: "18px", cursor: "pointer", fontSize: "10px", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  >✕</button>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "700", color: "#111b21" }}>{pendingImage.isImage ? "Image selected" : "Document selected"}</p>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "#667781", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "200px" }}>
+                    {pendingImage.name || (pendingImage.isImage ? "Ready to send" : "document.pdf")}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            )}
           <form onSubmit={handleSend} style={{ padding: "10px 16px", display: "flex", gap: "10px", alignItems: "center" }}>
             <input
               type="file"

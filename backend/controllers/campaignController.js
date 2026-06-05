@@ -80,6 +80,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
           const SUCCESS_STATUSES = ["sent", "delivered", "read"];
           const isSent = SUCCESS_STATUSES.includes(latestLog.status);
           const isFailed = latestLog.status === "failed";
+          const isUndeliverable = isFailed && latestLog.error && latestLog.error.toLowerCase().includes("undeliverable");
 
           if (isSent || isFailed) {
             const logPhone = latestLog.phone;
@@ -101,6 +102,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
                 subsector: subsectorName || "Unassigned",
                 isCampaignSent: isSent,
                 isCampaignFailed: isFailed,
+                isDeleted: isUndeliverable || false,
                 status: isSent ? "sent" : (isFailed ? "failed" : null),
                 accountsData: [{
                   whatsappAccountId: account._id,
@@ -138,6 +140,9 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               // ALWAYS update top-level status/campaign fallbacks as well for backwards compatibility
               contactObj.isCampaignSent = isSent;
               contactObj.isCampaignFailed = isFailed;
+              if (isUndeliverable) {
+                contactObj.isDeleted = true;
+              }
               if (!contactObj.sourceCampaign) contactObj.sourceCampaign = campaign.name;
               if (sectorName && contactObj.sector !== sectorName) contactObj.sector = sectorName;
               if (subsectorName && contactObj.subsector !== subsectorName) contactObj.subsector = subsectorName;
@@ -299,16 +304,19 @@ export const startCampaign = async (req, res) => {
       phone: { $in: uniquePhones }, 
       $or: [
         { isBlocked: true },
+        { isDeleted: true },
         { status: { $regex: new RegExp(`^(${excludePattern})$`, 'i') } }
       ]
-    }, 'phone status isBlocked');
+    }, 'phone status isBlocked isDeleted');
     
     const blockedPhones = new Set(blockedContacts.map(c => c.phone));
     const allowedPhones = uniquePhones.filter(phone => !blockedPhones.has(phone));
     
     const blockedLogs = blockedContacts.map(c => {
       let reason = "Blocked";
-      if (c.status && excludeStatuses.some(st => st.toLowerCase() === c.status.toLowerCase())) {
+      if (c.isDeleted) {
+         reason = "Deleted Lead";
+      } else if (c.status && excludeStatuses.some(st => st.toLowerCase() === c.status.toLowerCase())) {
          reason = `Skipped: ${c.status}`;
       } else if (c.isBlocked) {
          reason = "Opted-out/Blocked";
@@ -401,7 +409,14 @@ export const updateCampaignStatus = async (req, res) => {
       
       // Find remaining contacts (not in logs)
       const attemptedPhones = new Set(campaign.logs.map(l => l.phone));
-      const remainingContacts = (campaign.contacts || []).filter(c => !attemptedPhones.has(c.phone));
+      let remainingContacts = (campaign.contacts || []).filter(c => !attemptedPhones.has(c.phone));
+
+      if (remainingContacts.length > 0) {
+        const remainingPhones = remainingContacts.map(c => c.phone);
+        const deletedContacts = await Contact.find({ phone: { $in: remainingPhones }, isDeleted: true }, "phone");
+        const deletedPhones = new Set(deletedContacts.map(c => c.phone));
+        remainingContacts = remainingContacts.filter(c => !deletedPhones.has(c.phone));
+      }
 
       if (remainingContacts.length > 0) {
         processCampaignExecution(campaign, account, remainingContacts, campaign.template, templateComponents, 2, req, campaign.sector, campaign.subsector);
@@ -450,6 +465,15 @@ export const retryFailedContacts = async (req, res) => {
     // Filter out duplicates if multiple retries happened
     const failedPhones = [...new Set(failedLogs.map(l => l.phone))];
     
+    // Exclude any contacts that are soft-deleted (isDeleted === true)
+    const deletedContacts = await Contact.find({ phone: { $in: failedPhones }, isDeleted: true }, "phone");
+    const deletedPhones = new Set(deletedContacts.map(c => c.phone));
+    const allowedFailedPhones = failedPhones.filter(phone => !deletedPhones.has(phone));
+
+    if (allowedFailedPhones.length === 0) {
+      return res.status(400).json({ error: "All failed contacts are deleted leads and cannot be retried." });
+    }
+
     // We update status to RUNNING
     campaign.status = "RUNNING";
     await campaign.save();
@@ -458,12 +482,12 @@ export const retryFailedContacts = async (req, res) => {
     
     // We need templateComponents. They are stored in Message models but not in Campaign.
     // For a retry, we'll try to find the last template components from a previous message in this campaign.
-    const lastMsg = await Message.findOne({ to: { $in: failedPhones }, whatsappAccountId: account._id }).sort({ createdAt: -1 });
+    const lastMsg = await Message.findOne({ to: { $in: allowedFailedPhones }, whatsappAccountId: account._id }).sort({ createdAt: -1 });
     const templateComponents = lastMsg?.templateData?.components || [];
 
-    processCampaignExecution(campaign, account, failedPhones.map(p => ({ phone: p })), campaign.template, templateComponents, 2, req, campaign.sector, campaign.subsector);
+    processCampaignExecution(campaign, account, allowedFailedPhones.map(p => ({ phone: p })), campaign.template, templateComponents, 2, req, campaign.sector, campaign.subsector);
 
-    res.json({ message: "Retrying failed contacts", count: failedPhones.length });
+    res.json({ message: "Retrying failed contacts", count: allowedFailedPhones.length });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

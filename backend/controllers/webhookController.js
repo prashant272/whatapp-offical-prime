@@ -60,6 +60,20 @@ export const handleWebhook = async (req, res) => {
         if (status.status === "failed" && status.errors && status.errors[0]) {
           updateFields.error = status.errors[0].message || status.errors[0].title || "Delivery Failed";
         }
+
+        // Soft delete contact if delivery failed due to being undeliverable
+        if (status.status === "failed") {
+          const errMsg = (status.errors && status.errors[0])
+            ? (status.errors[0].message || status.errors[0].title || "")
+            : "";
+          if (errMsg.toLowerCase().includes("undeliverable")) {
+            const recipientPhone = normalizePhone(status.recipient_id);
+            if (recipientPhone) {
+              await Contact.updateMany({ phone: recipientPhone }, { $set: { isDeleted: true } });
+              console.log(`🗑️ Soft deleted contact ${recipientPhone} due to undeliverable message webhook.`);
+            }
+          }
+        }
         const updatedMsg = await Message.findOneAndUpdate(
           { messageId: status.id },
           { 
@@ -182,8 +196,28 @@ export const handleWebhook = async (req, res) => {
 
       if (message) {
         const from = normalizePhone(message.from); 
-        let bodyContent = "";
         let type = message.type || "text";
+
+        // Handle reactions separately
+        if (type === "reaction") {
+          const reactionInfo = message.reaction;
+          if (reactionInfo && reactionInfo.message_id) {
+            const targetMessageId = reactionInfo.message_id;
+            const emoji = reactionInfo.emoji || null;
+            const updatedMessage = await Message.findOneAndUpdate(
+              { messageId: targetMessageId },
+              { $set: { reaction: emoji } },
+              { new: true }
+            );
+            if (updatedMessage) {
+              console.log(`😀 Reaction updated for message ${targetMessageId}: ${emoji}`);
+              getIO().emit("message_reaction", { messageId: targetMessageId, reaction: emoji });
+            }
+          }
+          return res.sendStatus(200);
+        }
+
+        let bodyContent = "";
 
         let mediaUrl = null;
 
@@ -220,6 +254,16 @@ export const handleWebhook = async (req, res) => {
           return res.sendStatus(200);
         }
 
+        let quotedMessageId = null;
+        let quotedMessageBody = null;
+        if (message.context && message.context.id) {
+          quotedMessageId = message.context.id;
+          const quotedMsg = await Message.findOne({ messageId: quotedMessageId });
+          if (quotedMsg) {
+            quotedMessageBody = quotedMsg.body;
+          }
+        }
+
         const newMessage = new Message({
           messageId: message.id,
           from,
@@ -228,7 +272,9 @@ export const handleWebhook = async (req, res) => {
           type,
           mediaUrl,
           direction: "inbound",
-          whatsappAccountId: account?._id
+          whatsappAccountId: account?._id,
+          quotedMessageId,
+          quotedMessageBody
         });
         await newMessage.save();
 

@@ -46,19 +46,23 @@ export const sendTemplateMessage = async (account, to, templateName, languageCod
   }
 };
 
-export const sendTextMessage = async (account, to, text) => {
+export const sendTextMessage = async (account, to, text, quotedMessageId = null) => {
   let cleanTo = to.toString().replace(/\D/g, "");
   if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
   try {
+    const payload = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: cleanTo,
+      type: "text",
+      text: { body: text },
+    };
+    if (quotedMessageId) {
+      payload.context = { message_id: quotedMessageId };
+    }
     const res = await axios.post(
       `${BASE_URL}/${account.phoneNumberId}/messages`,
-      {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: cleanTo,
-        type: "text",
-        text: { body: text },
-      },
+      payload,
       { headers: getHeaders(account.accessToken) }
     );
     return res.data;

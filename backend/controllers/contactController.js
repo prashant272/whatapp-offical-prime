@@ -40,20 +40,25 @@ export const getContacts = async (req, res, next) => {
       page = 1, limit = 50, skip: skipParam, onlyPhones, 
       assignedUsers, excludeUsers,
       statuses, excludeStatuses,
-      campaignStatus, excludeCampaignStatus 
+      campaignStatus, excludeCampaignStatus,
+      deleted
     } = req.query;
 
     let query = {};
     const isAll = showAllAccounts === "true" || accountId === "all" || !accountId;
 
-    if (isAll) {
-      query = {};
-    } else {
+    if (!isAll) {
       query.$or = [
         { whatsappAccountId: accountId },
         { whatsappAccountId: null },
         { whatsappAccountId: { $exists: false } }
       ];
+    }
+
+    if (deleted === "true") {
+      query.isDeleted = true;
+    } else {
+      query.isDeleted = { $ne: true };
     }
 
     if (search) {
@@ -436,9 +441,16 @@ export const getUniqueTags = async (req, res, next) => {
 export const deleteContact = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const contact = await Contact.findByIdAndDelete(id);
+    const contact = await Contact.findById(id);
     if (!contact) return res.status(404).json({ error: "Contact not found" });
-    res.json({ message: "Contact deleted successfully" });
+
+    if (contact.isDeleted) {
+      await Contact.deleteMany({ phone: contact.phone });
+      res.json({ message: "Contact deleted permanently" });
+    } else {
+      await Contact.updateMany({ phone: contact.phone }, { $set: { isDeleted: true } });
+      res.json({ message: "Contact moved to trash successfully" });
+    }
   } catch (err) {
     next(err);
   }

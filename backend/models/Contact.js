@@ -56,6 +56,7 @@ const contactSchema = new mongoose.Schema({
   }],
   isCampaignSent: { type: Boolean, default: false },
   isCampaignFailed: { type: Boolean, default: false },
+  isDeleted: { type: Boolean, default: false },
   
   // Nested account-specific details to support multiple sender accounts on one global contact
   accountsData: [{
@@ -81,6 +82,7 @@ contactSchema.index({ subsector: 1 });
 contactSchema.index({ status: 1 });
 contactSchema.index({ assignedTo: 1 });
 contactSchema.index({ isCampaignSent: 1, isCampaignFailed: 1 });
+contactSchema.index({ isDeleted: 1 });
 
 // Pre-validate hook to clean data before validation runs
 contactSchema.pre("validate", function(next) {

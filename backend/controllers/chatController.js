@@ -269,14 +269,22 @@ export const resolveConversationByPhone = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { body } = req.body;
+    const { body, quotedMessageId } = req.body;
     const to = normalizePhone(req.body.to);
     const account = req.whatsappAccount;
 
     if (!account) throw new Error("No active WhatsApp account found");
 
-    const metaRes = await sendTextMessage(account, to, body);
+    const metaRes = await sendTextMessage(account, to, body, quotedMessageId);
     const messageId = metaRes.messages?.[0]?.id;
+
+    let quotedMessageBody = null;
+    if (quotedMessageId) {
+      const quotedMsg = await Message.findOne({ messageId: quotedMessageId });
+      if (quotedMsg) {
+        quotedMessageBody = quotedMsg.body;
+      }
+    }
 
     const newMessage = new Message({
       messageId,
@@ -284,7 +292,9 @@ export const sendMessage = async (req, res) => {
       to,
       body,
       direction: "outbound",
-      whatsappAccountId: account._id
+      whatsappAccountId: account._id,
+      quotedMessageId,
+      quotedMessageBody
     });
     await newMessage.save();
 

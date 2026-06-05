@@ -15,6 +15,7 @@ import {
   setActiveChat,
   addMessage,
   updateMessageStatus,
+  updateMessageReaction,
   fetchMessages as fetchReduxMessages,
   fetchConversations as fetchReduxConversations,
   sendMessage as sendReduxMessage,
@@ -46,6 +47,7 @@ const ChatModule = () => {
   const [templates, setTemplates] = useState([]);
   const [templatePresets, setTemplatePresets] = useState([]);
   const [quickReplies, setQuickReplies] = useState([]);
+  const [replyToMessage, setReplyToMessage] = useState(null);
   const [selectedPreset, setSelectedPreset] = useState("");
   const [executives, setExecutives] = useState([]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -528,15 +530,20 @@ const ChatModule = () => {
         const tempId = "temp-" + Date.now();
         const optimisticMsg = {
           _id: tempId, from: "me", to: selectedChat.phone, body: text, type: "text",
-          direction: "outbound", status: "sending", timestamp: new Date().toISOString()
+          direction: "outbound", status: "sending", timestamp: new Date().toISOString(),
+          quotedMessageId: replyToMessage ? replyToMessage.messageId : undefined,
+          quotedMessageBody: replyToMessage ? replyToMessage.body : undefined
         };
 
         dispatch(addMessage(optimisticMsg));
         setNewMessage("");
+        const replyId = replyToMessage ? replyToMessage.messageId : null;
+        setReplyToMessage(null);
 
         try {
           const resultAction = await dispatch(sendReduxMessage({
-            to: selectedChat.phone, body: text, accountId: selectedChat.whatsappAccountId
+            to: selectedChat.phone, body: text, accountId: selectedChat.whatsappAccountId,
+            quotedMessageId: replyId
           }));
 
           if (sendReduxMessage.fulfilled.match(resultAction)) {
@@ -826,6 +833,11 @@ const ChatModule = () => {
   const formatWhatsAppText = useCallback((text) => {
     if (!text) return "";
     let formatted = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // Hyperlink matching: format http/https/ftp or standard domains as clickable <a> tags
+    const urlRegex = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+    formatted = formatted.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #039be5; text-decoration: underline; word-break: break-all;">$1</a>');
+
     formatted = formatted.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
     formatted = formatted.replace(/_([^_]+)_/g, "<em>$1</em>");
     formatted = formatted.replace(/~([^~]+)~/g, "<del>$1</del>");
@@ -902,6 +914,9 @@ const ChatModule = () => {
   }, [accounts]);
 
   // --- Effects for Data Fetching & Socket ---
+  useEffect(() => {
+    setReplyToMessage(null);
+  }, [chatId]);
 
   useEffect(() => {
     const fetchGlobalData = async () => {
@@ -1000,6 +1015,7 @@ const ChatModule = () => {
     });
 
     socket.on("status_update", ({ messageId, status }) => { dispatch(updateMessageStatus({ messageId, status })); });
+    socket.on("message_reaction", ({ messageId, reaction }) => { dispatch(updateMessageReaction({ messageId, reaction })); });
     socket.on("conversation_status_update", ({ phone, status }) => { refetchConvs(); });
 
     socket.on("chat_assigned", ({ conversation, isNewAssignment = true }) => {
@@ -1218,6 +1234,7 @@ const ChatModule = () => {
         handleMediaUpload={handleMediaUpload} setShowTemplateModal={setShowTemplateModal}
         setShowContactInfo={setShowContactInfo} showContactInfo={showContactInfo}
         formatDateLabel={formatDateLabel}
+        replyToMessage={replyToMessage} setReplyToMessage={setReplyToMessage}
       />
 
       <ContactDetailSidebar

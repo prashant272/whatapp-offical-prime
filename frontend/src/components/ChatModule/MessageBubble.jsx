@@ -1,7 +1,7 @@
 import React, { memo } from "react";
-import { Check, CheckCheck, AlertCircle, FileText, Loader2 } from "lucide-react";
+import { Check, CheckCheck, AlertCircle, FileText, Loader2, CornerUpLeft } from "lucide-react";
 
-const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUrl, templates }) => {
+const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUrl, templates, onReply }) => {
   return (
     <div
       className={`msg-bubble ${msg.direction === "outbound" ? "msg-outbound" : "msg-inbound"}`}
@@ -10,6 +10,45 @@ const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUr
         position: "relative"
       }}
     >
+      {msg.reaction && (
+        <div style={{
+          position: "absolute",
+          bottom: "-12px",
+          [msg.direction === "outbound" ? "left" : "right"]: "12px",
+          background: "white",
+          borderRadius: "12px",
+          padding: "2px 6px",
+          fontSize: "0.85rem",
+          boxShadow: "0 2px 5px rgba(0,0,0,0.15)",
+          border: "1px solid #e2e8f0",
+          zIndex: 5,
+          display: "flex",
+          alignItems: "center",
+          pointerEvents: "none"
+        }}>
+          {msg.reaction}
+        </div>
+      )}
+      {msg.quotedMessageBody && (
+        <div style={{
+          background: msg.direction === "outbound" ? "rgba(0,0,0,0.08)" : "rgba(0,0,0,0.04)",
+          borderLeft: "4px solid #00a884",
+          borderRadius: "6px",
+          padding: "6px 10px",
+          marginBottom: "8px",
+          fontSize: "0.8rem",
+          color: "#475569",
+          maxWidth: "100%",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap"
+        }}>
+          <div style={{ fontWeight: "700", fontSize: "0.7rem", color: "#00a884", marginBottom: "2px" }}>
+            Quoted Message
+          </div>
+          {msg.quotedMessageBody}
+        </div>
+      )}
       {msg.status === "sending" && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 10 }}>
           <Loader2 className="animate-spin" size={24} color="#00a884" />
@@ -58,6 +97,25 @@ const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUr
                 {(msg.status === "delivered" || msg.status === "read") && <CheckCheck size={15} />}
                 {msg.status === "failed" && <AlertCircle size={14} />}
               </span>
+            )}
+            {onReply && msg.status !== "sending" && (
+              <button 
+                type="button"
+                onClick={() => onReply(msg)}
+                title="Reply to message"
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: "2px",
+                  cursor: "pointer",
+                  color: "#8696a0",
+                  display: "flex",
+                  alignItems: "center",
+                  marginLeft: "5px"
+                }}
+              >
+                <CornerUpLeft size={12} />
+              </button>
             )}
           </div>
         </div>
@@ -110,6 +168,25 @@ const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUr
                 {(msg.status === "delivered" || msg.status === "read") && <CheckCheck size={15} />}
                 {msg.status === "failed" && <AlertCircle size={14} />}
               </span>
+            )}
+            {onReply && msg.status !== "sending" && (
+              <button 
+                type="button"
+                onClick={() => onReply(msg)}
+                title="Reply to message"
+                style={{
+                  background: "none",
+                  border: "none",
+                  padding: "2px",
+                  cursor: "pointer",
+                  color: "#8696a0",
+                  display: "flex",
+                  alignItems: "center",
+                  marginLeft: "5px"
+                }}
+              >
+                <CornerUpLeft size={12} />
+              </button>
             )}
           </div>
         </div>

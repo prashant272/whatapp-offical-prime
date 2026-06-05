@@ -82,6 +82,10 @@ const QuickReplyManager = () => {
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
 
+    // Hyperlink matching: format http/https/ftp or standard domains as clickable <a> tags
+    const urlRegex = /(\b(https?|ftp|file):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+    formatted = formatted.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color: #039be5; text-decoration: underline; word-break: break-all;">$1</a>');
+
     // Bold: *text*
     formatted = formatted.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
     // Italic: _text_

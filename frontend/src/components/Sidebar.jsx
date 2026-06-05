@@ -196,8 +196,8 @@ const Sidebar = ({ user, menuItems, handleLogout, isCollapsed, setIsCollapsed })
         paddingRight: isCollapsed ? "0" : "5px"
       }}>
         {(() => {
-          const contactItems = visibleMenu.filter(item => ["contacts", "custom-fields"].includes(item.id));
-          const otherItems = visibleMenu.filter(item => !["contacts", "custom-fields"].includes(item.id));
+          const contactItems = visibleMenu.filter(item => ["contacts", "deleted-contacts", "custom-fields"].includes(item.id));
+          const otherItems = visibleMenu.filter(item => !["contacts", "deleted-contacts", "custom-fields"].includes(item.id));
 
           return (
             <>

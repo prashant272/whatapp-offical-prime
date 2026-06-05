@@ -91,7 +91,8 @@ export const initAutomationCron = () => {
         // We "populate" whatsappAccountId so we know EXACTLY which account this customer belongs to.
         const contacts = await Contact.find({
           status: rule.status,
-          isBlocked: { $ne: true }
+          isBlocked: { $ne: true },
+          isDeleted: { $ne: true }
         }).populate("whatsappAccountId");
 
         for (const contact of contacts) {

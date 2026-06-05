@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap, Settings, Bot, GitBranch, Layers } from "lucide-react";
+import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap, Settings, Bot, GitBranch, Layers, Trash2 } from "lucide-react";
 import io from "socket.io-client";
 import api from "./api";
 import TemplateManager from "./components/TemplateManager";
@@ -95,6 +95,7 @@ function AppContent() {
     { id: "flows", label: "Smart Flows", icon: GitBranch, path: "/flows", roles: ["Admin", "Manager"] },
     { id: "settings", label: "WhatsApp Setup", icon: Settings, path: "/settings", roles: ["Admin"] },
     { id: "contacts", label: "Contacts", icon: UserPlus, path: "/contacts", roles: ["Admin", "Manager", "Executive"] },
+    { id: "deleted-contacts", label: "Deleted Leads", icon: Trash2, path: "/deleted-contacts", roles: ["Admin", "Manager", "Executive"] },
     { id: "custom-fields", label: "Custom Fields", icon: Layers, path: "/custom-fields", roles: ["Admin", "Manager"] },
     { id: "activity", label: "Activity", icon: History, path: "/activity", roles: ["Admin", "Manager"] },
     { id: "users", label: "Team", icon: UserPlus, path: "/users", roles: ["Admin"] },
@@ -244,6 +245,7 @@ function AppContent() {
                 <Route path="/automation" element={<AutoReplyManager />} />
                 <Route path="/flows" element={<FlowManagerWrapper />} />
                 <Route path="/contacts" element={<ContactManager />} />
+                <Route path="/deleted-contacts" element={<ContactManager deleted={true} />} />
                 <Route path="/custom-fields" element={<CustomFieldManager />} />
                 <Route path="/settings" element={<WhatsAppAccountSettings />} />
                 <Route path="*" element={<Navigate to="/" />} />

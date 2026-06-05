@@ -32,9 +32,9 @@ export const fetchConversations = createAsyncThunk(
 
 export const sendMessage = createAsyncThunk(
   "chat/sendMessage",
-  async ({ to, body, accountId }, { rejectWithValue }) => {
+  async ({ to, body, accountId, quotedMessageId }, { rejectWithValue }) => {
     try {
-      const res = await api.post("/messages/send", { to, body }, {
+      const res = await api.post("/messages/send", { to, body, quotedMessageId }, {
         headers: { "x-whatsapp-account-id": accountId }
       });
       return res.data; // Full data including conversation
@@ -144,6 +144,13 @@ const chatSlice = createSlice({
           if (state.messages[index]) state.messages[index].status = status;
         }
       }
+    },
+    updateMessageReaction: (state, action) => {
+      const { messageId, reaction } = action.payload;
+      const index = state.messages.findIndex(m => m.messageId === messageId);
+      if (index !== -1) {
+        if (state.messages[index]) state.messages[index].reaction = reaction;
+      }
     }
   },
   extraReducers: (builder) => {
@@ -177,7 +184,8 @@ export const {
   setSelectedAccountIds,
   setActiveChat,
   addMessage,
-  updateMessageStatus
+  updateMessageStatus,
+  updateMessageReaction
 } = chatSlice.actions;
 
 export default chatSlice.reducer;
