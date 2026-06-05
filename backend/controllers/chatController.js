@@ -210,7 +210,7 @@ export const getMessages = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const messages = await Message.find(filter)
-      .select("body from to timestamp status direction type mediaUrl templateData")
+      .select("messageId body from to timestamp status direction type mediaUrl templateData reaction quotedMessageId quotedMessageBody")
       .sort({ timestamp: -1 })
       .skip(skip)
       .limit(limit);
