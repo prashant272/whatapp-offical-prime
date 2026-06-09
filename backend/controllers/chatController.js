@@ -473,11 +473,11 @@ export const sendChatImageMessage = async (req, res) => {
 
     // Detect if it's a document based on URL or provided type
     const isDocument = providedType === "document" ||
-                       imageUrl.toLowerCase().endsWith(".pdf") ||
-                       imageUrl.toLowerCase().endsWith(".doc") ||
-                       imageUrl.toLowerCase().endsWith(".docx") ||
-                       imageUrl.toLowerCase().endsWith(".xlsx") ||
-                       imageUrl.toLowerCase().endsWith(".xls");
+      imageUrl.toLowerCase().endsWith(".pdf") ||
+      imageUrl.toLowerCase().endsWith(".doc") ||
+      imageUrl.toLowerCase().endsWith(".docx") ||
+      imageUrl.toLowerCase().endsWith(".xlsx") ||
+      imageUrl.toLowerCase().endsWith(".xls");
 
     let metaRes;
     let type = "image";

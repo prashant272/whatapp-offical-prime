@@ -95,6 +95,7 @@ const ChatModule = () => {
   const setSearchQuery = (val) => dispatch(setReduxSearchQuery(val));
   const setSelectedAccountIds = (val) => dispatch(setReduxSelectedAccountIds(val));
 
+  const lastFetchParamsRef = useRef(null);
   const [conversations, setConversations] = useState([]);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [isFetchingNextPage, setIsFetchingNextPage] = useState(false);
@@ -185,8 +186,28 @@ const ChatModule = () => {
   }, [searchQuery]);
 
   const loadConversations = useCallback(async (cursor = null) => {
-    setIsFetchingNextPage(true);
     const accIds = selectedAccountIds.length > 0 ? selectedAccountIds.join(",") : activeAccount?._id;
+    
+    // Skip redundant fresh loads if the query parameters haven't changed
+    const currentParams = {
+      accIds,
+      statusFilter,
+      userFilter,
+      sectorFilter,
+      debouncedSearch,
+      filter
+    };
+
+    if (!cursor && lastFetchParamsRef.current && 
+        JSON.stringify(lastFetchParamsRef.current) === JSON.stringify(currentParams)) {
+      return;
+    }
+
+    if (!cursor) {
+      lastFetchParamsRef.current = currentParams;
+    }
+
+    setIsFetchingNextPage(true);
     const resultAction = await dispatch(fetchReduxConversations({
       cursor,
       status: statusFilter,
@@ -203,15 +224,23 @@ const ChatModule = () => {
       let finalConvs = newConvs;
       const currentChatId = window.location.pathname.split("/").pop();
 
-      if (!cursor) {
-        const isPresent = newConvs.find(c => c._id === currentChatId || c.phone === currentChatId);
-        if (!isPresent && currentChatId && currentChatId.length > 5) {
+      if (!cursor && currentChatId) {
+        const cleanCurrentChatId = currentChatId.replace(/\D/g, "");
+        const isPresent = newConvs.find(c => {
+          if (c._id === currentChatId) return true;
+          const cleanPhone = c.phone ? c.phone.replace(/\D/g, "") : "";
+          if (cleanPhone && cleanPhone === cleanCurrentChatId) return true;
+          if (currentChatId.startsWith("new:") && cleanPhone === currentChatId.split(":")[1].replace(/\D/g, "")) return true;
+          return false;
+        });
+
+        if (!isPresent && currentChatId.length > 5) {
           try {
             let res;
             if (/^[0-9a-fA-F]{24}$/.test(currentChatId)) {
               res = await api.get(`/conversations/${currentChatId}`);
             } else {
-              res = await api.get(`/conversations/resolve?phone=${currentChatId}&accountId=${activeAccount?._id}`);
+              res = await api.get(`/conversations/resolve?phone=${currentChatId.replace("new:", "")}&accountId=${activeAccount?._id}`);
             }
             const chatData = res.data?.conversation || res.data;
             if (chatData && chatData._id) {
@@ -259,7 +288,10 @@ const ChatModule = () => {
     }
   };
 
-  const refetchConvs = () => loadConversations();
+  const refetchConvs = () => {
+    lastFetchParamsRef.current = null;
+    loadConversations();
+  };
 
   const selectedChat = useMemo(() => {
     if (!chatId) return null;

@@ -100,7 +100,7 @@ export const sendImageMessage = async (account, to, imageUrl, caption = "") => {
 export const sendDocumentMessage = async (account, to, documentUrl, filename = "document.pdf", caption = "") => {
   let cleanTo = to.toString().replace(/\D/g, "");
   if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
-  
+
   console.log(`📤 Attempting to send Document to ${cleanTo}`);
   console.log(`📄 URL: ${documentUrl}`);
   console.log(`📎 Filename: ${filename}`);
@@ -113,8 +113,8 @@ export const sendDocumentMessage = async (account, to, documentUrl, filename = "
         recipient_type: "individual",
         to: cleanTo,
         type: "document",
-        document: { 
-          link: documentUrl, 
+        document: {
+          link: documentUrl,
           caption: caption || undefined,
           filename: filename
         },
@@ -205,9 +205,9 @@ export const uploadMediaToMeta = async (accessToken, fileUrl) => {
     const fileData = Buffer.from(fileRes.data);
     const contentType = fileRes.headers["content-type"] || "image/jpeg";
     const fileLength = fileData.length;
-    
+
     const APP_ID = "4777118855760718"; // Found via debug_token
-    
+
     // Step 1: Create Upload Session
     console.log(`🚀 Creating Meta Upload Session (Size: ${fileLength} bytes)`);
     const sessionRes = await axios.post(
@@ -223,7 +223,7 @@ export const uploadMediaToMeta = async (accessToken, fileUrl) => {
       }
     );
     const sessionId = sessionRes.data.id;
-    
+
     // Step 2: Upload Data
     console.log(`📤 Uploading bytes to Meta Session: ${sessionId}`);
     const uploadRes = await axios.post(
@@ -236,7 +236,7 @@ export const uploadMediaToMeta = async (accessToken, fileUrl) => {
         }
       }
     );
-    
+
     console.log(`✅ Meta Media Handle Obtained: ${uploadRes.data.h}`);
     return uploadRes.data.h;
   } catch (error) {

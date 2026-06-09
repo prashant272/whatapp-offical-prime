@@ -27,7 +27,7 @@ export const throttleCampaign = async (account, contacts, templateName, sendFunc
           continue;
         }
 
-        // Handle Time Window (8 AM - 7 PM) - Using IST (India Time) (Robust and 100% timezone-independent extraction via Intl)
+        // Handle Time Window (8 AM - 8 PM) - Using IST (India Time) (Robust and 100% timezone-independent extraction via Intl)
         const dateNow = new Date();
         let istHour = 12; // Fallback
         try {
@@ -36,7 +36,7 @@ export const throttleCampaign = async (account, contacts, templateName, sendFunc
           const utcTime = dateNow.getTime() + (dateNow.getTimezoneOffset() * 60000);
           istHour = new Date(utcTime + (3600000 * 5.5)).getHours();
         }
-        const isOutsideWindow = istHour < 8 || istHour >= 19;
+        const isOutsideWindow = istHour < 8 || istHour >= 20;
 
         if (isOutsideWindow && !campaign.allowOutsideHours) {
           console.log(`🌙 Outside business hours (IST ${istHour}:00). Campaign "${campaign.name}" is waiting...`);

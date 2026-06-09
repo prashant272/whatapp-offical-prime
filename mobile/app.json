@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "PrimeimpactChat",
+    "slug": "whatapp-official-prime",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#008069"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.primeimpact.official"
+    },
+    "android": {
+      "package": "com.primeimpact.official",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b36a7ecd-b630-490f-9d37-8db3762fa824"
+      }
+    }
+  }
+}
