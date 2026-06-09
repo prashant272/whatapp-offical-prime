@@ -2,6 +2,8 @@ import { verifyContacts } from "../services/whatsappService.js";
 import Contact from "../models/Contact.js";
 import Conversation from "../models/Conversation.js";
 import Timeline from "../models/Timeline.js";
+import Campaign from "../models/Campaign.js";
+import Message from "../models/Message.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 
 export const verifyNumbers = async (req, res, next) => {
@@ -41,6 +43,7 @@ export const getContacts = async (req, res, next) => {
       assignedUsers, excludeUsers,
       statuses, excludeStatuses,
       campaignStatus, excludeCampaignStatus,
+      campaignName,
       deleted
     } = req.query;
 
@@ -90,6 +93,13 @@ export const getContacts = async (req, res, next) => {
     if (tag) query.tags = { $in: [tag] };
     if (sector) query.sector = sector;
     if (subsector) query.subsector = subsector;
+
+    if (campaignName) {
+      query.$or = [
+        { sourceCampaign: campaignName },
+        { "accountsData.sourceCampaign": campaignName }
+      ];
+    }
 
     if (campaignStatus) {
       const statusArr = Array.isArray(campaignStatus) ? campaignStatus : campaignStatus.split(',');
@@ -621,6 +631,76 @@ export const toggleReminder = async (req, res, next) => {
     reminder.isCompleted = !reminder.isCompleted;
     await contact.save();
     res.json(contact);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const checkCampaignHistory = async (req, res, next) => {
+  try {
+    const { phones } = req.body;
+    if (!phones || !Array.isArray(phones)) {
+      return res.status(400).json({ error: "Invalid phones list" });
+    }
+
+    const cleanPhones = phones.map(p => String(p).replace(/\D/g, "")).filter(Boolean);
+    const phoneVariations = new Set();
+    const phoneLookupMap = new Map();
+
+    phones.forEach(original => {
+      const cleanOriginal = String(original).replace(/\D/g, "");
+      if (!cleanOriginal) return;
+      
+      phoneVariations.add(cleanOriginal);
+      phoneLookupMap.set(cleanOriginal, original);
+
+      if (cleanOriginal.length === 10) {
+        const withCode = "91" + cleanOriginal;
+        phoneVariations.add(withCode);
+        phoneLookupMap.set(withCode, original);
+      } else if (cleanOriginal.length === 12 && cleanOriginal.startsWith("91")) {
+        const withoutCode = cleanOriginal.substring(2);
+        phoneVariations.add(withoutCode);
+        phoneLookupMap.set(withoutCode, original);
+      }
+    });
+
+    const queryPhones = Array.from(phoneVariations);
+    const queryPhonesSet = new Set(queryPhones);
+
+    // Find campaigns containing these phones in logs with field projection
+    const campaigns = await Campaign.find({
+      "logs.phone": { $in: queryPhones }
+    }, {
+      name: 1,
+      whatsappAccountId: 1,
+      startedAt: 1,
+      logs: 1
+    })
+    .populate("whatsappAccountId", "name")
+    .lean();
+
+    const history = [];
+
+    campaigns.forEach(camp => {
+      if (!camp.logs) return;
+      
+      camp.logs.forEach(log => {
+        const cleanLogPhone = String(log.phone).replace(/\D/g, "");
+        if (queryPhonesSet.has(cleanLogPhone)) {
+          const matchedOriginal = phoneLookupMap.get(cleanLogPhone) || log.phone;
+          history.push({
+            phone: matchedOriginal,
+            campaignName: camp.name,
+            accountName: camp.whatsappAccountId?.name || "Primary Account",
+            sentAt: log.sentAt || camp.startedAt,
+            status: log.status
+          });
+        }
+      });
+    });
+
+    res.json({ history });
   } catch (err) {
     next(err);
   }

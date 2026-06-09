@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import api, { API_BASE } from "../api";
-import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud, Smartphone, Calendar, Clock, Trash2, RotateCcw } from "lucide-react";
+import { Send, List, UserPlus, Play, CheckCircle2, AlertCircle, Eye, Type, MousePointer2, FileUp, UploadCloud, Smartphone, Calendar, Clock, Trash2, RotateCcw, Loader2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import { io } from "socket.io-client";
@@ -15,6 +15,7 @@ const CampaignManager = () => {
   const [presets, setPresets] = useState([]);
   const [selectedPreset, setSelectedPreset] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Processing...");
   const [isUploading, setIsUploading] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
@@ -56,6 +57,11 @@ const CampaignManager = () => {
   const [excludeUsers, setExcludeUsers] = useState(false);
   const [excludeCampaignStatus, setExcludeCampaignStatus] = useState(false);
   const [existingNumbers, setExistingNumbers] = useState([]); // Array of { phone, sector }
+  const [campaignHistory, setCampaignHistory] = useState([]);
+  const [showHistoryPopup, setShowHistoryPopup] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [checkingMessages, setCheckingMessages] = useState(false);
+  const [checkingHistory, setCheckingHistory] = useState(false);
   const [bulkSector, setBulkSector] = useState("");
   const [showRecampaignModal, setShowRecampaignModal] = useState(false);
   const [recampaignSource, setRecampaignSource] = useState(null);
@@ -137,10 +143,11 @@ const CampaignManager = () => {
 
   const fetchData = async () => {
     if (!activeAccount) return;
+    setLoadingMessage("Fetching campaigns and templates...");
     setLoading(true);
     try {
       const [campRes, tempRes, presetRes, tagRes] = await Promise.all([
-        api.get("/campaigns").catch(e => ({ data: [] })),
+        api.get("/campaigns", { headers: { "x-whatsapp-account-id": "all" } }).catch(e => ({ data: [] })),
         api.get("/templates").catch(e => ({ data: [] })),
         api.get("/presets").catch(e => ({ data: [] })),
         api.get("/contacts/tags").catch(e => ({ data: [] }))
@@ -254,6 +261,7 @@ const CampaignManager = () => {
   const handleRecampaign = async (camp) => {
     let fullCamp = camp;
     if (!camp.contacts || camp.contacts.length === 0) {
+      setLoadingMessage("Loading campaign data for copy...");
       setLoading(true);
       fullCamp = await fetchFullCampaign(camp._id);
       setLoading(false);
@@ -439,6 +447,8 @@ const CampaignManager = () => {
     const phones = newCampaign.contactsRaw.split("\n").map(p => p.trim()).filter(p => p.length > 5);
     if (phones.length === 0) return alert("No numbers to verify.");
 
+    setVerifying(true);
+    setLoadingMessage("Checking WhatsApp status for numbers...");
     setLoading(true);
     try {
       const res = await api.post("/contacts/verify", { phones });
@@ -452,6 +462,7 @@ const CampaignManager = () => {
     } catch (err) {
       alert("Verification failed: " + (err.response?.data?.error || err.message));
     } finally {
+      setVerifying(false);
       setLoading(false);
     }
   };
@@ -460,6 +471,8 @@ const CampaignManager = () => {
     const phones = newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5);
     if (phones.length === 0) return alert("No numbers to check.");
 
+    setCheckingMessages(true);
+    setLoadingMessage("Scanning database for previously messaged contacts...");
     setLoading(true);
     try {
       const res = await api.post("/contacts/check-existing", { phones });
@@ -474,6 +487,27 @@ const CampaignManager = () => {
     } catch (err) {
       alert("Check failed: " + (err.response?.data?.error || err.message));
     } finally {
+      setCheckingMessages(false);
+      setLoading(false);
+    }
+  };
+
+  const checkCampaignHistory = async () => {
+    const phones = newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(p => p.length > 5);
+    if (phones.length === 0) return alert("No numbers to check.");
+
+    setCheckingHistory(true);
+    setLoadingMessage("Analyzing campaign dispatch logs...");
+    setLoading(true);
+    try {
+      const res = await api.post("/contacts/check-campaign-history", { phones });
+      const found = res.data.history || [];
+      setCampaignHistory(found);
+      setShowHistoryPopup(true);
+    } catch (err) {
+      alert("Campaign history check failed: " + (err.response?.data?.error || err.message));
+    } finally {
+      setCheckingHistory(false);
       setLoading(false);
     }
   };
@@ -902,7 +936,7 @@ const CampaignManager = () => {
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: "0.7rem", color: "#667781", fontWeight: "600" }}>Active Filters:</span>
                   {selectedSourceType && selectedSourceValue
-                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "tag" ? "Tag" : "Sector"}: {selectedSourceValue} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
+                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "campaign" ? "Campaign" : "Sector"}: {selectedSourceValue} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
                     : <span style={{ background: "#f0f2f5", color: "#667781", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem" }}>All Categories</span>
                   }
                   {selectedStatuses.length > 0
@@ -933,7 +967,7 @@ const CampaignManager = () => {
                     onChange={(e) => { setSelectedSourceType(e.target.value); setSelectedSourceValue(""); setSelectedSubsectorValue(""); }}
                   >
                     <option value="">All Contacts</option>
-                    <option value="tag">By Tag</option>
+                    <option value="campaign">By Campaign</option>
                     <option value="sector">By Sector</option>
                   </select>
                 </div>
@@ -947,7 +981,12 @@ const CampaignManager = () => {
                     disabled={!selectedSourceType}
                   >
                     <option value="">-- Select Value --</option>
-                    {selectedSourceType === "tag" ? tags.map(t => <option key={t} value={t}>{t}</option>) :
+                    {selectedSourceType === "campaign" ? campaigns
+                      .map(c => {
+                        const accName = c.whatsappAccountId?.name || "";
+                        const displayName = accName ? `${c.name} (${accName})` : c.name;
+                        return <option key={c._id} value={c.name}>{displayName}</option>;
+                      }) :
                       selectedSourceType === "sector" ? sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>) : null}
                   </select>
                 </div>
@@ -1146,7 +1185,13 @@ const CampaignManager = () => {
                     onClick={async () => {
                       try {
                         let url = `/contacts?limit=${loadLimit}&skip=${loadSkip}&showAllAccounts=true&onlyPhones=true`;
-                        if (selectedSourceType && selectedSourceValue) url += `&${selectedSourceType}=${selectedSourceValue}`;
+                        if (selectedSourceType && selectedSourceValue) {
+                          if (selectedSourceType === "campaign") {
+                            url += `&campaignName=${selectedSourceValue}`;
+                          } else {
+                            url += `&${selectedSourceType}=${selectedSourceValue}`;
+                          }
+                        }
                         if (selectedSourceType === "sector" && selectedSubsectorValue) url += `&subsector=${selectedSubsectorValue}`;
                         if (selectedStatuses.length > 0) url += `&statuses=${selectedStatuses.join(",")}&excludeStatuses=${excludeStatuses}`;
                         if (selectedUsers.length > 0) url += `&assignedUsers=${selectedUsers.join(",")}&excludeUsers=${excludeUsers}`;
@@ -1178,11 +1223,72 @@ const CampaignManager = () => {
                   </span>
                 )}
               </p>
-              <div style={{ display: "flex", gap: "10px" }}>
+              <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
                 <input type="file" ref={fileInputRef} style={{ display: "none" }} onChange={handleFileUpload} />
-                <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5" }}>Upload File</button>
-                <button type="button" onClick={verifyNumbers} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#e7fce3", color: "#008069" }}>Verify Numbers</button>
-                <button type="button" onClick={checkExistingMessages} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#fff5f5", color: "#ff4757" }}>Check Previous Messages</button>
+                <button type="button" onClick={() => fileInputRef.current.click()} style={{ fontSize: "0.75rem", padding: "4px 10px", borderRadius: "6px", background: "#f0f2f5", border: "1px solid #ccc", cursor: "pointer" }}>Upload File</button>
+                
+                <button 
+                  type="button" 
+                  onClick={verifyNumbers} 
+                  disabled={verifying}
+                  style={{ 
+                    fontSize: "0.75rem", 
+                    padding: "4px 10px", 
+                    borderRadius: "6px", 
+                    background: verifying ? "#e2e8f0" : "#e7fce3", 
+                    color: verifying ? "#64748b" : "#008069", 
+                    border: "1px solid #ccc", 
+                    cursor: verifying ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  {verifying && <Loader2 className="animate-spin" size={12} style={{ animation: "spin 1s linear infinite" }} />}
+                  {verifying ? "Verifying..." : "Verify Numbers"}
+                </button>
+                
+                <button 
+                  type="button" 
+                  onClick={checkExistingMessages} 
+                  disabled={checkingMessages}
+                  style={{ 
+                    fontSize: "0.75rem", 
+                    padding: "4px 10px", 
+                    borderRadius: "6px", 
+                    background: checkingMessages ? "#e2e8f0" : "#fff5f5", 
+                    color: checkingMessages ? "#64748b" : "#ff4757", 
+                    border: "1px solid #ccc", 
+                    cursor: checkingMessages ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  {checkingMessages && <Loader2 className="animate-spin" size={12} style={{ animation: "spin 1s linear infinite" }} />}
+                  {checkingMessages ? "Checking..." : "Check Previous Messages"}
+                </button>
+
+                <button 
+                  type="button" 
+                  onClick={checkCampaignHistory} 
+                  disabled={checkingHistory}
+                  style={{ 
+                    fontSize: "0.75rem", 
+                    padding: "4px 10px", 
+                    borderRadius: "6px", 
+                    background: checkingHistory ? "#e2e8f0" : "#e0f2fe", 
+                    color: checkingHistory ? "#64748b" : "#0369a1", 
+                    border: "1px solid #ccc", 
+                    cursor: checkingHistory ? "not-allowed" : "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px"
+                  }}
+                >
+                  {checkingHistory && <Loader2 className="animate-spin" size={12} style={{ animation: "spin 1s linear infinite" }} />}
+                  {checkingHistory ? "Checking History..." : "Check Campaign History"}
+                </button>
               </div>
             </div>
             <textarea rows="4" style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", fontFamily: "monospace" }} placeholder="919876543210..." value={newCampaign.contactsRaw} onChange={e => setNewCampaign({ ...newCampaign, contactsRaw: e.target.value })} required></textarea>
@@ -1378,6 +1484,7 @@ const CampaignManager = () => {
                     onClick={async () => { 
                       let fullCamp = camp;
                       if (!camp.logs || camp.logs.length === 0) {
+                        setLoadingMessage("Fetching campaign dispatch logs...");
                         setLoading(true);
                         fullCamp = await fetchFullCampaign(camp._id);
                         setLoading(false);
@@ -1540,6 +1647,7 @@ const CampaignManager = () => {
                     onClick={async () => { 
                       let fullCamp = camp;
                       if (!camp.logs || camp.logs.length === 0) {
+                        setLoadingMessage("Fetching campaign dispatch logs...");
                         setLoading(true);
                         fullCamp = await fetchFullCampaign(camp._id);
                         setLoading(false);
@@ -1881,6 +1989,211 @@ const CampaignManager = () => {
           </div>
         );
       })()}
+      
+      {/* Campaign History Popup Modal */}
+      {showHistoryPopup && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.7)", backdropFilter: "blur(5px)",
+          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100,
+          padding: "20px"
+        }}>
+          <div style={{ 
+            background: "white", 
+            padding: "30px", 
+            borderRadius: "20px", 
+            width: "100%",
+            maxWidth: "700px", 
+            maxHeight: "85vh", 
+            overflowY: "auto",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+            display: "flex",
+            flexDirection: "column"
+          }}>
+            <h4 style={{ margin: "0 0 5px 0", fontSize: "1.2rem", fontWeight: "700" }}>Campaign Dispatch History</h4>
+            <p style={{ fontSize: "0.85rem", color: "#667781", marginBottom: "20px" }}>
+              The following numbers have already received campaign messages in the past:
+            </p>
+
+            <div style={{ flex: 1, overflowY: "auto", maxHeight: "400px", border: "1px solid #eee", borderRadius: "10px", marginBottom: "20px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem", textAlign: "left" }}>
+                <thead style={{ background: "#f8f9fa", position: "sticky", top: 0, zIndex: 1, boxShadow: "0 1px 0 #eee" }}>
+                  <tr>
+                    <th style={{ padding: "12px 16px", color: "#667781" }}>Phone</th>
+                    <th style={{ padding: "12px 16px", color: "#667781" }}>Campaigns & Sender Accounts</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const groups = {};
+                    campaignHistory.forEach(item => {
+                      if (!groups[item.phone]) {
+                        groups[item.phone] = { phone: item.phone, campaigns: [] };
+                      }
+                      groups[item.phone].campaigns.push(item);
+                    });
+                    const groupedList = Object.values(groups);
+
+                    if (groupedList.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan="2" style={{ padding: "30px", textAlign: "center", color: "#999" }}>
+                            No dispatch history found for these numbers.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return groupedList.map((group, idx) => (
+                      <tr key={idx} style={{ borderBottom: "1px solid #eee" }}>
+                        <td style={{ padding: "12px 16px", fontWeight: "600", verticalAlign: "top", width: "150px" }}>{group.phone}</td>
+                        <td style={{ padding: "12px 16px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            {group.campaigns.map((c, cIdx) => (
+                              <div key={cIdx} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", fontSize: "0.8rem", borderBottom: cIdx < group.campaigns.length - 1 ? "1px dashed #f0f0f0" : "none", paddingBottom: cIdx < group.campaigns.length - 1 ? "4px" : 0 }}>
+                                <span style={{ fontWeight: "600", color: "#111b21" }}>{c.campaignName}</span>
+                                <span style={{ color: "#667781" }}>({c.accountName})</span>
+                                <span style={{ fontSize: "0.7rem", color: "#999" }}>
+                                  {c.sentAt ? new Date(c.sentAt).toLocaleString() : "-"}
+                                </span>
+                                <span style={{
+                                  padding: "2px 6px", borderRadius: "4px", fontSize: "0.68rem", fontWeight: "bold",
+                                  background: ["sent", "delivered", "read"].includes(c.status) ? "#e7fce3" : "#fff5f5",
+                                  color: ["sent", "delivered", "read"].includes(c.status) ? "#008069" : "#ff4757",
+                                  marginLeft: "auto"
+                                }}>
+                                  {c.status ? c.status.toUpperCase() : "UNKNOWN"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button 
+                type="button"
+                onClick={() => setShowHistoryPopup(false)}
+                style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "none", background: "#eee", cursor: "pointer", fontWeight: "bold", color: "#667781" }}
+              >
+                Close
+              </button>
+              {campaignHistory.length > 0 && (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    const targetedPhones = new Set(campaignHistory.map(h => String(h.phone).replace(/\D/g, "")));
+                    const currentPhones = newCampaign.contactsRaw.split(/[,\n]/).map(p => p.trim()).filter(Boolean);
+                    const filtered = currentPhones.filter(phone => {
+                      const clean = phone.replace(/\D/g, "");
+                      const clean10 = clean.length === 12 && clean.startsWith("91") ? clean.substring(2) : clean;
+                      return !targetedPhones.has(clean) && !targetedPhones.has("91" + clean10) && !targetedPhones.has(clean10);
+                    });
+                    setNewCampaign({ ...newCampaign, contactsRaw: filtered.join("\n") });
+                    setShowHistoryPopup(false);
+                    alert(`✅ Removed ${currentPhones.length - filtered.length} numbers that already received campaigns!`);
+                  }}
+                  style={{ flex: 2, padding: "12px", borderRadius: "10px", border: "none", background: "linear-gradient(135deg, #ff4757, #ff6b6b)", color: "white", cursor: "pointer", fontWeight: "bold", boxShadow: "0 4px 10px rgba(255, 71, 87, 0.2)" }}
+                >
+                  Remove Targeted Numbers
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Full-Screen Premium Loading Screen */}
+      {loading && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(11, 20, 26, 0.72)", // Deep glass background
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          color: "white",
+          transition: "all 0.3s ease"
+        }}>
+          <div style={{ position: "relative", width: "120px", height: "120px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {/* Outer Ring */}
+            <div style={{
+              position: "absolute",
+              width: "100%",
+              height: "100%",
+              borderRadius: "50%",
+              border: "4px solid transparent",
+              borderTopColor: "#00a884",
+              borderBottomColor: "#339af0",
+              animation: "spin 1.5s linear infinite"
+            }} />
+            {/* Inner Ring */}
+            <div style={{
+              position: "absolute",
+              width: "80%",
+              height: "80%",
+              borderRadius: "50%",
+              border: "4px solid transparent",
+              borderLeftColor: "#00a884",
+              borderRightColor: "#339af0",
+              animation: "spin-reverse 2s linear infinite",
+              opacity: 0.7
+            }} />
+            {/* Brand Logo / Pulse */}
+            <div style={{
+              width: "50px",
+              height: "50px",
+              background: "linear-gradient(135deg, #00a884, #008069)",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 0 20px rgba(0, 168, 132, 0.6)",
+              animation: "pulse 1.8s ease-in-out infinite"
+            }}>
+              <Send size={24} color="white" />
+            </div>
+          </div>
+          <h4 style={{ 
+            marginTop: "24px", 
+            fontWeight: "700", 
+            fontSize: "1.15rem", 
+            letterSpacing: "0.5px", 
+            textShadow: "0 2px 10px rgba(0,0,0,0.5)", 
+            color: "#ffffff"
+          }}>
+            {loadingMessage}
+          </h4>
+          <p style={{ margin: "8px 0 0 0", fontSize: "0.82rem", color: "#8696a0", fontWeight: "500", opacity: 0.8 }}>
+            Please wait, processing database request...
+          </p>
+          
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+            @keyframes spin-reverse {
+              0% { transform: rotate(360deg); }
+              100% { transform: rotate(0deg); }
+            }
+            @keyframes pulse {
+              0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(0, 168, 132, 0.6); }
+              50% { transform: scale(1.1); box-shadow: 0 0 35px rgba(0, 168, 132, 0.9); }
+            }
+          `}</style>
+        </div>
+      )}
     </div>
   );
 };

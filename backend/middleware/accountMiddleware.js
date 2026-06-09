@@ -5,7 +5,10 @@ export const attachWhatsAppAccount = async (req, res, next) => {
   
   if (accountIdHeader) {
     // Support multiple IDs (comma separated)
-    if (accountIdHeader.includes(",")) {
+    if (accountIdHeader === "all") {
+      req.whatsappAccount = { _id: "all" };
+      req.whatsappAccountIds = [];
+    } else if (accountIdHeader.includes(",")) {
       const ids = accountIdHeader.split(",").filter(id => id.trim());
       req.whatsappAccountIds = ids;
       

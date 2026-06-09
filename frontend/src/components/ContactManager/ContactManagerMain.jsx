@@ -16,7 +16,7 @@ import EditContactModal from "./EditContactModal";
 const ContactManagerMain = ({ deleted = false }) => {
   const navigate = useNavigate();
   const { activeAccount } = useWhatsAppAccount();
-  
+
   // States
   const [viewMode, setViewMode] = useState("list"); // list or kanban
   const [contacts, setContacts] = useState([]);
@@ -25,16 +25,16 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(100);
   const [filters, setFilters] = useState({ search: "", status: "", sector: "", tag: "" });
-  
+
   // Metadata
   const [customFields, setCustomFields] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [customStatuses, setCustomStatuses] = useState([]);
-  
+
   // Selection
   const [selectedContactIds, setSelectedContactIds] = useState(new Set());
   const [isUniversalSelect, setIsUniversalSelect] = useState(false);
-  
+
   // Modals & Drawers
   const [selectedContact, setSelectedContact] = useState(null);
   const [showDrawer, setShowDrawer] = useState(false);
@@ -43,7 +43,7 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
-  
+
   // Import state
   const [showMapper, setShowMapper] = useState(false);
   const [tempImportData, setTempImportData] = useState([]);
@@ -61,7 +61,7 @@ const ContactManagerMain = ({ deleted = false }) => {
       if (deleted) {
         queryParams.append("deleted", "true");
       }
-      
+
       const res = await api.get(`/contacts?${queryParams.toString()}`);
       setContacts(res.data.contacts || []);
       setTotal(res.data.total || 0);
@@ -114,7 +114,7 @@ const ContactManagerMain = ({ deleted = false }) => {
     try {
       const res = await api.patch(`/contacts/${contactId}`, { status: newStatus });
       setContacts(prev => prev.map(c => c._id === contactId ? { ...c, status: newStatus } : c));
-      
+
       // Update drawer if open
       if (selectedContact?._id === contactId) {
         setSelectedContact(res.data);
@@ -237,7 +237,7 @@ const ContactManagerMain = ({ deleted = false }) => {
         tags: item.tags ? item.tags.split(',') : [],
         customFields: item.customFields || {}
       })).filter(c => c.phone.length >= 10);
-      
+
       await api.post("/contacts/import", { contacts: contactsToImport });
       alert(`Successfully imported ${contactsToImport.length} leads!`);
       setShowImportModal(false);
@@ -251,8 +251,8 @@ const ContactManagerMain = ({ deleted = false }) => {
 
   return (
     <div className="contact-manager-nextgen" style={{ height: "100%", display: "flex", flexDirection: "column", background: "#f8fafc", padding: "1.5rem" }}>
-      
-      <ContactFilters 
+
+      <ContactFilters
         filters={filters}
         setFilters={setFilters}
         handleSearch={() => setPage(1)}
@@ -275,7 +275,7 @@ const ContactManagerMain = ({ deleted = false }) => {
             <p style={{ fontWeight: "800", color: "#64748b" }}>Synchronizing Leads...</p>
           </div>
         ) : viewMode === "list" ? (
-          <ContactTable 
+          <ContactTable
             contacts={contacts}
             loading={loading}
             selectedContactIds={selectedContactIds}
@@ -308,7 +308,7 @@ const ContactManagerMain = ({ deleted = false }) => {
             handleRestoreContact={handleRestoreContact}
           />
         ) : (
-          <ContactKanban 
+          <ContactKanban
             contacts={contacts}
             customStatuses={customStatuses}
             handleContactClick={handleContactClick}
@@ -324,9 +324,9 @@ const ContactManagerMain = ({ deleted = false }) => {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 25px", background: "white", borderTop: "2px solid #f0f0f0", marginTop: "1rem", borderRadius: "12px", boxShadow: "0 -4px 20px rgba(0,0,0,0.02)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span style={{ fontSize: "0.85rem", color: "#666", fontWeight: "700" }}>Items per page:</span>
-            <select 
-              value={limit} 
-              onChange={e => { setLimit(Number(e.target.value)); setPage(1); }} 
+            <select
+              value={limit}
+              onChange={e => { setLimit(Number(e.target.value)); setPage(1); }}
               style={{ padding: "6px 12px", borderRadius: "8px", border: "2px solid #eee", fontSize: "0.85rem", fontWeight: "800", color: "#1a1a1a", cursor: "pointer" }}
             >
               <option value={50}>50</option>
@@ -346,7 +346,7 @@ const ContactManagerMain = ({ deleted = false }) => {
 
       {/* Drawer */}
       {showDrawer && selectedContact && (
-        <ContactDrawer 
+        <ContactDrawer
           contact={selectedContact}
           onClose={() => setShowDrawer(false)}
           loadingTimeline={loadingTimeline}
@@ -365,8 +365,8 @@ const ContactManagerMain = ({ deleted = false }) => {
               <h3 style={{ margin: 0, fontWeight: "900", fontSize: "1.5rem" }}>Import Leads</h3>
               <X size={24} style={{ cursor: "pointer" }} onClick={() => setShowImportModal(false)} />
             </div>
-            <div 
-              style={{ border: "3px dashed #eef2f6", padding: "40px", textAlign: "center", borderRadius: "15px", cursor: "pointer", background: "#f8fafc" }} 
+            <div
+              style={{ border: "3px dashed #eef2f6", padding: "40px", textAlign: "center", borderRadius: "15px", cursor: "pointer", background: "#f8fafc" }}
               onClick={() => document.getElementById('import-file').click()}
             >
               <p style={{ fontWeight: "800", color: "#1a1a1a" }}>Click to select Excel/CSV file</p>
@@ -380,7 +380,7 @@ const ContactManagerMain = ({ deleted = false }) => {
       )}
 
       {/* Import Mapper - Step 2: Mapping Fields */}
-      <ImportMapperModal 
+      <ImportMapperModal
         isOpen={showMapper}
         onClose={() => setShowMapper(false)}
         rawData={tempImportData}
