@@ -248,9 +248,9 @@ const CampaignManager = () => {
     }
   };
 
-  const fetchFullCampaign = async (id) => {
+  const fetchFullCampaign = async (id, includeContacts = false) => {
     try {
-      const res = await api.get(`/campaigns/${id}`);
+      const res = await api.get(`/campaigns/${id}${includeContacts ? "?includeContacts=true" : ""}`);
       setCampaigns(prev => prev.map(c => c._id === id ? res.data : c));
       return res.data;
     } catch (err) {
@@ -264,7 +264,7 @@ const CampaignManager = () => {
     if (!camp.contacts || camp.contacts.length === 0) {
       setLoadingMessage("Loading campaign data for copy...");
       setLoading(true);
-      fullCamp = await fetchFullCampaign(camp._id);
+      fullCamp = await fetchFullCampaign(camp._id, true);
       setLoading(false);
     }
     if (fullCamp) {
