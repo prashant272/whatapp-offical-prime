@@ -26,6 +26,7 @@ const CampaignManager = () => {
   const [visibleLogsCount, setVisibleLogsCount] = useState(150);
   const [logSearch, setLogSearch] = useState("");
   const [showAllCampaigns, setShowAllCampaigns] = useState(false);
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState("");
   const [newCampaign, setNewCampaign] = useState({
     name: "",
     type: "MESSAGE",
@@ -1378,8 +1379,71 @@ const CampaignManager = () => {
         </form>
       ) : (
         <div style={{ display: "grid", gap: "1.5rem" }}>
+          {/* Account Dropdown Filter */}
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "#ffffff",
+            padding: "16px 24px",
+            borderRadius: "16px",
+            border: "1px solid #e2e8f0",
+            boxShadow: "0 4px 6px -1px rgba(0,0,0,0.02), 0 2px 4px -1px rgba(0,0,0,0.01)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", width: "100%" }}>
+              <span style={{ fontSize: "0.9rem", fontWeight: "700", color: "#475569", whiteSpace: "nowrap" }}>Filter by Sender Account:</span>
+              <select
+                value={selectedAccountFilter}
+                onChange={e => setSelectedAccountFilter(e.target.value)}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: "10px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  color: "#0f172a",
+                  fontSize: "0.85rem",
+                  fontWeight: "600",
+                  outline: "none",
+                  cursor: "pointer",
+                  width: "100%",
+                  maxWidth: "400px",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                }}
+              >
+                <option value="">All Accounts</option>
+                {accounts.map(acc => (
+                  <option key={acc._id} value={acc._id}>
+                    {acc.name} ({acc.phoneNumberId})
+                  </option>
+                ))}
+              </select>
+              {selectedAccountFilter && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedAccountFilter("")}
+                  style={{
+                    fontSize: "0.8rem",
+                    padding: "8px 16px",
+                    borderRadius: "8px",
+                    background: "#f1f5f9",
+                    color: "#475569",
+                    border: "1px solid #cbd5e1",
+                    cursor: "pointer",
+                    fontWeight: "600"
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Active Campaigns First */}
-          {campaigns.filter(c => ["RUNNING", "PAUSED", "PENDING"].includes(c.status)).map(camp => (
+          {campaigns.filter(c => {
+            const campAccId = c.whatsappAccountId && typeof c.whatsappAccountId === 'object' ? c.whatsappAccountId._id : c.whatsappAccountId;
+            const matchesAccount = !selectedAccountFilter || campAccId === selectedAccountFilter;
+            return ["RUNNING", "PAUSED", "PENDING"].includes(c.status) && matchesAccount;
+          }).map(camp => (
             <div key={camp._id} style={{
               background: "#ffffff",
               borderRadius: "16px",
@@ -1555,7 +1619,7 @@ const CampaignManager = () => {
           ))}
 
           {/* Toggle Button for Old Campaigns */}
-          {campaigns.some(c => ["COMPLETED", "FAILED"].includes(c.status)) && (
+          {!selectedAccountFilter && campaigns.some(c => ["COMPLETED", "FAILED"].includes(c.status)) && (
             <div style={{ textAlign: "center", margin: "1rem 0" }}>
               <button
                 onClick={() => setShowAllCampaigns(!showAllCampaigns)}
@@ -1572,7 +1636,11 @@ const CampaignManager = () => {
           )}
 
           {/* Old/Completed Campaigns */}
-          {showAllCampaigns && campaigns.filter(c => ["COMPLETED", "FAILED"].includes(c.status)).map(camp => (
+          {(showAllCampaigns || !!selectedAccountFilter) && campaigns.filter(c => {
+            const campAccId = c.whatsappAccountId && typeof c.whatsappAccountId === 'object' ? c.whatsappAccountId._id : c.whatsappAccountId;
+            const matchesAccount = !selectedAccountFilter || campAccId === selectedAccountFilter;
+            return ["COMPLETED", "FAILED"].includes(c.status) && matchesAccount;
+          }).map(camp => (
             <div key={camp._id} style={{
               background: "#ffffff",
               borderRadius: "16px",
