@@ -1081,11 +1081,13 @@ const ChatModule = () => {
     });
 
     socket.on("followup_reminder", ({ conversation }) => {
-      // Logic: Admins see all reminders. Executives only see theirs.
-      const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
-      const isMyReminder = !assignedToId || String(assignedToId) === String(currentUser._id);
+      // Logic: Admins do NOT see followup reminders. Only the assigned specialist sees theirs.
+      if (currentUser.role === "Admin") return;
 
-      if (currentUser.role !== "Admin" && !isMyReminder) return;
+      const assignedToId = typeof conversation.assignedTo === 'object' ? conversation.assignedTo?._id : conversation.assignedTo;
+      const isMyReminder = assignedToId && String(assignedToId) === String(currentUser._id);
+
+      if (!isMyReminder) return;
 
       const contactName = conversation.contact?.name || conversation.phone;
 
