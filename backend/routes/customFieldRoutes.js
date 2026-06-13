@@ -41,7 +41,7 @@ router.get("/", async (req, res) => {
 // Create a new field (Admin/Manager only)
 router.post("/", restrictTo("Admin", "Manager"), async (req, res) => {
   try {
-    const { name, label, type, options, whatsappAccountIds, sortOrder, optionsSortAlpha } = req.body;
+    const { name, label, type, options, whatsappAccountIds, sortOrder, optionsSortAlpha, applicableStatus } = req.body;
     const accountId = req.headers["x-whatsapp-account-id"];
 
     if (!name || !label) {
@@ -61,7 +61,8 @@ router.post("/", restrictTo("Admin", "Manager"), async (req, res) => {
       options: finalOptions,
       sortOrder: sortOrder || 0,
       optionsSortAlpha: optionsSortAlpha || false,
-      whatsappAccountIds: whatsappAccountIds || [accountId]
+      whatsappAccountIds: whatsappAccountIds || [accountId],
+      applicableStatus: applicableStatus || "All"
     });
 
     await newField.save();
@@ -84,7 +85,7 @@ router.delete("/:id", restrictTo("Admin"), async (req, res) => {
 // Update a field
 router.put("/:id", restrictTo("Admin", "Manager"), async (req, res) => {
   try {
-    const { label, type, options, whatsappAccountIds, sortOrder, optionsSortAlpha } = req.body;
+    const { label, type, options, whatsappAccountIds, sortOrder, optionsSortAlpha, applicableStatus } = req.body;
 
     // Sort options alphabetically if requested
     let finalOptions = options || [];
@@ -94,7 +95,7 @@ router.put("/:id", restrictTo("Admin", "Manager"), async (req, res) => {
 
     const updatedField = await CustomField.findByIdAndUpdate(
       req.params.id,
-      { label, type, options: finalOptions, whatsappAccountIds, sortOrder: sortOrder || 0, optionsSortAlpha: optionsSortAlpha || false },
+      { label, type, options: finalOptions, whatsappAccountIds, sortOrder: sortOrder || 0, optionsSortAlpha: optionsSortAlpha || false, applicableStatus: applicableStatus || "All" },
       { new: true }
     );
     if (!updatedField) return res.status(404).json({ error: "Field not found" });

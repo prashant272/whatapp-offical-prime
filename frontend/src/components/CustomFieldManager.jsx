@@ -6,6 +6,7 @@ import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 const CustomFieldManager = () => {
   const { activeAccount } = useWhatsAppAccount();
   const [fields, setFields] = useState([]);
+  const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newField, setNewField] = useState({
@@ -15,7 +16,8 @@ const CustomFieldManager = () => {
     options: "",
     sortOrder: 0,
     optionsSortAlpha: false,
-    whatsappAccountIds: []
+    whatsappAccountIds: [],
+    applicableStatus: "All"
   });
   const [editingField, setEditingField] = useState(null);
   const { accounts } = useWhatsAppAccount();
@@ -33,8 +35,18 @@ const CustomFieldManager = () => {
     }
   };
 
+  const fetchStatuses = async () => {
+    try {
+      const res = await api.get("/statuses");
+      setStatuses(res.data || []);
+    } catch (err) {
+      console.error("Error fetching statuses:", err);
+    }
+  };
+
   useEffect(() => {
     fetchFields();
+    fetchStatuses();
   }, [activeAccount]);
 
   const handleAddField = async (e) => {
@@ -51,7 +63,7 @@ const CustomFieldManager = () => {
         whatsappAccountIds: newField.whatsappAccountIds.length > 0 ? newField.whatsappAccountIds : [activeAccount?._id]
       };
       await api.post("/custom-fields", payload);
-      setNewField({ label: "", name: "", type: "TEXT", options: "", sortOrder: 0, optionsSortAlpha: false, whatsappAccountIds: [] });
+      setNewField({ label: "", name: "", type: "TEXT", options: "", sortOrder: 0, optionsSortAlpha: false, whatsappAccountIds: [], applicableStatus: "All" });
       setShowAddForm(false);
       fetchFields();
     } catch (err) {
@@ -169,6 +181,21 @@ const CustomFieldManager = () => {
                 value={newField.sortOrder} 
                 onChange={e => setNewField({ ...newField, sortOrder: e.target.value })}
               />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
+            <div>
+              <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Applicable Lead Status</label>
+              <select 
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0" }} 
+                value={newField.applicableStatus || "All"} 
+                onChange={e => setNewField({ ...newField, applicableStatus: e.target.value })}
+              >
+                <option value="All">All Statuses (General)</option>
+                {statuses.map(s => (
+                  <option key={s._id} value={s.name}>{s.name}</option>
+                ))}
+              </select>
             </div>
           </div>
           {["SELECT", "COMBOBOX"].includes(newField.type) && (
@@ -290,6 +317,21 @@ const CustomFieldManager = () => {
                 />
               </div>
             </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "1.5rem", marginBottom: "1.5rem" }}>
+              <div>
+                <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Applicable Lead Status</label>
+                <select 
+                  style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #e2e8f0", boxSizing: "border-box" }} 
+                  value={editingField.applicableStatus || "All"} 
+                  onChange={e => setEditingField({ ...editingField, applicableStatus: e.target.value })}
+                >
+                  <option value="All">All Statuses (General)</option>
+                  {statuses.map(s => (
+                    <option key={s._id} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
             {["SELECT", "COMBOBOX"].includes(editingField.type) && (
               <div style={{ marginBottom: "1.5rem" }}>
                 <label style={{ fontSize: "0.85rem", fontWeight: "600", color: "#64748b", display: "block", marginBottom: "8px" }}>Dropdown Options (Comma separated)</label>
@@ -372,6 +414,7 @@ const CustomFieldManager = () => {
                       <div style={{ fontWeight: "700", color: "#1e293b" }}>{field.label}</div>
                       <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>Key: {field.name}</div>
                       {field.optionsSortAlpha && <div style={{ fontSize: "0.65rem", color: "#6366f1", fontWeight: "700", marginTop: "2px" }}>🔤 A→Z Sorted</div>}
+                      <div style={{ fontSize: "0.7rem", color: "#6366f1", fontWeight: "700", marginTop: "4px" }}>📍 Status: {field.applicableStatus || "All"}</div>
                     </td>
                     <td style={{ padding: "16px 24px" }}>
                       <div style={{ 

@@ -428,222 +428,292 @@ const ContactDetailSidebar = ({
             Status & Assignment
           </p>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-            <div>
-              <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Lead Status</label>
-              <div style={{ position: "relative" }}>
-                <select
-                  style={{
-                    width: "100%",
-                    padding: "10px 14px",
-                    background: "#f8fafc",
-                    border: "1.5px solid #e2e8f0",
-                    borderRadius: "10px",
-                    color: "#1e293b",
-                    fontSize: "0.9rem",
-                    fontWeight: "600",
-                    outline: "none",
-                    cursor: "pointer",
-                    appearance: "none",
-                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
-                  }}
-                  value={selectedChat.status || "New"}
-                  onChange={(e) => handleUpdateStatus(e.target.value)}
-                  onFocus={e => {
-                    e.target.style.borderColor = "#4f46e5";
-                    e.target.style.background = "#ffffff";
-                  }}
-                  onBlur={e => {
-                    e.target.style.borderColor = "#e2e8f0";
-                    e.target.style.background = "#f8fafc";
-                  }}
-                >
-                  {[...allStatusOptions]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(s => (
-                      <option key={s.name} value={s.name}>{s.name}</option>
-                    ))}
-                </select>
-                <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
-              </div>
-            </div>
+          {(() => {
+            const isJobsStatus = (selectedChat.status || "").toLowerCase() === "jobs";
+            return (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Lead Status</label>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        style={{
+                          width: "100%",
+                          padding: "10px 14px",
+                          background: "#f8fafc",
+                          border: "1.5px solid #e2e8f0",
+                          borderRadius: "10px",
+                          color: "#1e293b",
+                          fontSize: "0.9rem",
+                          fontWeight: "600",
+                          outline: "none",
+                          cursor: "pointer",
+                          appearance: "none",
+                          transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+                        }}
+                        value={selectedChat.status || "New"}
+                        onChange={(e) => handleUpdateStatus(e.target.value)}
+                        onFocus={e => {
+                          e.target.style.borderColor = "#4f46e5";
+                          e.target.style.background = "#ffffff";
+                        }}
+                        onBlur={e => {
+                          e.target.style.borderColor = "#e2e8f0";
+                          e.target.style.background = "#f8fafc";
+                        }}
+                      >
+                        {[...allStatusOptions]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(s => (
+                            <option key={s.name} value={s.name}>{s.name}</option>
+                          ))}
+                      </select>
+                      <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                    </div>
+                  </div>
 
-            <div>
-              <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Sector</label>
-              <div style={{ position: "relative" }}>
-                <select
-                  style={{
-                    width: "100%",
-                    padding: "10px 14px",
-                    background: "#f8fafc",
-                    border: "1.5px solid #e2e8f0",
-                    borderRadius: "10px",
-                    color: "#1e293b",
-                    fontSize: "0.9rem",
-                    fontWeight: "600",
-                    outline: "none",
-                    cursor: "pointer",
-                    appearance: "none",
-                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
-                  }}
-                  value={activeContact?.sector || selectedChat.sector || "Unassigned"}
-                  onChange={(e) => handleAssign(undefined, e.target.value, "Unassigned")}
-                  onFocus={e => {
-                    e.target.style.borderColor = "#4f46e5";
-                    e.target.style.background = "#ffffff";
-                  }}
-                  onBlur={e => {
-                    e.target.style.borderColor = "#e2e8f0";
-                    e.target.style.background = "#f8fafc";
-                  }}
-                >
-                  <option value="Unassigned">Unassigned</option>
-                  {[...sectors]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(s => (
-                      <option key={s._id} value={s.name}>{s.name}</option>
-                    ))}
-                </select>
-                <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
-              </div>
-            </div>
-          </div>
-
-          {(selectedChat.followUpTime || (selectedChat.status && selectedChat.status.toLowerCase().includes("follow"))) && (
-            <div style={{
-              padding: "10px 14px",
-              background: "#fffbeb",
-              border: "1px solid #fef3c7",
-              borderRadius: "12px",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px"
-            }}>
-              <Clock size={14} color="#d97706" />
-              <span style={{ fontSize: "0.75rem", color: "#b45309", fontWeight: "600" }}>
-                Due: {selectedChat.followUpTime ? new Date(selectedChat.followUpTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "Not Scheduled"}
-                {selectedChat.followUpActivity && ` - ${selectedChat.followUpActivity}`}
-              </span>
-            </div>
-          )}
-
-          {/* Subsector and Specialist grid layout */}
-          <div style={{ display: "grid", gridTemplateColumns: (activeContact?.sector || selectedChat.sector) && (activeContact?.sector || selectedChat.sector) !== "Unassigned" ? "1fr 1fr" : "1fr", gap: "12px" }}>
-            {(activeContact?.sector || selectedChat.sector) && (activeContact?.sector || selectedChat.sector) !== "Unassigned" && (
-              <div>
-                <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Subsector</label>
-                <div style={{ position: "relative" }}>
-                  <select
-                    style={{
-                      width: "100%",
-                      padding: "10px 12px",
-                      background: "#f8fafc",
-                      border: "1.5px solid #e2e8f0",
-                      borderRadius: "12px",
-                      color: "#1e293b",
-                      fontSize: "0.85rem",
-                      fontWeight: "600",
-                      outline: "none",
-                      cursor: "pointer",
-                      appearance: "none",
-                      transition: "all 0.2s ease"
-                    }}
-                    value={activeContact?.subsector || selectedChat.subsector || "Unassigned"}
-                    onChange={(e) => handleAssign(undefined, undefined, e.target.value)}
-                    onFocus={e => {
-                      e.target.style.borderColor = "#4f46e5";
-                      e.target.style.background = "#ffffff";
-                    }}
-                    onBlur={e => {
-                      e.target.style.borderColor = "#e2e8f0";
-                      e.target.style.background = "#f8fafc";
-                    }}
-                  >
-                    <option value="Unassigned">Unassigned</option>
-                    {[...(sectors.find(s => s.name === (activeContact?.sector || selectedChat.sector))?.subsectors || [])]
-                      .sort((a, b) => a.localeCompare(b))
-                      .map(sub => (
-                        <option key={sub} value={sub}>{sub}</option>
-                      ))}
-                  </select>
-                  <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                  {isJobsStatus ? (
+                    <div>
+                      <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Specialist</label>
+                      <div style={{ position: "relative" }}>
+                        <select
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            background: "#f8fafc",
+                            border: "1.5px solid #e2e8f0",
+                            borderRadius: "12px",
+                            color: "#1e293b",
+                            fontSize: "0.85rem",
+                            fontWeight: "600",
+                            outline: "none",
+                            cursor: "pointer",
+                            appearance: "none",
+                            transition: "all 0.2s ease"
+                          }}
+                          value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
+                          onChange={(e) => handleAssign(e.target.value, undefined)}
+                          onFocus={e => {
+                            e.target.style.borderColor = "#4f46e5";
+                            e.target.style.background = "#ffffff";
+                          }}
+                          onBlur={e => {
+                            e.target.style.borderColor = "#e2e8f0";
+                            e.target.style.background = "#f8fafc";
+                          }}
+                        >
+                          <option value="">Nil (Unassigned)</option>
+                          {[...executives]
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(ex => (
+                              <option key={ex._id} value={ex._id}>{ex.name}</option>
+                            ))}
+                        </select>
+                        <User size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Sector</label>
+                      <div style={{ position: "relative" }}>
+                        <select
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            background: "#f8fafc",
+                            border: "1.5px solid #e2e8f0",
+                            borderRadius: "10px",
+                            color: "#1e293b",
+                            fontSize: "0.9rem",
+                            fontWeight: "600",
+                            outline: "none",
+                            cursor: "pointer",
+                            appearance: "none",
+                            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+                          }}
+                          value={activeContact?.sector || selectedChat.sector || "Unassigned"}
+                          onChange={(e) => handleAssign(undefined, e.target.value, "Unassigned")}
+                          onFocus={e => {
+                            e.target.style.borderColor = "#4f46e5";
+                            e.target.style.background = "#ffffff";
+                          }}
+                          onBlur={e => {
+                            e.target.style.borderColor = "#e2e8f0";
+                            e.target.style.background = "#f8fafc";
+                          }}
+                        >
+                          <option value="Unassigned">Unassigned</option>
+                          {[...sectors]
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(s => (
+                              <option key={s._id} value={s.name}>{s.name}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
 
-            <div>
-              <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Specialist</label>
-              <div style={{ position: "relative" }}>
-                <select
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    background: "#f8fafc",
-                    border: "1.5px solid #e2e8f0",
+                {(selectedChat.followUpTime || (selectedChat.status && selectedChat.status.toLowerCase().includes("follow"))) && (
+                  <div style={{
+                    padding: "10px 14px",
+                    background: "#fffbeb",
+                    border: "1px solid #fef3c7",
                     borderRadius: "12px",
-                    color: "#1e293b",
-                    fontSize: "0.85rem",
-                    fontWeight: "600",
-                    outline: "none",
-                    cursor: "pointer",
-                    appearance: "none",
-                    transition: "all 0.2s ease"
-                  }}
-                  value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
-                  onChange={(e) => handleAssign(e.target.value, undefined)}
-                  onFocus={e => {
-                    e.target.style.borderColor = "#4f46e5";
-                    e.target.style.background = "#ffffff";
-                  }}
-                  onBlur={e => {
-                    e.target.style.borderColor = "#e2e8f0";
-                    e.target.style.background = "#f8fafc";
-                  }}
-                >
-                  <option value="">Nil (Unassigned)</option>
-                  {[...executives]
-                    .sort((a, b) => a.name.localeCompare(b.name))
-                    .map(ex => (
-                      <option key={ex._id} value={ex._id}>{ex.name}</option>
-                    ))}
-                </select>
-                <User size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
-              </div>
-            </div>
-          </div>
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
+                  }}>
+                    <Clock size={14} color="#d97706" />
+                    <span style={{ fontSize: "0.75rem", color: "#b45309", fontWeight: "600" }}>
+                      Due: {selectedChat.followUpTime ? new Date(selectedChat.followUpTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "Not Scheduled"}
+                      {selectedChat.followUpActivity && ` - ${selectedChat.followUpActivity}`}
+                    </span>
+                  </div>
+                )}
+
+                {/* Subsector and Specialist grid layout (only when not Jobs status) */}
+                {!isJobsStatus && (
+                  <div style={{ display: "grid", gridTemplateColumns: (activeContact?.sector || selectedChat.sector) && (activeContact?.sector || selectedChat.sector) !== "Unassigned" ? "1fr 1fr" : "1fr", gap: "12px" }}>
+                    {(activeContact?.sector || selectedChat.sector) && (activeContact?.sector || selectedChat.sector) !== "Unassigned" && (
+                      <div>
+                        <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Subsector</label>
+                        <div style={{ position: "relative" }}>
+                          <select
+                            style={{
+                              width: "100%",
+                              padding: "10px 12px",
+                              background: "#f8fafc",
+                              border: "1.5px solid #e2e8f0",
+                              borderRadius: "12px",
+                              color: "#1e293b",
+                              fontSize: "0.85rem",
+                              fontWeight: "600",
+                              outline: "none",
+                              cursor: "pointer",
+                              appearance: "none",
+                              transition: "all 0.2s ease"
+                            }}
+                            value={activeContact?.subsector || selectedChat.subsector || "Unassigned"}
+                            onChange={(e) => handleAssign(undefined, undefined, e.target.value)}
+                            onFocus={e => {
+                              e.target.style.borderColor = "#4f46e5";
+                              e.target.style.background = "#ffffff";
+                            }}
+                            onBlur={e => {
+                              e.target.style.borderColor = "#e2e8f0";
+                              e.target.style.background = "#f8fafc";
+                            }}
+                          >
+                            <option value="Unassigned">Unassigned</option>
+                            {[...(sectors.find(s => s.name === (activeContact?.sector || selectedChat.sector))?.subsectors || [])]
+                              .sort((a, b) => a.localeCompare(b))
+                              .map(sub => (
+                                <option key={sub} value={sub}>{sub}</option>
+                              ))}
+                          </select>
+                          <ChevronDown size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Specialist</label>
+                      <div style={{ position: "relative" }}>
+                        <select
+                          style={{
+                            width: "100%",
+                            padding: "10px 12px",
+                            background: "#f8fafc",
+                            border: "1.5px solid #e2e8f0",
+                            borderRadius: "12px",
+                            color: "#1e293b",
+                            fontSize: "0.85rem",
+                            fontWeight: "600",
+                            outline: "none",
+                            cursor: "pointer",
+                            appearance: "none",
+                            transition: "all 0.2s ease"
+                          }}
+                          value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
+                          onChange={(e) => handleAssign(e.target.value, undefined)}
+                          onFocus={e => {
+                            e.target.style.borderColor = "#4f46e5";
+                            e.target.style.background = "#ffffff";
+                          }}
+                          onBlur={e => {
+                            e.target.style.borderColor = "#e2e8f0";
+                            e.target.style.background = "#f8fafc";
+                          }}
+                        >
+                          <option value="">Nil (Unassigned)</option>
+                          {[...executives]
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(ex => (
+                              <option key={ex._id} value={ex._id}>{ex.name}</option>
+                            ))}
+                        </select>
+                        <User size={14} style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8", pointerEvents: "none" }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         {/* CRM Attributes Section */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <p style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Lead Intelligence</p>
-            <div style={{ height: "1px", flex: 1, background: "#edf2f7", marginLeft: "12px" }}></div>
-          </div>
+        {(() => {
+          const isJobsStatus = (selectedChat.status || "").toLowerCase() === "jobs";
+          
+          const filteredFields = customFieldsDef.filter(field => {
+            const fieldStatus = (field.applicableStatus || "All").toLowerCase();
+            if (isJobsStatus) {
+              return fieldStatus === "jobs";
+            } else {
+              return fieldStatus !== "jobs";
+            }
+          });
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            {customFieldsDef.length === 0 ? (
-              <p style={{ fontSize: "0.85rem", color: "#94a3b8", textAlign: "center", fontStyle: "italic", background: "#f8fafc", padding: "20px", borderRadius: "16px", border: "1px dashed #e2e8f0" }}>No custom attributes found.</p>
-            ) : (
-              [...customFieldsDef]
-                .sort((a, b) => {
-                  if (a.sortOrder === 0 && b.sortOrder === 0) return 0;
-                  if (a.sortOrder === 0) return 1;
-                  if (b.sortOrder === 0) return -1;
-                  return a.sortOrder - b.sortOrder;
-                })
-                .map(field => (
-                  <CustomFieldItem
-                    key={field._id}
-                    field={field}
-                    activeContact={activeContact}
-                    isUpdatingField={isUpdatingField}
-                    handleUpdateCustomField={handleUpdateCustomField}
-                    setActiveContact={setActiveContact}
-                  />
-                ))
-            )}
-          </div>
-        </div>
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <p style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
+                  {isJobsStatus ? "Job Details" : "Lead Intelligence"}
+                </p>
+                <div style={{ height: "1px", flex: 1, background: "#edf2f7", marginLeft: "12px" }}></div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {filteredFields.length === 0 ? (
+                  <p style={{ fontSize: "0.85rem", color: "#94a3b8", textAlign: "center", fontStyle: "italic", background: "#f8fafc", padding: "20px", borderRadius: "16px", border: "1px dashed #e2e8f0" }}>
+                    {isJobsStatus ? "No job fields configured." : "No custom attributes found."}
+                  </p>
+                ) : (
+                  [...filteredFields]
+                    .sort((a, b) => {
+                      if (a.sortOrder === 0 && b.sortOrder === 0) return 0;
+                      if (a.sortOrder === 0) return 1;
+                      if (b.sortOrder === 0) return -1;
+                      return a.sortOrder - b.sortOrder;
+                    })
+                    .map(field => (
+                      <CustomFieldItem
+                        key={field._id}
+                        field={field}
+                        activeContact={activeContact}
+                        isUpdatingField={isUpdatingField}
+                        handleUpdateCustomField={handleUpdateCustomField}
+                        setActiveContact={setActiveContact}
+                      />
+                    ))
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Footer Actions */}
         <div style={{ marginTop: "auto", paddingTop: "8px" }}>

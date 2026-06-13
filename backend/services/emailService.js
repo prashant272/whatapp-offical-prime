@@ -24,12 +24,7 @@ const getTransporterConfig = (setting) => {
       auth: {
         user: setting.user,
         pass: setting.pass
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      name: setting.host, // HELO/EHLO name matches SMTP server host
-      xMailer: false
+      }
     };
   }
 };
@@ -64,24 +59,13 @@ export const sendEmail = async (setting, { to, subject, html, text, attachments 
   const fromName = setting.senderName || "WhatsApp Dashboard";
   const fromEmail = setting.senderEmail || setting.user;
 
-  // Personal Gmail accounts should have NO custom headers to look exactly like standard user messages.
-  // Official SMTP can use standard Microsoft Outlook spoofing headers.
-  const customHeaders = setting.type === "gmail" ? {} : {
-    "X-Mailer": "Microsoft Outlook",
-    "X-Priority": "1",
-    "X-MSMail-Priority": "High",
-    "Importance": "high",
-    "Precedence": "urgent"
-  };
-
   const mailOptions = {
     from: `"${fromName}" <${fromEmail}>`,
     to,
     subject,
     html,
     text,
-    attachments: attachments || [],
-    headers: customHeaders
+    attachments: attachments || []
   };
 
   try {

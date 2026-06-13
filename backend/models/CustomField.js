@@ -13,6 +13,7 @@ const customFieldSchema = new mongoose.Schema({
   optionsSortAlpha: { type: Boolean, default: false }, // Sort COMBOBOX options A-Z
   whatsappAccountIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }],
   whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" }, // Backward compatibility
+  applicableStatus: { type: String, default: "All" },
   createdAt: { type: Date, default: Date.now }
 });
 
