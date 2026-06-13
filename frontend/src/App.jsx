@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap, Settings, Bot, GitBranch, Layers, Trash2 } from "lucide-react";
+import { LayoutDashboard, Send, FileText, BarChart3, MessageCircle, UserPlus, History, Zap, Settings, Bot, GitBranch, Layers, Trash2, Mail } from "lucide-react";
 import io from "socket.io-client";
 import api from "./api";
 import TemplateManager from "./components/TemplateManager";
@@ -16,6 +16,7 @@ import WhatsAppAccountSettings from "./components/WhatsAppAccountSettings";
 import FlowManager from "./components/FlowManager";
 import ContactManager from "./components/ContactManager/ContactManagerMain";
 import CustomFieldManager from "./components/CustomFieldManager";
+import EmailManager from "./components/EmailManager";
 import { WhatsAppAccountProvider, useWhatsAppAccount } from "./WhatsAppAccountContext";
 
 function AppContent() {
@@ -88,6 +89,7 @@ function AppContent() {
 
   const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/", roles: ["Admin", "Manager"] },
+    { id: "email", label: "Email System", icon: Mail, path: "/email", roles: ["Admin", "Manager", "Executive"] },
     { id: "templates", label: "Templates", icon: FileText, path: "/templates", roles: ["Admin", "Manager"] },
     { id: "campaigns", label: "Campaigns", icon: Send, path: "/campaigns", roles: ["Admin", "Manager"] },
     { id: "chats", label: "Chats", icon: MessageCircle, path: "/chats", roles: ["Admin", "Manager", "Executive"] },
@@ -248,6 +250,7 @@ function AppContent() {
                 <Route path="/deleted-contacts" element={<ContactManager deleted={true} />} />
                 <Route path="/custom-fields" element={<CustomFieldManager />} />
                 <Route path="/settings" element={<WhatsAppAccountSettings />} />
+                <Route path="/email" element={<EmailManager />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>
             </main>

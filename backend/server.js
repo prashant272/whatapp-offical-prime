@@ -27,6 +27,7 @@ import keywordRuleRoutes from "./routes/keywordRuleRoutes.js";
 import quickReplyRoutes from "./routes/quickReplyRoutes.js";
 import callRoutes from "./routes/callRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import emailRoutes from "./routes/emailRoutes.js";
 import { protect, restrictTo } from "./middleware/authMiddleware.js";
 import { attachWhatsAppAccount } from "./middleware/accountMiddleware.js";
 import { errorHandler } from "./utils/errorHandler.js";
@@ -36,6 +37,7 @@ import { initSocket } from "./utils/socket.js";
 
 import { syncEnvAccount } from "./utils/accountSyncer.js";
 import { initAutomationCron } from "./utils/automationCron.js";
+import { initEmailSyncCron } from "./utils/emailSyncCron.js";
 
 dotenv.config();
 
@@ -44,6 +46,7 @@ connectDB().then(() => {
   // Step 2: Sync settings and start the Background Follow-up Cron Job
   syncEnvAccount();
   initAutomationCron();
+  initEmailSyncCron();
 });
 
 const app = express();
@@ -83,6 +86,7 @@ app.use("/api/keyword-rules", keywordRuleRoutes);
 app.use("/api/quick-replies", quickReplyRoutes);
 app.use("/api/calls", callRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/email", emailRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({
