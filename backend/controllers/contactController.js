@@ -1,9 +1,10 @@
-import { verifyContacts } from "../services/whatsappService.js";
+import { verifyContacts, blockUser, unblockUser } from "../services/whatsappService.js";
 import Contact from "../models/Contact.js";
 import Conversation from "../models/Conversation.js";
 import Timeline from "../models/Timeline.js";
 import Campaign from "../models/Campaign.js";
 import Message from "../models/Message.js";
+import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 
 export const verifyNumbers = async (req, res, next) => {
@@ -91,13 +92,19 @@ export const getContacts = async (req, res, next) => {
     }
 
     if (tag) query.tags = { $in: [tag] };
-    if (sector) query.sector = sector;
+    
+    if (sector) {
+      const sectorArr = Array.isArray(sector) ? sector : sector.split(',');
+      query.sector = { $in: sectorArr };
+    }
+    
     if (subsector) query.subsector = subsector;
 
     if (campaignName) {
+      const campArr = Array.isArray(campaignName) ? campaignName : campaignName.split(',');
       query.$or = [
-        { sourceCampaign: campaignName },
-        { "accountsData.sourceCampaign": campaignName }
+        { sourceCampaign: { $in: campArr } },
+        { "accountsData.sourceCampaign": { $in: campArr } }
       ];
     }
 
@@ -290,6 +297,31 @@ export const updateContact = async (req, res, next) => {
 
     const contact = await Contact.findById(id);
     if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+    // Meta API Block/Unblock Integration
+    if (updateData.isBlocked !== undefined && updateData.isBlocked !== contact.isBlocked) {
+      let activeAcc = req.whatsappAccount;
+      if (!activeAcc && contact.whatsappAccountId) {
+        activeAcc = await WhatsAppAccount.findById(contact.whatsappAccountId);
+      }
+      
+      if (activeAcc) {
+        try {
+          if (updateData.isBlocked) {
+            await blockUser(activeAcc, contact.phone);
+            console.log(`✅ Blocked user ${contact.phone} on Meta WhatsApp API.`);
+          } else {
+            await unblockUser(activeAcc, contact.phone);
+            console.log(`✅ Unblocked user ${contact.phone} on Meta WhatsApp API.`);
+          }
+        } catch (metaErr) {
+          console.error("⚠️ Failed to block/unblock user on Meta Cloud API:", metaErr.response?.data || metaErr.message);
+          return res.status(400).json({ error: `Meta API Error: ${metaErr.response?.data?.error?.message || metaErr.message}` });
+        }
+      } else {
+        console.warn("⚠️ No active WhatsApp account context found to perform Meta block/unblock.");
+      }
+    }
 
     // Update ALL contact documents with the same phone number to sync across all WhatsApp accounts!
     await Contact.updateMany({ phone: contact.phone }, { $set: updateData });

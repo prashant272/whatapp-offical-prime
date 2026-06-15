@@ -196,6 +196,14 @@ export const handleWebhook = async (req, res) => {
 
       if (message) {
         const from = normalizePhone(message.from); 
+
+        // Reject incoming messages from blocked contacts
+        const existingBlockedContact = await Contact.findOne({ phone: from, isBlocked: true });
+        if (existingBlockedContact) {
+          console.log(`🚫 Webhook ignored message from blocked contact: ${from}`);
+          return res.sendStatus(200);
+        }
+
         let type = message.type || "text";
 
         // Handle reactions separately

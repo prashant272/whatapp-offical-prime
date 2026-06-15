@@ -40,9 +40,10 @@ const CampaignManager = () => {
   const [tags, setTags] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [selectedSourceType, setSelectedSourceType] = useState(""); // "tag" or "sector"
-  const [selectedSourceValue, setSelectedSourceValue] = useState("");
+  const [selectedSourceValues, setSelectedSourceValues] = useState([]);
   const [selectedSubsectorValue, setSelectedSubsectorValue] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
+  const [showSourceValueDropdown, setShowSourceValueDropdown] = useState(false);
   const [loadLimit, setLoadLimit] = useState(100);
   const [loadSkip, setLoadSkip] = useState(0);
   const [loadFromAllAccounts, setLoadFromAllAccounts] = useState(false);
@@ -125,6 +126,7 @@ const CampaignManager = () => {
   const statusDropdownRef = useRef(null);
   const userDropdownRef = useRef(null);
   const campaignStatusDropdownRef = useRef(null);
+  const sourceValueDropdownRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -136,6 +138,9 @@ const CampaignManager = () => {
       }
       if (campaignStatusDropdownRef.current && !campaignStatusDropdownRef.current.contains(event.target)) {
         setShowCampaignStatusDropdown(false);
+      }
+      if (sourceValueDropdownRef.current && !sourceValueDropdownRef.current.contains(event.target)) {
+        setShowSourceValueDropdown(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -936,8 +941,8 @@ const CampaignManager = () => {
                 {/* Active Filters Summary */}
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: "0.7rem", color: "#667781", fontWeight: "600" }}>Active Filters:</span>
-                  {selectedSourceType && selectedSourceValue
-                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "campaign" ? "Campaign" : "Sector"}: {selectedSourceValue} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
+                  {selectedSourceType && selectedSourceValues.length > 0
+                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "campaign" ? "Campaigns" : "Sectors"}: {selectedSourceValues.join(", ")} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
                     : <span style={{ background: "#f0f2f5", color: "#667781", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem" }}>All Categories</span>
                   }
                   {selectedStatuses.length > 0
@@ -965,7 +970,7 @@ const CampaignManager = () => {
                   <select
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", outline: "none" }}
                     value={selectedSourceType}
-                    onChange={(e) => { setSelectedSourceType(e.target.value); setSelectedSourceValue(""); setSelectedSubsectorValue(""); }}
+                    onChange={(e) => { setSelectedSourceType(e.target.value); setSelectedSourceValues([]); setSelectedSubsectorValue(""); }}
                   >
                     <option value="">All Contacts</option>
                     <option value="campaign">By Campaign</option>
@@ -973,23 +978,70 @@ const CampaignManager = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Value</label>
-                  <select
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", outline: "none", opacity: !selectedSourceType ? 0.5 : 1 }}
-                    value={selectedSourceValue}
-                    onChange={(e) => { setSelectedSourceValue(e.target.value); setSelectedSubsectorValue(""); }}
-                    disabled={!selectedSourceType}
-                  >
-                    <option value="">-- Select Value --</option>
-                    {selectedSourceType === "campaign" ? campaigns
-                      .map(c => {
-                        const accName = c.whatsappAccountId?.name || "";
-                        const displayName = accName ? `${c.name} (${accName})` : c.name;
-                        return <option key={c._id} value={c.name}>{displayName}</option>;
-                      }) :
-                      selectedSourceType === "sector" ? sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>) : null}
-                  </select>
+                <div style={{ position: "relative" }} ref={sourceValueDropdownRef}>
+                  <label style={{ fontSize: "0.72rem", fontWeight: "700", color: "#667781", display: "block", marginBottom: "4px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Value {selectedSourceValues.length > 0 && <span style={{ background: "#00a884", color: "white", borderRadius: "10px", padding: "1px 7px", fontSize: "0.65rem" }}>{selectedSourceValues.length}</span>}
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <div
+                      onClick={() => selectedSourceType && setShowSourceValueDropdown(prev => !prev)}
+                      style={{ padding: "9px 12px", borderRadius: "8px", border: "1px solid #ddd", background: "white", fontSize: "0.85rem", cursor: selectedSourceType ? "pointer" : "not-allowed", display: "flex", justifyContent: "space-between", alignItems: "center", userSelect: "none", opacity: !selectedSourceType ? 0.5 : 1 }}
+                    >
+                      <span style={{ color: selectedSourceValues.length === 0 ? "#aaa" : "#111b21", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "140px" }}>
+                        {selectedSourceValues.length === 0 ? "-- Select Value --" : selectedSourceValues.join(", ")}
+                      </span>
+                      <span style={{ color: "#667781", fontSize: "0.7rem" }}>▼</span>
+                    </div>
+                    {showSourceValueDropdown && selectedSourceType && (
+                      <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "white", border: "1px solid #ddd", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, maxHeight: "250px", overflowY: "auto" }}>
+                        <div
+                          onClick={() => { setSelectedSourceValues([]); setSelectedSubsectorValue(""); }}
+                          style={{ padding: "8px 14px", fontSize: "0.8rem", cursor: "pointer", borderBottom: "1px solid #f0f2f5", color: "#667781", fontWeight: "600" }}
+                        >✕ Clear All</div>
+                        {selectedSourceType === "campaign" ? (
+                          campaigns.map(c => {
+                            const accName = c.whatsappAccountId?.name || "";
+                            const displayName = accName ? `${c.name} (${accName})` : c.name;
+                            const isSelected = selectedSourceValues.includes(c.name);
+                            return (
+                              <div
+                                key={c._id}
+                                onClick={() => {
+                                  setSelectedSourceValues(prev => prev.includes(c.name) ? prev.filter(x => x !== c.name) : [...prev, c.name]);
+                                  setSelectedSubsectorValue("");
+                                }}
+                                style={{ padding: "8px 14px", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: isSelected ? "#f0fdf4" : "transparent", color: isSelected ? "#00a884" : "#111b21" }}
+                              >
+                                <span style={{ width: "16px", height: "16px", borderRadius: "4px", border: `2px solid ${isSelected ? "#00a884" : "#ccc"}`, background: isSelected ? "#00a884" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", color: "white", flexShrink: 0 }}>
+                                  {isSelected ? "✓" : ""}
+                                </span>
+                                {displayName}
+                              </div>
+                            );
+                          })
+                        ) : selectedSourceType === "sector" ? (
+                          sectors.map(s => {
+                            const isSelected = selectedSourceValues.includes(s.name);
+                            return (
+                              <div
+                                key={s._id}
+                                onClick={() => {
+                                  setSelectedSourceValues(prev => prev.includes(s.name) ? prev.filter(x => x !== s.name) : [...prev, s.name]);
+                                  setSelectedSubsectorValue("");
+                                }}
+                                style={{ padding: "8px 14px", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: isSelected ? "#f0fdf4" : "transparent", color: isSelected ? "#00a884" : "#111b21" }}
+                              >
+                                <span style={{ width: "16px", height: "16px", borderRadius: "4px", border: `2px solid ${isSelected ? "#00a884" : "#ccc"}`, background: isSelected ? "#00a884" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", color: "white", flexShrink: 0 }}>
+                                  {isSelected ? "✓" : ""}
+                                </span>
+                                {s.name}
+                              </div>
+                            );
+                          })
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {selectedSourceType === "sector" && (
@@ -1001,7 +1053,10 @@ const CampaignManager = () => {
                       onChange={(e) => setSelectedSubsectorValue(e.target.value)}
                     >
                       <option value="">All Subsectors</option>
-                      {(sectors.find(s => s.name === selectedSourceValue)?.subsectors || []).map(sub => (
+                      {[...new Set(sectors
+                        .filter(s => selectedSourceValues.includes(s.name))
+                        .flatMap(s => s.subsectors || [])
+                      )].map(sub => (
                         <option key={sub} value={sub}>{sub}</option>
                       ))}
                     </select>
@@ -1186,11 +1241,12 @@ const CampaignManager = () => {
                     onClick={async () => {
                       try {
                         let url = `/contacts?limit=${loadLimit}&skip=${loadSkip}&showAllAccounts=true&onlyPhones=true`;
-                        if (selectedSourceType && selectedSourceValue) {
+                        if (selectedSourceType && selectedSourceValues.length > 0) {
+                          const valuesEscaped = encodeURIComponent(selectedSourceValues.join(","));
                           if (selectedSourceType === "campaign") {
-                            url += `&campaignName=${selectedSourceValue}`;
+                            url += `&campaignName=${valuesEscaped}`;
                           } else {
-                            url += `&${selectedSourceType}=${selectedSourceValue}`;
+                            url += `&${selectedSourceType}=${valuesEscaped}`;
                           }
                         }
                         if (selectedSourceType === "sector" && selectedSubsectorValue) url += `&subsector=${selectedSubsectorValue}`;

@@ -278,7 +278,7 @@ const ContactDetailSidebar = ({
   sectors, handleAssign,
   executives, customFieldsDef,
   isUpdatingField, handleUpdateCustomField,
-  setActiveContact
+  setActiveContact, handleToggleBlock
 }) => {
   if (!showContactInfo || !selectedChat) return null;
 
@@ -718,13 +718,13 @@ const ContactDetailSidebar = ({
         {/* Footer Actions */}
         <div style={{ marginTop: "auto", paddingTop: "8px" }}>
           <button
-            onClick={() => alert("Notes feature coming soon!")}
+            onClick={() => handleToggleBlock(activeContact?._id, !activeContact?.isBlocked)}
             style={{
               width: "100%",
               padding: "12px",
-              background: "transparent",
-              border: "1.5px solid #fca5a5",
-              color: "#ef4444",
+              background: activeContact?.isBlocked ? "#f0fdf4" : "transparent",
+              border: activeContact?.isBlocked ? "1.5px solid #86efac" : "1.5px solid #fca5a5",
+              color: activeContact?.isBlocked ? "#15803d" : "#ef4444",
               borderRadius: "12px",
               cursor: "pointer",
               fontSize: "0.85rem",
@@ -736,17 +736,17 @@ const ContactDetailSidebar = ({
               transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
             }}
             onMouseOver={e => {
-              e.currentTarget.style.background = "#fff5f5";
-              e.currentTarget.style.borderColor = "#ef4444";
+              e.currentTarget.style.background = activeContact?.isBlocked ? "#dcfce7" : "#fff5f5";
+              e.currentTarget.style.borderColor = activeContact?.isBlocked ? "#22c55e" : "#ef4444";
               e.currentTarget.style.transform = "translateY(-1px)";
             }}
             onMouseOut={e => {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.borderColor = "#fca5a5";
+              e.currentTarget.style.background = activeContact?.isBlocked ? "#f0fdf4" : "transparent";
+              e.currentTarget.style.borderColor = activeContact?.isBlocked ? "#86efac" : "#fca5a5";
               e.currentTarget.style.transform = "none";
             }}
           >
-            <ShieldAlert size={16} /> Block Contact
+            <ShieldAlert size={16} /> {activeContact?.isBlocked ? "Unblock Contact" : "Block Contact"}
           </button>
         </div>
       </div>

@@ -245,3 +245,57 @@ export const uploadMediaToMeta = async (accessToken, fileUrl) => {
     throw new Error(`Meta media upload failed: ${error.response?.data?.error?.message || error.message}`);
   }
 };
+
+export const blockUser = async (account, phoneToBlock) => {
+  let cleanTo = phoneToBlock.toString().replace(/\D/g, "");
+  if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${account.phoneNumberId}/block_users`,
+      {
+        messaging_product: "whatsapp",
+        block_users: [
+          {
+            user: cleanTo
+          }
+        ]
+      },
+      { headers: getHeaders(account.accessToken) }
+    );
+    return res.data;
+  } catch (error) {
+    const metaError = error.response?.data?.error;
+    if (metaError) {
+      console.error(`❌ Meta API Error (Block User: ${cleanTo}):`, JSON.stringify(metaError, null, 2));
+    }
+    throw error;
+  }
+};
+
+export const unblockUser = async (account, phoneToUnblock) => {
+  let cleanTo = phoneToUnblock.toString().replace(/\D/g, "");
+  if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
+  try {
+    const res = await axios.delete(
+      `${BASE_URL}/${account.phoneNumberId}/block_users`,
+      {
+        headers: getHeaders(account.accessToken),
+        data: {
+          messaging_product: "whatsapp",
+          block_users: [
+            {
+              user: cleanTo
+            }
+          ]
+        }
+      }
+    );
+    return res.data;
+  } catch (error) {
+    const metaError = error.response?.data?.error;
+    if (metaError) {
+      console.error(`❌ Meta API Error (Unblock User: ${cleanTo}):`, JSON.stringify(metaError, null, 2));
+    }
+    throw error;
+  }
+};

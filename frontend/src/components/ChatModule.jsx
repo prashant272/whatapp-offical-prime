@@ -476,6 +476,21 @@ const ChatModule = () => {
     }
   };
 
+  const handleToggleBlock = async (contactId, isBlocked) => {
+    if (!contactId) return;
+    const actionText = isBlocked ? "block" : "unblock";
+    if (!window.confirm(`Are you sure you want to ${actionText} this contact?`)) return;
+
+    try {
+      const res = await api.put(`/contacts/${contactId}`, { isBlocked });
+      setActiveContact(res.data);
+      alert(`Contact successfully ${isBlocked ? "blocked" : "unblocked"}!`);
+    } catch (err) {
+      console.error("Error toggling block status:", err);
+      alert("Failed to update block status.");
+    }
+  };
+
   const handleSend = async (e) => {
     if (e) e.preventDefault();
     if (isSendingMsg || (!newMessage.trim() && !pendingImage) || !selectedChat) return;
@@ -1287,6 +1302,7 @@ const ChatModule = () => {
         executives={executives} customFieldsDef={customFieldsDef}
         isUpdatingField={isUpdatingField} handleUpdateCustomField={handleUpdateCustomField}
         setActiveContact={setActiveContact}
+        handleToggleBlock={handleToggleBlock}
       />
 
       <TemplateModal

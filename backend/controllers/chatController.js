@@ -281,6 +281,11 @@ export const sendMessage = async (req, res) => {
 
     if (!account) throw new Error("No active WhatsApp account found");
 
+    const contact = await Contact.findOne({ phone: to });
+    if (contact && contact.isBlocked) {
+      return res.status(400).json({ error: "Cannot send messages to a blocked contact." });
+    }
+
     console.log(`📤 sendMessage controller called: body="${body}", to="${to}", quotedMessageId="${quotedMessageId}"`);
     const metaRes = await sendTextMessage(account, to, body, quotedMessageId);
     console.log("📤 Meta API Response:", JSON.stringify(metaRes));
@@ -403,6 +408,11 @@ export const sendChatTemplateMessage = async (req, res) => {
 
     if (!account) throw new Error("No active WhatsApp account found");
 
+    const contact = await Contact.findOne({ phone: to });
+    if (contact && contact.isBlocked) {
+      return res.status(400).json({ error: "Cannot send messages to a blocked contact." });
+    }
+
     const template = await Template.findOne({ name: templateName, whatsappAccountId: account._id });
     const lang = template ? template.language : "en_US";
 
@@ -476,6 +486,11 @@ export const sendChatImageMessage = async (req, res) => {
     const account = req.whatsappAccount;
 
     if (!account) throw new Error("No active WhatsApp account found");
+
+    const contact = await Contact.findOne({ phone: to });
+    if (contact && contact.isBlocked) {
+      return res.status(400).json({ error: "Cannot send messages to a blocked contact." });
+    }
 
     // Detect if it's a document based on URL or provided type
     const isDocument = providedType === "document" ||
