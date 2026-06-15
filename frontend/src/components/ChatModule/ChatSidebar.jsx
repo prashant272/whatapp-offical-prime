@@ -455,6 +455,7 @@ const ChatSidebar = ({
                   style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
                 >
                   <option value="all">User: All</option>
+                  <option value="unassigned">Unassigned</option>
                   {executives?.map(ex => (
                     <option key={ex._id} value={ex._id}>{ex.name}</option>
                   ))}
@@ -466,7 +467,8 @@ const ChatSidebar = ({
                   style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
                 >
                   <option value="all">Sector: All</option>
-                  {sectors?.map(s => (
+                  <option value="unassigned">Unassigned</option>
+                  {sectors?.filter(s => s.name?.toLowerCase() !== "unassigned")?.map(s => (
                     <option key={s.name} value={s.name}>{s.name}</option>
                   ))}
                 </select>

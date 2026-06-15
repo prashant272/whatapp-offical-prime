@@ -432,7 +432,7 @@ export default function ChatListScreen({ navigation }) {
           style={[styles.dropdownBtn, sectorFilter !== 'all' && styles.dropdownBtnActive]}
         >
           <Text style={[styles.dropdownBtnText, sectorFilter !== 'all' && styles.dropdownBtnTextActive]} numberOfLines={1}>
-            {sectorFilter === 'all' ? 'All Sectors' : sectorFilter}
+            {sectorFilter === 'all' ? 'All Sectors' : (sectorFilter === 'unassigned' ? 'Unassigned' : sectorFilter)}
           </Text>
           <ChevronDown size={14} color={sectorFilter !== 'all' ? '#008069' : '#667781'} />
         </TouchableOpacity>
@@ -527,11 +527,11 @@ export default function ChatListScreen({ navigation }) {
               </TouchableOpacity>
             </View>
             <FlatList
-              data={[{ _id: 'all', name: 'all' }, ...sectors]}
-              keyExtractor={(item) => item._id}
+              data={[{ _id: 'all', name: 'all' }, { _id: 'unassigned', name: 'unassigned' }, ...sectors.filter(s => s.name?.toLowerCase() !== 'unassigned')]}
+              keyExtractor={(item) => item._id || item.name}
               renderItem={({ item }) => {
                 const isAll = item.name === 'all';
-                const label = isAll ? 'All Sectors' : item.name;
+                const label = isAll ? 'All Sectors' : (item.name === 'unassigned' ? 'Unassigned' : item.name);
                 const isActive = sectorFilter === item.name;
                 return (
                   <TouchableOpacity 

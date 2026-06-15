@@ -923,7 +923,13 @@ const ChatModule = () => {
           if (assignedId) return false;
         } else if (assignedId !== userFilter) return false;
       }
-      if (sectorFilter && sectorFilter.toLowerCase() !== "all" && c.sector !== sectorFilter) return false;
+      if (sectorFilter && sectorFilter.toLowerCase() !== "all") {
+        if (sectorFilter.toLowerCase() === "unassigned") {
+          if (c.sector && c.sector.toLowerCase() !== "unassigned") return false;
+        } else if (c.sector !== sectorFilter) {
+          return false;
+        }
+      }
       if (query) {
         if (!((c.contact?.name || "").toLowerCase().includes(query) || c.phone.includes(query) || (c.lastMessage || "").toLowerCase().includes(query))) return false;
       }

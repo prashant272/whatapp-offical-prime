@@ -380,7 +380,9 @@ export const handleWebhook = async (req, res) => {
             phone: from,
             whatsappAccountId: account?._id,
             status: contact.status || "New", // Sync status from contact if it's a fresh conversation record
-            assignedTo: contact.assignedTo // Carry over assignment if any
+            assignedTo: contact.assignedTo, // Carry over assignment if any
+            sector: contact.sector || "Unassigned",
+            subsector: contact.subsector || "Unassigned"
           });
         }
         

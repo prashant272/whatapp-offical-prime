@@ -79,7 +79,13 @@ export const getConversations = async (req, res) => {
         conditions.push({ assignedTo });
       }
     }
-    if (sector && sector !== "all") conditions.push({ sector });
+    if (sector && sector !== "all") {
+      if (sector.toLowerCase() === "unassigned") {
+        conditions.push({ $or: [{ sector: "Unassigned" }, { sector: "unassigned" }, { sector: null }, { sector: { $exists: false } }, { sector: "" }] });
+      } else {
+        conditions.push({ sector });
+      }
+    }
     if (subsector && subsector !== "all") conditions.push({ subsector });
 
     // 3b. Unread/Window Quick Filters
