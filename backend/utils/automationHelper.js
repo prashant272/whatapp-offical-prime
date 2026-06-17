@@ -5,6 +5,7 @@ import { sendTextMessage, sendImageMessage } from "../services/whatsappService.j
 import Flow from "../models/Flow.js";
 import { smartEmit } from "./socket.js";
 import { normalizePhone } from "./phoneUtils.js";
+import { generateAIResponse } from "../services/aiService.js";
 
 // --- STRING SIMILARITY ALGORITHM (Levenshtein Distance) ---
 export function getSimilarity(s1, s2) {
@@ -122,6 +123,12 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     if (!bestMatch || highestScore < 0.8) {
+      // --- GEMINI AI FALLBACK RESPONDER ---
+      const aiReply = await generateAIResponse(incomingText, contact);
+      if (aiReply) {
+        console.log(`🤖 Gemini AI responding: "${aiReply}"`);
+        return await sendDelayedMessage(account, phone, aiReply, contact, 1000);
+      }
       return false;
     }
 
@@ -267,6 +274,25 @@ async function sendSingleAutoReplyMessage(account, phone, reply, contact, delayM
 /**
  * Logic for Dynamic Flows
  */
+/**
+ * Helper to replace placeholders in a string (supports both {field} and {{field}})
+ */
+function replacePlaceholders(str, chatData) {
+  if (!str) return str;
+  let result = str;
+  if (chatData && chatData.size > 0) {
+    chatData.forEach((value, key) => {
+      const placeholder2 = new RegExp(`{{${key}}}`, "gi");
+      const placeholder1 = new RegExp(`{${key}}`, "gi");
+      result = result.replace(placeholder2, value).replace(placeholder1, value);
+    });
+  }
+  return result;
+}
+
+/**
+ * Logic for Dynamic Flows
+ */
 async function processDynamicFlow(account, phone, text, contact) {
   const flow = await Flow.findById(contact.activeFlowId);
   if (!flow) {
@@ -278,54 +304,123 @@ async function processDynamicFlow(account, phone, text, contact) {
   const currentIndex = contact.currentStepIndex;
   const currentStep = flow.steps[currentIndex];
 
+  if (!currentStep) {
+    contact.activeFlowId = null;
+    contact.currentStepIndex = 0;
+    await contact.save();
+    return false;
+  }
+
   // 1. Save the user's response to the current step's field
   if (!contact.chatData) contact.chatData = new Map();
+  if (!contact.customFields) contact.customFields = new Map();
 
   // Save to specialized field if it's name
   if (currentStep.saveToField === "name") {
     contact.name = text;
   }
 
-  // Always save to chatData for variable interpolation {{field}}
+  // Always save to chatData for variable interpolation
   contact.chatData.set(currentStep.saveToField, text);
-
-  // CRITICAL: Mongoose doesn't auto-detect Map changes, we must mark it as modified!
   contact.markModified("chatData");
+
+  // Save to customFields so it shows in the sidebar automatically
+  contact.customFields.set(currentStep.saveToField, text);
+  contact.markModified("customFields");
   await contact.save();
 
-  // 2. Move to next step
-  const nextIndex = currentIndex + 1;
-  if (nextIndex < flow.steps.length) {
-    let nextQuestion = flow.steps[nextIndex].question;
-    const nextDelay = (flow.steps[nextIndex].delay || 2) * 1000;
-
-    // --- DYNAMIC VARIABLE REPLACEMENT ---
-    // Replace {{field}} with actual data from contact.chatData
-    if (contact.chatData && contact.chatData.size > 0) {
-      contact.chatData.forEach((value, key) => {
-        const placeholder = new RegExp(`{{${key}}}`, "gi"); // 'i' for case-insensitive
-        nextQuestion = nextQuestion.replace(placeholder, value);
+  // 2. Determine next action (if branching options exist)
+  let matchedOption = null;
+  if (currentStep.type === "options" && currentStep.options && currentStep.options.length > 0) {
+    const cleanInput = text.toLowerCase().trim();
+    for (const option of currentStep.options) {
+      if (!option.keywords) continue;
+      const keywords = option.keywords.toLowerCase().split(",").map(k => k.trim());
+      const isMatch = keywords.some(keyword => {
+        if (cleanInput === keyword) return true;
+        const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
+        if (wordRegex.test(cleanInput)) return true;
+        const words = cleanInput.split(/\s+/);
+        const maxSimilarity = Math.max(...words.map(w => getSimilarity(w, keyword)));
+        if (maxSimilarity >= 0.8) return true;
+        return false;
       });
+      if (isMatch) {
+        matchedOption = option;
+        break;
+      }
     }
 
-    contact.currentStepIndex = nextIndex;
-    await contact.save();
-    return await sendDelayedMessage(account, phone, nextQuestion, contact, nextDelay);
-  } else {
-    // Flow complete
-    let msg = flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏";
-
-    // Also replace variables in success message
-    if (contact.chatData && contact.chatData.size > 0) {
-      contact.chatData.forEach((value, key) => {
-        const placeholder = new RegExp(`{{${key}}}`, "gi");
-        msg = msg.replace(placeholder, value);
-      });
+    if (!matchedOption) {
+      // Re-send current question (or validation error) to avoid getting stuck
+      const repeatedQuestion = replacePlaceholders(currentStep.question, contact.chatData);
+      await sendDelayedMessage(account, phone, "Vikalp sahi nahi hai. Kripya fir se koshish karein:\n\n" + repeatedQuestion, contact, 1000);
+      return true;
     }
+  }
 
+  // Helper to send flow success message
+  const endFlow = async (successMsg, delayMs = 2000) => {
+    let msg = successMsg || flow.successMessage || "Dhanyawad! Aapki saari details save ho gayi hain. 🙏";
+    msg = replacePlaceholders(msg, contact.chatData);
     contact.activeFlowId = null;
     contact.currentStepIndex = 0;
     await contact.save();
-    return await sendDelayedMessage(account, phone, msg, contact, 2000);
+    return await sendDelayedMessage(account, phone, msg, contact, delayMs);
+  };
+
+  // Helper to trigger another flow
+  const triggerAnotherFlow = async (nextFlowId, delayMs = 2000) => {
+    const nextFlow = await Flow.findById(nextFlowId);
+    if (!nextFlow || !nextFlow.steps || nextFlow.steps.length === 0) {
+      return await endFlow();
+    }
+    contact.activeFlowId = nextFlow._id;
+    contact.currentStepIndex = 0;
+    await contact.save();
+
+    const firstQuestion = replacePlaceholders(nextFlow.steps[0].question, contact.chatData);
+    const firstDelay = (nextFlow.steps[0].delay || 2) * 1000 + delayMs;
+    return await sendDelayedMessage(account, phone, firstQuestion, contact, firstDelay);
+  };
+
+  // Process the matched option action or the default linear flow
+  if (matchedOption) {
+    // If there is reply text for this specific option, send it
+    let optionDelay = 0;
+    if (matchedOption.replyText) {
+      const replyToSend = replacePlaceholders(matchedOption.replyText, contact.chatData);
+      await sendDelayedMessage(account, phone, replyToSend, contact, 1000);
+      optionDelay = 2000; // Shift subsequent messages
+    }
+
+    if (matchedOption.action === "end") {
+      return await endFlow(null, optionDelay || 2000);
+    } else if (matchedOption.action === "trigger_flow") {
+      return await triggerAnotherFlow(matchedOption.nextFlowId, optionDelay);
+    } else if (matchedOption.action === "jump") {
+      const nextIndex = matchedOption.nextStepIndex;
+      if (nextIndex >= 0 && nextIndex < flow.steps.length) {
+        contact.currentStepIndex = nextIndex;
+        await contact.save();
+        const nextQuestion = replacePlaceholders(flow.steps[nextIndex].question, contact.chatData);
+        const nextDelay = (flow.steps[nextIndex].delay || 2) * 1000 + optionDelay;
+        return await sendDelayedMessage(account, phone, nextQuestion, contact, nextDelay);
+      } else {
+        return await endFlow(null, optionDelay || 2000);
+      }
+    }
+  }
+
+  // Default flow behavior (continue to next step)
+  const nextIndex = currentIndex + 1;
+  if (nextIndex < flow.steps.length) {
+    contact.currentStepIndex = nextIndex;
+    await contact.save();
+    const nextQuestion = replacePlaceholders(flow.steps[nextIndex].question, contact.chatData);
+    const nextDelay = (flow.steps[nextIndex].delay || 2) * 1000;
+    return await sendDelayedMessage(account, phone, nextQuestion, contact, nextDelay);
+  } else {
+    return await endFlow();
   }
 }

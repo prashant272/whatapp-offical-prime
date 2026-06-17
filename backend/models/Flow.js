@@ -1,9 +1,19 @@
 import mongoose from "mongoose";
 
+const flowStepOptionSchema = new mongoose.Schema({
+  keywords: { type: String, required: true }, // comma-separated e.g. "yes, interested, haan"
+  action: { type: String, enum: ["continue", "jump", "trigger_flow", "end"], default: "continue" },
+  nextStepIndex: { type: Number, default: 0 },
+  nextFlowId: { type: mongoose.Schema.Types.ObjectId, ref: "Flow", default: null },
+  replyText: { type: String, default: "" }
+});
+
 const flowStepSchema = new mongoose.Schema({
   question: { type: String, required: true },
   saveToField: { type: String, required: true }, // e.g. "city", "profession"
-  delay: { type: Number, default: 2 } // Delay in seconds for this specific step
+  delay: { type: Number, default: 2 }, // Delay in seconds for this specific step
+  type: { type: String, enum: ["text", "options"], default: "text" },
+  options: [flowStepOptionSchema]
 });
 
 const flowSchema = new mongoose.Schema({

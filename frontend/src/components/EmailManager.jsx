@@ -1111,7 +1111,6 @@ const EmailManager = () => {
                       <strong>Subject:</strong> {t.subject}
                     </p>
                     <div style={{
-                      background: "#f8fafc",
                       padding: "10px 14px",
                       borderRadius: "8px",
                       fontSize: "0.85rem",
