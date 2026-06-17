@@ -92,6 +92,8 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
         { whatsappAccountIds: account?._id }
       ]
     });
+    let bestFlowMatch = null;
+    let highestFlowScore = 0;
     for (const flow of allFlows) {
       if (!flow.triggerKeyword) continue;
       const keywords = flow.triggerKeyword.toLowerCase().split(",").map(k => k.trim());
