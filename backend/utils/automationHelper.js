@@ -92,14 +92,27 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
         { whatsappAccountIds: account?._id }
       ]
     });
-    let bestFlowMatch = null;
-    let highestFlowScore = 0;
-
     for (const flow of allFlows) {
-      const score = getSimilarity(text, flow.triggerKeyword);
-      if (score > highestFlowScore) {
-        highestFlowScore = score;
-        bestFlowMatch = flow;
+      if (!flow.triggerKeyword) continue;
+      const keywords = flow.triggerKeyword.toLowerCase().split(",").map(k => k.trim());
+      for (const keyword of keywords) {
+        if (text === keyword) {
+          bestFlowMatch = flow;
+          highestFlowScore = 1.0;
+          break;
+        }
+        const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
+        if (wordRegex.test(text)) {
+          if (highestFlowScore < 0.9) {
+            highestFlowScore = 0.9;
+            bestFlowMatch = flow;
+          }
+        }
+        const score = getSimilarity(text, keyword);
+        if (score > highestFlowScore) {
+          highestFlowScore = score;
+          bestFlowMatch = flow;
+        }
       }
     }
 
