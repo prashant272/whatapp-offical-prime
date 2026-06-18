@@ -236,9 +236,9 @@ export const handleWebhook = async (req, res) => {
         } else if (type === "interactive") {
           const interactive = message.interactive;
           bodyContent = interactive?.button_reply?.title || interactive?.list_reply?.title || interactive?.button_reply?.id;
-        } else if (type === "image" || type === "video" || type === "audio" || type === "document") {
+        } else if (type === "image" || type === "video" || type === "audio" || type === "document" || type === "sticker") {
           const media = message[type];
-          bodyContent = media?.caption || `${type.charAt(0).toUpperCase() + type.slice(1)} received`;
+          bodyContent = media?.filename || media?.caption || `${type.charAt(0).toUpperCase() + type.slice(1)} received`;
           if (media?.id) {
             try {
               mediaUrl = await getMediaUrl(account, media.id);
@@ -246,6 +246,17 @@ export const handleWebhook = async (req, res) => {
               console.error(`Error fetching ${type} URL:`, err);
             }
           }
+        } else if (type === "location") {
+          const loc = message.location;
+          const mapUrl = `https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`;
+          bodyContent = `📍 Location: ${loc.name || loc.address || "Shared Location"}\n${mapUrl}`;
+        } else if (type === "contacts") {
+          const contactArr = message.contacts || [];
+          const contactNames = contactArr.map(c => c.name?.formatted_name || c.phones?.[0]?.phone || "Unknown Contact").join(", ");
+          bodyContent = `👤 Contact Card(s): ${contactNames}`;
+        } else if (type === "unsupported") {
+          const err = message.errors?.[0];
+          bodyContent = err ? `⚠️ This message type is not supported: ${err.message || err.title}` : "⚠️ This message type is not supported";
         }
 
         // Final fallback if nothing worked

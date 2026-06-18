@@ -123,11 +123,11 @@ const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUr
         <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
           {msg.mediaUrl && (
             <div style={{ marginBottom: "5px" }}>
-              {msg.type === "image" ? (
+              {msg.type === "image" || msg.type === "sticker" ? (
                 <img
                   src={getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId)}
-                  alt="Received"
-                  style={{ width: "100%", borderRadius: "8px", maxHeight: "250px", objectFit: "cover", cursor: "pointer" }}
+                  alt={msg.type === "sticker" ? "Sticker" : "Received"}
+                  style={{ width: msg.type === "sticker" ? "120px" : "100%", borderRadius: "8px", maxHeight: "250px", objectFit: msg.type === "sticker" ? "contain" : "cover", cursor: "pointer" }}
                   onDoubleClick={() => window.open(getProxiedUrl(msg.mediaUrl, msg.whatsappAccountId), "_blank")}
                 />
               ) : msg.type === "video" ? (

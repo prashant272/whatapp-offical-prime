@@ -56,7 +56,30 @@ router.get("/proxy", async (req, res) => {
       timeout: 20000
     });
 
-    res.setHeader("Content-Type", response.headers["content-type"]);
+    res.setHeader("Content-Type", response.headers["content-type"] || "application/octet-stream");
+
+    if (response.headers["content-disposition"]) {
+      res.setHeader("Content-Disposition", response.headers["content-disposition"]);
+    } else {
+      const contentType = response.headers["content-type"] || "";
+      let ext = "bin";
+      if (contentType.includes("pdf")) ext = "pdf";
+      else if (contentType.includes("image/jpeg") || contentType.includes("image/jpg")) ext = "jpg";
+      else if (contentType.includes("image/png")) ext = "png";
+      else if (contentType.includes("image/webp")) ext = "webp";
+      else if (contentType.includes("image/gif")) ext = "gif";
+      else if (contentType.includes("audio/")) ext = "mp3";
+      else if (contentType.includes("video/")) ext = "mp4";
+      else if (contentType.includes("wordprocessingml") || contentType.includes("msword")) ext = "docx";
+      else if (contentType.includes("spreadsheetml") || contentType.includes("excel")) ext = "xlsx";
+      
+      res.setHeader("Content-Disposition", `inline; filename="file.${ext}"`);
+    }
+
+    if (response.headers["content-length"]) {
+      res.setHeader("Content-Length", response.headers["content-length"]);
+    }
+
     response.data.pipe(res);
   } catch (error) {
     console.error("❌ Media Proxy Error Detail:", {
