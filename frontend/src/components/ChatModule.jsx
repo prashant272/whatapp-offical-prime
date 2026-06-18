@@ -897,7 +897,8 @@ const ChatModule = () => {
   const getProxiedUrl = useCallback((url, accountId) => {
     if (!url) return "";
     if (url.includes("cloudinary.com") || url.startsWith("blob:")) return url;
-    const accountParam = accountId ? `&accountId=${accountId}` : "";
+    const finalAccountId = (accountId && typeof accountId === "object") ? accountId._id : accountId;
+    const accountParam = finalAccountId ? `&accountId=${finalAccountId}` : "";
     return `${API_BASE}/media/proxy?url=${encodeURIComponent(url)}${accountParam}`;
   }, []);
 

@@ -16,9 +16,21 @@ router.get("/proxy", async (req, res) => {
     let token = process.env.ACCESS_TOKEN;
     
     if (accountId && accountId !== "undefined" && accountId !== "null") {
-      const account = await WhatsAppAccount.findById(accountId);
-      if (account?.accessToken) {
-        token = account.accessToken.trim();
+      try {
+        const account = await WhatsAppAccount.findById(accountId);
+        if (account?.accessToken) {
+          token = account.accessToken.trim();
+        }
+      } catch (err) {
+        console.warn("⚠️ Invalid accountId in proxy, using fallback.");
+      }
+    }
+
+    // Fallback: If token is still empty/missing, use the first active account token in DB
+    if (!token || token === "undefined") {
+      const fallbackAccount = await WhatsAppAccount.findOne({ accessToken: { $exists: true, $ne: "" } });
+      if (fallbackAccount?.accessToken) {
+        token = fallbackAccount.accessToken.trim();
       }
     }
 
