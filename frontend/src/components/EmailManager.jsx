@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Mail, Settings, FileText, Send, Trash2, Plus, Edit2, CheckCircle2, XCircle, Info, RefreshCw, Eye, Sparkles, History, Paperclip, Server, Check } from "lucide-react";
 import api from "../api";
 import { io } from "socket.io-client";
+import RichTextEditor from "./RichTextEditor";
 
 const EmailManager = () => {
   const [activeTab, setActiveTab] = useState("inbox"); // "inbox" | "send" | "templates" | "settings" | "history"
@@ -925,14 +926,11 @@ const EmailManager = () => {
                   </div>
 
                   <div className="input-group">
-                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", color: "#475569", fontSize: "0.85rem" }}>Body Content (HTML Supported)</label>
-                    <textarea
-                      required
-                      rows="10"
-                      placeholder="Write HTML here. Use double curly brackets for variables, e.g. {{name}} or {{otp}}"
+                    <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", color: "#475569", fontSize: "0.85rem" }}>Body Content (Rich Text / HTML Formatting)</label>
+                    <RichTextEditor
+                      placeholder="Write content here. Use double curly brackets for variables, e.g. {{name}} or {{otp}}"
                       value={sendForm.body}
-                      onChange={e => setSendForm({ ...sendForm, body: e.target.value })}
-                      style={{ width: "100%", padding: "12px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.9rem", resize: "vertical", fontFamily: "monospace" }}
+                      onChange={html => setSendForm({ ...sendForm, body: html })}
                     />
                   </div>
 
@@ -1222,14 +1220,11 @@ const EmailManager = () => {
                     </div>
 
                     <div className="input-group">
-                      <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "0.85rem" }}>Body Content (HTML Supported)</label>
-                      <textarea
-                        required
-                        rows="8"
+                      <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", fontSize: "0.85rem" }}>Body Content (Rich Text / HTML Formatting)</label>
+                      <RichTextEditor
                         placeholder="Template Body. Use placeholders like {{name}}, {{otp}} to render inputs when sending."
                         value={templateForm.body}
-                        onChange={e => setTemplateForm({ ...templateForm, body: e.target.value })}
-                        style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", resize: "vertical", fontFamily: "monospace" }}
+                        onChange={html => setTemplateForm({ ...templateForm, body: html })}
                       />
                     </div>
                   </form>

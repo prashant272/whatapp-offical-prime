@@ -146,3 +146,10 @@ h1, h2, h3 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Rich Text Editor - contenteditable placeholder */
+div[contenteditable]:empty::before {
+  content: attr(placeholder);
+  color: #94a3b8;
+  cursor: text;
+}
