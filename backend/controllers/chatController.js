@@ -216,7 +216,7 @@ export const getMessages = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const messages = await Message.find(filter)
-      .select("messageId body from to timestamp status direction type mediaUrl templateData reaction quotedMessageId quotedMessageBody")
+      .select("messageId body from to timestamp status direction type mediaUrl templateData reaction quotedMessageId quotedMessageBody whatsappAccountId")
       .sort({ timestamp: -1 })
       .skip(skip)
       .limit(limit);
