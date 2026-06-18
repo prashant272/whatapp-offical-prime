@@ -52,7 +52,7 @@ export const verifySmtpConnection = async (setting) => {
  * @param {Object} mailOptions - { to, subject, html, text, attachments }
  * @returns {Promise<Object>}
  */
-export const sendEmail = async (setting, { to, subject, html, text, attachments }) => {
+export const sendEmail = async (setting, { to, cc, bcc, subject, html, text, attachments }) => {
   const config = getTransporterConfig(setting);
   const transporter = nodemailer.createTransport(config);
 
@@ -62,6 +62,8 @@ export const sendEmail = async (setting, { to, subject, html, text, attachments 
   const mailOptions = {
     from: `"${fromName}" <${fromEmail}>`,
     to,
+    cc: cc || undefined,
+    bcc: bcc || undefined,
     subject,
     html,
     text,

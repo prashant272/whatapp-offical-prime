@@ -43,6 +43,8 @@ const EmailManager = () => {
   const [sendForm, setSendForm] = useState({
     smtpProfileId: "",
     to: "",
+    cc: "",
+    bcc: "",
     subject: "",
     body: "",
     selectedTemplateId: ""
@@ -388,6 +390,8 @@ const EmailManager = () => {
     const formData = new FormData();
     formData.append("smtpProfileId", sendForm.smtpProfileId);
     formData.append("to", sendForm.to);
+    formData.append("cc", sendForm.cc);
+    formData.append("bcc", sendForm.bcc);
     formData.append("subject", resolvedSubject);
     formData.append("body", resolvedBody);
     
@@ -405,6 +409,8 @@ const EmailManager = () => {
       setSendForm(prev => ({
         ...prev,
         to: "",
+        cc: "",
+        bcc: "",
         subject: "",
         body: "",
         selectedTemplateId: ""
@@ -911,6 +917,29 @@ const EmailManager = () => {
                       onChange={e => setSendForm({ ...sendForm, to: e.target.value })}
                       style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.9rem" }}
                     />
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                    <div className="input-group">
+                      <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", color: "#475569", fontSize: "0.85rem" }}>CC</label>
+                      <input
+                        type="text"
+                        placeholder="cc@domain.com (comma separated)"
+                        value={sendForm.cc}
+                        onChange={e => setSendForm({ ...sendForm, cc: e.target.value })}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.9rem" }}
+                      />
+                    </div>
+                    <div className="input-group">
+                      <label style={{ display: "block", marginBottom: "6px", fontWeight: "600", color: "#475569", fontSize: "0.85rem" }}>BCC</label>
+                      <input
+                        type="text"
+                        placeholder="bcc@domain.com (comma separated)"
+                        value={sendForm.bcc}
+                        onChange={e => setSendForm({ ...sendForm, bcc: e.target.value })}
+                        style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.9rem" }}
+                      />
+                    </div>
                   </div>
 
                   <div className="input-group">
@@ -1800,6 +1829,8 @@ const EmailManager = () => {
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.85rem", color: "#475569", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px", marginBottom: "1rem" }}>
                   <div><strong>To:</strong> {selectedLog.to}</div>
+                  {selectedLog.cc && <div><strong>CC:</strong> {selectedLog.cc}</div>}
+                  {selectedLog.bcc && <div><strong>BCC:</strong> {selectedLog.bcc}</div>}
                   <div><strong>Subject:</strong> {selectedLog.subject}</div>
                   <div><strong>SMTP Profile:</strong> {selectedLog.smtpProfileName}</div>
                   <div><strong>Sent At:</strong> {new Date(selectedLog.createdAt).toLocaleString()}</div>

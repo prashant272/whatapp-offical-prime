@@ -4,6 +4,8 @@ const emailLogSchema = new mongoose.Schema({
   userRef: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
   smtpProfileName: { type: String, required: true }, // Store name of SMTP profile (e.g. "Brevo Support")
   to: { type: String, required: true },
+  cc: { type: String },
+  bcc: { type: String },
   subject: { type: String, required: true },
   body: { type: String, required: true },
   status: { type: String, enum: ["success", "failed"], required: true },

@@ -123,7 +123,7 @@ export const testSmtpConnection = async (req, res) => {
 
 export const sendEmailOutbound = async (req, res) => {
   const userRef = req.user._id;
-  const { smtpProfileId, to, subject, body } = req.body;
+  const { smtpProfileId, to, cc, bcc, subject, body } = req.body;
 
   if (!smtpProfileId || !to || !subject || !body) {
     return res.status(400).json({ error: "Missing required fields (smtpProfileId, to, subject, body)" });
@@ -151,6 +151,8 @@ export const sendEmailOutbound = async (req, res) => {
     // Send email
     await sendEmail(setting, {
       to,
+      cc,
+      bcc,
       subject,
       html: body,
       text: body.replace(/<[^>]*>/g, ""),
@@ -163,6 +165,8 @@ export const sendEmailOutbound = async (req, res) => {
       userRef,
       smtpProfileName: profileName,
       to,
+      cc,
+      bcc,
       subject,
       body,
       status: "success",
@@ -179,6 +183,8 @@ export const sendEmailOutbound = async (req, res) => {
       userRef,
       smtpProfileName: profileName,
       to,
+      cc,
+      bcc,
       subject,
       body,
       status: "failed",
