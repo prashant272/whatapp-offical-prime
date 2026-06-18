@@ -42,6 +42,44 @@ export function getSimilarity(s1, s2) {
   return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
 }
 
+// --- KEYWORD MATCHING WITH NEGATION DETECTION ---
+export function matchKeyword(text, keyword) {
+  const cleanText = text.toLowerCase().trim();
+  const cleanKeyword = keyword.toLowerCase().trim();
+  
+  if (cleanText === cleanKeyword) {
+    return 1.0;
+  }
+  
+  // Escape keyword for regex
+  const escapedKeyword = cleanKeyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const wordRegex = new RegExp(`\\b${escapedKeyword}\\b`, "i");
+  
+  if (wordRegex.test(cleanText)) {
+    const negationWords = ["not", "no", "don't", "dont", "never", "nahi", "nahin", "na", "mat", "gair"];
+    
+    // Check if the keyword itself contains/starts with any negation word
+    const keywordHasNegation = negationWords.some(neg => 
+      new RegExp(`\\b${neg}\\b`, "i").test(cleanKeyword)
+    );
+    
+    if (!keywordHasNegation) {
+      // Check for a negation word within 1-2 words before the keyword in text
+      const negationRegex = new RegExp(`\\b(${negationWords.join("|")})\\b\\s+(?:\\w+\\s+)?${escapedKeyword}\\b`, "i");
+      if (negationRegex.test(cleanText)) {
+        return 0.0; // Negated, so not a match
+      }
+    }
+    return 0.9;
+  }
+  
+  // Fuzzy Match fallback
+  const words = cleanText.split(/\s+/);
+  const wordScores = words.map(word => getSimilarity(word, cleanKeyword));
+  return Math.max(...wordScores, getSimilarity(cleanText, cleanKeyword));
+}
+
+
 export const processAutoReply = async (account, phone, incomingText, contact) => {
   try {
     const text = incomingText.toLowerCase().trim();
@@ -56,30 +94,16 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
 
     let bestMatch = null;
     let highestScore = 0;
+    let bestMatchKeywordLength = 0;
 
     for (const ar of autoReplies) {
-      let currentScore = 0;
       const keyword = ar.keyword.toLowerCase();
+      const currentScore = matchKeyword(text, keyword);
 
-      // 1. Check Exact or Word Match
-      if (text === keyword) {
-        currentScore = 1.0;
-      } else {
-        // Only allow 'contains' if the keyword is a distinct word in the message
-        const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
-        if (wordRegex.test(text)) {
-          currentScore = 0.9;
-        } else {
-          // 2. Fuzzy Match (Levenshtein)
-          const words = text.split(/\s+/);
-          const wordScores = words.map(word => getSimilarity(word, keyword));
-          currentScore = Math.max(...wordScores);
-        }
-      }
-
-      if (currentScore > highestScore) {
+      if (currentScore > highestScore || (currentScore === highestScore && currentScore > 0 && keyword.length > bestMatchKeywordLength)) {
         highestScore = currentScore;
         bestMatch = ar;
+        bestMatchKeywordLength = keyword.length;
       }
     }
 
@@ -94,39 +118,45 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     });
     let bestFlowMatch = null;
     let highestFlowScore = 0;
+    let bestFlowKeywordLength = 0;
+    let wildcardFlow = null;
+
     for (const flow of allFlows) {
       if (!flow.triggerKeyword) continue;
       const keywords = flow.triggerKeyword.toLowerCase().split(",").map(k => k.trim());
       for (const keyword of keywords) {
-        if (text === keyword) {
-          bestFlowMatch = flow;
-          highestFlowScore = 1.0;
-          break;
+        if (keyword === "*") {
+          wildcardFlow = flow;
+          continue;
         }
-        const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
-        if (wordRegex.test(text)) {
-          if (highestFlowScore < 0.9) {
-            highestFlowScore = 0.9;
-            bestFlowMatch = flow;
-          }
-        }
-        const score = getSimilarity(text, keyword);
-        if (score > highestFlowScore) {
+
+        const score = matchKeyword(text, keyword);
+        if (score > highestFlowScore || (score === highestFlowScore && score > 0 && keyword.length > bestFlowKeywordLength)) {
           highestFlowScore = score;
           bestFlowMatch = flow;
+          bestFlowKeywordLength = keyword.length;
         }
       }
     }
 
+    let triggeredFlow = null;
     if (bestFlowMatch && highestFlowScore >= 0.8) {
-      console.log(`🚀 Triggering Flow: ${bestFlowMatch.name} (Score: ${highestFlowScore}) for ${phone}`);
-      contact.activeFlowId = bestFlowMatch._id;
+      triggeredFlow = bestFlowMatch;
+    } else if (wildcardFlow && (!contact || !contact.activeFlowId)) {
+      // Trigger wildcard flow if no specific flow matches and we're not in an active flow
+      triggeredFlow = wildcardFlow;
+      highestFlowScore = 1.0;
+    }
+
+    if (triggeredFlow) {
+      console.log(`🚀 Triggering Flow: ${triggeredFlow.name} (Score: ${highestFlowScore}) for ${phone}`);
+      contact.activeFlowId = triggeredFlow._id;
       contact.currentStepIndex = 0; // ALWAYS START FROM BEGINNING
       contact.chatData = new Map(); // Reset data for new flow
       await contact.save();
 
-      const firstQuestion = bestFlowMatch.steps[0].question;
-      const firstDelay = (bestFlowMatch.steps[0].delay || 2) * 1000;
+      const firstQuestion = triggeredFlow.steps[0].question;
+      const firstDelay = (triggeredFlow.steps[0].delay || 2) * 1000;
       return await sendDelayedMessage(account, phone, firstQuestion, contact, firstDelay);
     }
 
@@ -348,21 +378,21 @@ async function processDynamicFlow(account, phone, text, contact) {
   let matchedOption = null;
   if (currentStep.type === "options" && currentStep.options && currentStep.options.length > 0) {
     const cleanInput = text.toLowerCase().trim();
+    let highestOptionScore = 0;
+    let bestOptionKeywordLength = 0;
+
     for (const option of currentStep.options) {
       if (!option.keywords) continue;
       const keywords = option.keywords.toLowerCase().split(",").map(k => k.trim());
-      const isMatch = keywords.some(keyword => {
-        if (cleanInput === keyword) return true;
-        const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
-        if (wordRegex.test(cleanInput)) return true;
-        const words = cleanInput.split(/\s+/);
-        const maxSimilarity = Math.max(...words.map(w => getSimilarity(w, keyword)));
-        if (maxSimilarity >= 0.8) return true;
-        return false;
-      });
-      if (isMatch) {
-        matchedOption = option;
-        break;
+      for (const keyword of keywords) {
+        const score = matchKeyword(cleanInput, keyword);
+        if (score >= 0.8) {
+          if (score > highestOptionScore || (score === highestOptionScore && keyword.length > bestOptionKeywordLength)) {
+            highestOptionScore = score;
+            matchedOption = option;
+            bestOptionKeywordLength = keyword.length;
+          }
+        }
       }
     }
 

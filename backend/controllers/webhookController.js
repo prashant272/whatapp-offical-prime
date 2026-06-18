@@ -6,7 +6,7 @@ import Campaign from "../models/Campaign.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getMediaUrl } from "../services/whatsappService.js";
 import { getIO, smartEmit } from "../utils/socket.js";
-import { processAutoReply, getSimilarity } from "../utils/automationHelper.js";
+import { processAutoReply, getSimilarity, matchKeyword } from "../utils/automationHelper.js";
 import KeywordRule from "../models/KeywordRule.js";
 
 export const verifyWebhook = (req, res) => {
@@ -328,9 +328,9 @@ export const handleWebhook = async (req, res) => {
         let matchingRule = null;
         let highestRuleScore = 0;
         let wildcardRule = null;
+        let bestRuleKeywordLength = 0;
 
         for (const rule of allRules) {
-          let currentScore = 0;
           const keyword = rule.keyword.trim().toLowerCase();
 
           if (keyword === "*") {
@@ -338,22 +338,12 @@ export const handleWebhook = async (req, res) => {
             continue;
           }
 
-          if (textContent === keyword) {
-            currentScore = 1.0;
-          } else {
-            const wordRegex = new RegExp(`\\b${keyword}\\b`, "i");
-            if (wordRegex.test(textContent)) {
-              currentScore = 0.9;
-            } else {
-              const words = textContent.split(/\s+/);
-              const wordScores = words.map(word => getSimilarity(word, keyword));
-              currentScore = Math.max(...wordScores);
-            }
-          }
+          const currentScore = matchKeyword(textContent, keyword);
 
-          if (currentScore > highestRuleScore) {
+          if (currentScore > highestRuleScore || (currentScore === highestRuleScore && currentScore > 0 && keyword.length > bestRuleKeywordLength)) {
             highestRuleScore = currentScore;
             matchingRule = rule;
+            bestRuleKeywordLength = keyword.length;
           }
         }
         
