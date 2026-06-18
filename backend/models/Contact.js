@@ -24,6 +24,7 @@ const contactSchema = new mongoose.Schema({
   // If the user is currently in a multi-step flow, this points to the Flow ID.
   activeFlowId: { type: mongoose.Schema.Types.ObjectId, ref: "Flow", default: null },
   currentStepIndex: { type: Number, default: 0 },
+  lastFlowEndedAt: { type: Date, default: null },
   
   // Temporary storage for data collected during a multi-step flow.
   chatData: { type: Map, of: String, default: {} },

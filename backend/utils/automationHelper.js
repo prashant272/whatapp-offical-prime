@@ -143,9 +143,13 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     if (bestFlowMatch && highestFlowScore >= 0.8) {
       triggeredFlow = bestFlowMatch;
     } else if (wildcardFlow && (!contact || !contact.activeFlowId)) {
-      // Trigger wildcard flow if no specific flow matches and we're not in an active flow
-      triggeredFlow = wildcardFlow;
-      highestFlowScore = 1.0;
+      // Trigger wildcard flow only if a campaign was recently sent to this contact
+      if (contact && contact.isCampaignSent) {
+        triggeredFlow = wildcardFlow;
+        highestFlowScore = 1.0;
+      } else {
+        console.log(`⏳ Wildcard Flow skipped because no new campaign has been sent to ${phone}`);
+      }
     }
 
     if (triggeredFlow) {
@@ -153,6 +157,12 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       contact.activeFlowId = triggeredFlow._id;
       contact.currentStepIndex = 0; // ALWAYS START FROM BEGINNING
       contact.chatData = new Map(); // Reset data for new flow
+      
+      // Consume the campaign trigger if we are starting the wildcard flow
+      if (triggeredFlow === wildcardFlow) {
+        contact.isCampaignSent = false;
+      }
+      
       await contact.save();
 
       const firstQuestion = triggeredFlow.steps[0].question;
@@ -410,6 +420,7 @@ async function processDynamicFlow(account, phone, text, contact) {
     msg = replacePlaceholders(msg, contact.chatData);
     contact.activeFlowId = null;
     contact.currentStepIndex = 0;
+    contact.lastFlowEndedAt = new Date();
     await contact.save();
     return await sendDelayedMessage(account, phone, msg, contact, delayMs);
   };
