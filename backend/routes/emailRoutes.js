@@ -10,10 +10,7 @@ import {
   createTemplate,
   updateTemplate,
   deleteTemplate,
-  getEmailLogs,
-  getEmailInbox,
-  markEmailAsRead,
-  deleteInboxEmail
+  getEmailLogs
 } from "../controllers/emailController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
@@ -37,10 +34,5 @@ router.delete("/templates/:id", protect, deleteTemplate);
 
 // Email Sent Logs / History
 router.get("/logs", protect, getEmailLogs);
-
-// Email Inbox / Replies
-router.get("/inbox", protect, getEmailInbox);
-router.put("/inbox/:id/read", protect, markEmailAsRead);
-router.delete("/inbox/:id", protect, deleteInboxEmail);
 
 export default router;

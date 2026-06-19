@@ -1,9 +1,7 @@
 import EmailSetting from "../models/EmailSetting.js";
 import EmailTemplate from "../models/EmailTemplate.js";
 import EmailLog from "../models/EmailLog.js";
-import EmailInbox from "../models/EmailInbox.js";
 import { verifySmtpConnection, sendEmail } from "../services/emailService.js";
-import { syncUserInbox } from "../services/imapSyncService.js";
 import { logActivity } from "../utils/activityLogger.js";
 
 // --- SMTP CONFIGURATIONS (CRUD) ---
@@ -271,65 +269,6 @@ export const getEmailLogs = async (req, res) => {
     const userRef = req.user._id;
     const logs = await EmailLog.find({ userRef }).sort({ createdAt: -1 }).limit(100);
     res.json(logs);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-// --- EMAIL INBOX / REPLIES ---
-
-export const getEmailInbox = async (req, res) => {
-  try {
-    const userRef = req.user._id;
-    const { sync } = req.query;
-
-    if (sync === "true") {
-      await syncUserInbox(userRef);
-    }
-
-    const inbox = await EmailInbox.find({ userRef })
-      .populate("smtpProfileId", "name user type")
-      .sort({ date: -1 })
-      .limit(100);
-    res.json(inbox);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-export const markEmailAsRead = async (req, res) => {
-  try {
-    const userRef = req.user._id;
-    const { id } = req.params;
-    const { seen } = req.body;
-
-    const email = await EmailInbox.findOneAndUpdate(
-      { _id: id, userRef },
-      { seen: seen !== undefined ? seen : true },
-      { new: true }
-    );
-
-    if (!email) {
-      return res.status(404).json({ error: "Email not found" });
-    }
-
-    res.json({ success: true, email });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
-
-export const deleteInboxEmail = async (req, res) => {
-  try {
-    const userRef = req.user._id;
-    const { id } = req.params;
-
-    const email = await EmailInbox.findOneAndDelete({ _id: id, userRef });
-    if (!email) {
-      return res.status(404).json({ error: "Email not found" });
-    }
-
-    res.json({ success: true, message: "Email deleted from inbox" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import RichTextEditor from "./RichTextEditor";
 
 const EmailManager = () => {
-  const [activeTab, setActiveTab] = useState("inbox"); // "inbox" | "send" | "templates" | "settings" | "history"
+  const [activeTab, setActiveTab] = useState("send"); // "send" | "templates" | "settings" | "history"
   
   // SMTP settings state (Dynamic Profiles list)
   const [smtpSettings, setSmtpSettings] = useState([]);
@@ -21,18 +21,8 @@ const EmailManager = () => {
     user: "",
     pass: "",
     senderName: "WhatsApp Dashboard",
-    senderEmail: "",
-    imapHost: "",
-    imapPort: 993,
-    imapSecure: true
+    senderEmail: ""
   });
-
-  // Inbox/Replies states
-  const [inbox, setInbox] = useState([]);
-  const [selectedInboxEmail, setSelectedInboxEmail] = useState(null);
-  const [showInboxModal, setShowInboxModal] = useState(false);
-  const [syncingInbox, setSyncingInbox] = useState(false);
-  const [filterProfileId, setFilterProfileId] = useState("all");
   
   // Templates state
   const [templates, setTemplates] = useState([]);
@@ -71,63 +61,7 @@ const EmailManager = () => {
     fetchSettings();
     fetchTemplates();
     fetchLogs();
-    fetchInbox();
-
-    // Setup Socket connection for real-time incoming email notifications!
-    const socketUrl = import.meta.env.VITE_API_URL || window.location.origin;
-    const socket = io(socketUrl);
-
-    socket.on("new_email", ({ email }) => {
-      // Add the new email to the top of the list if it's not already in the state
-      setInbox(prev => {
-        const exists = prev.some(item => item.messageId === email.messageId);
-        if (exists) return prev;
-        return [email, ...prev];
-      });
-    });
-
-    return () => {
-      socket.disconnect();
-    };
   }, []);
-
-  const fetchInbox = async (sync = false) => {
-    if (sync) setSyncingInbox(true);
-    try {
-      const { data } = await api.get(`/email/inbox${sync ? "?sync=true" : ""}`);
-      setInbox(data);
-    } catch (err) {
-      console.error("Failed to fetch email inbox:", err);
-      showFeedback("danger", "Failed to load email inbox.");
-    } finally {
-      if (sync) setSyncingInbox(false);
-    }
-  };
-
-  const handleMarkAsRead = async (emailId, seenStatus) => {
-    try {
-      await api.put(`/email/inbox/${emailId}/read`, { seen: seenStatus });
-      setInbox(prev => prev.map(item => item._id === emailId ? { ...item, seen: seenStatus } : item));
-    } catch (err) {
-      console.error("Failed to mark email read status:", err);
-    }
-  };
-
-  const handleDeleteInboxEmail = async (emailId) => {
-    if (!window.confirm("Are you sure you want to delete this email?")) return;
-    try {
-      await api.delete(`/email/inbox/${emailId}`);
-      setInbox(prev => prev.filter(item => item._id !== emailId));
-      if (selectedInboxEmail?._id === emailId) {
-        setShowInboxModal(false);
-        setSelectedInboxEmail(null);
-      }
-      showFeedback("success", "Email deleted from inbox.");
-    } catch (err) {
-      console.error("Failed to delete email:", err);
-      showFeedback("danger", "Failed to delete email.");
-    }
-  };
 
   // Scan for variables in Subject and Body whenever they change
   useEffect(() => {
@@ -190,10 +124,7 @@ const EmailManager = () => {
       type,
       host: type === "gmail" ? "smtp.gmail.com" : prev.host,
       port: type === "gmail" ? 465 : 587,
-      secure: type === "gmail" ? true : false,
-      imapHost: type === "gmail" ? "imap.gmail.com" : prev.imapHost,
-      imapPort: type === "gmail" ? 993 : prev.imapPort,
-      imapSecure: type === "gmail" ? true : prev.imapSecure
+      secure: type === "gmail" ? true : false
     }));
     setTestResult({ status: null, message: "" });
   };
@@ -249,10 +180,7 @@ const EmailManager = () => {
       user: "",
       pass: "",
       senderName: "WhatsApp Dashboard",
-      senderEmail: "",
-      imapHost: "",
-      imapPort: 993,
-      imapSecure: true
+      senderEmail: ""
     });
     setTestResult({ status: null, message: "" });
   };
@@ -268,10 +196,7 @@ const EmailManager = () => {
       user: profile.user,
       pass: profile.pass,
       senderName: profile.senderName || "WhatsApp Dashboard",
-      senderEmail: profile.senderEmail || "",
-      imapHost: profile.imapHost || "",
-      imapPort: profile.imapPort || 993,
-      imapSecure: profile.imapSecure !== undefined ? profile.imapSecure : true
+      senderEmail: profile.senderEmail || ""
     });
     setTestResult({ status: null, message: "" });
     setShowSmtpModal(true);
@@ -479,38 +404,7 @@ const EmailManager = () => {
         width: "fit-content",
         border: "1px solid #e2e8f0"
       }}>
-        <button
-          onClick={() => { setActiveTab("inbox"); fetchInbox(); }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "10px 20px",
-            borderRadius: "10px",
-            border: "none",
-            background: activeTab === "inbox" ? "white" : "transparent",
-            color: activeTab === "inbox" ? "#1e293b" : "#64748b",
-            fontWeight: "700",
-            cursor: "pointer",
-            boxShadow: activeTab === "inbox" ? "0 4px 10px rgba(0,0,0,0.05)" : "none",
-            transition: "all 0.2s"
-          }}
-        >
-          <Mail size={16} /> Replies / Inbox
-          {inbox.filter(i => !i.seen).length > 0 && (
-            <span style={{
-              background: "#ff4d4f",
-              color: "white",
-              fontSize: "0.75rem",
-              padding: "2px 6px",
-              borderRadius: "10px",
-              fontWeight: "800",
-              marginLeft: "4px"
-            }}>
-              {inbox.filter(i => !i.seen).length}
-            </span>
-          )}
-        </button>
+
         <button
           onClick={() => setActiveTab("send")}
           style={{
@@ -589,233 +483,7 @@ const EmailManager = () => {
         </button>
       </div>
 
-      {/* Tab Panel: REPLIES / INBOX */}
-      {activeTab === "inbox" && (
-        <div style={{
-          background: "white",
-          borderRadius: "20px",
-          padding: "2rem",
-          boxShadow: "0 10px 30px rgba(0,0,0,0.03)",
-          border: "1px solid #f1f5f9"
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-            <div>
-              <h3 style={{ fontSize: "1.25rem", color: "#1e293b", fontWeight: "700", marginBottom: "0.25rem" }}>Incoming Email Replies</h3>
-              <p style={{ color: "#64748b", fontSize: "0.9rem" }}>View responses to your sent campaigns and emails</p>
-            </div>
-            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-              <select
-                value={filterProfileId}
-                onChange={e => setFilterProfileId(e.target.value)}
-                style={{ padding: "8px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "0.9rem", background: "white", fontWeight: "600", color: "#475569" }}
-              >
-                <option value="all">All SMTP Profiles</option>
-                {smtpSettings.map(s => (
-                  <option key={s._id} value={s._id}>{s.name} ({s.type === "gmail" ? "Gmail" : "Custom"})</option>
-                ))}
-              </select>
-              <button
-                onClick={() => fetchInbox(true)}
-                disabled={syncingInbox}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  background: "var(--accent-primary, #00a884)",
-                  color: "white",
-                  border: "none",
-                  padding: "10px 18px",
-                  borderRadius: "10px",
-                  fontWeight: "700",
-                  cursor: "pointer",
-                  transition: "0.2s"
-                }}
-              >
-                <RefreshCw size={16} className={syncingInbox ? "animate-spin" : ""} style={{ animation: syncingInbox ? "spin 1s linear infinite" : "none" }} />
-                {syncingInbox ? "Syncing..." : "Sync Now"}
-              </button>
-            </div>
-          </div>
 
-          {filteredInbox.length === 0 ? (
-            <div style={{
-              textAlign: "center",
-              padding: "3rem",
-              background: "#f8fafc",
-              borderRadius: "16px",
-              color: "#64748b"
-            }}>
-              <Mail size={48} style={{ margin: "0 auto 1rem", opacity: 0.5 }} />
-              <p style={{ fontWeight: "600", fontSize: "1.1rem" }}>No emails found</p>
-              <p style={{ fontSize: "0.9rem", color: "#94a3b8", marginBottom: "1rem" }}>No inbound email replies match this filter. Click "Sync Now" to fetch latest replies.</p>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {filteredInbox.map(item => (
-                <div
-                  key={item._id}
-                  onClick={() => {
-                    setSelectedInboxEmail(item);
-                    setShowInboxModal(true);
-                    if (!item.seen) {
-                      handleMarkAsRead(item._id, true);
-                    }
-                  }}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.2fr 2fr 1.2fr",
-                    alignItems: "center",
-                    gap: "20px",
-                    padding: "1rem 1.5rem",
-                    borderRadius: "12px",
-                    border: "1px solid #e2e8f0",
-                    background: item.seen ? "white" : "rgba(0,168,132,0.02)",
-                    borderLeft: item.seen ? "1px solid #e2e8f0" : "4px solid #00a884",
-                    cursor: "pointer",
-                    transition: "all 0.2s",
-                    boxShadow: "0 2px 4px rgba(0,0,0,0.01)"
-                  }}
-                >
-                  <div style={{ display: "flex", flexDirection: "column", minWidth: "150px" }}>
-                    <span style={{ fontWeight: item.seen ? "600" : "800", color: "#1e293b", fontSize: "0.95rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {item.fromName || item.from}
-                    </span>
-                    <span style={{ fontSize: "0.8rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.from}</span>
-                    {item.smtpProfileId?.name && (
-                      <span style={{
-                        marginTop: "6px",
-                        padding: "2px 6px",
-                        background: "rgba(0,168,132,0.08)",
-                        color: "#00a884",
-                        borderRadius: "4px",
-                        fontSize: "0.7rem",
-                        width: "fit-content",
-                        fontWeight: "700"
-                      }}>
-                        {item.smtpProfileId.name}
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                    <span style={{ fontWeight: item.seen ? "600" : "800", color: "#1e293b", fontSize: "0.95rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {item.subject || "(No Subject)"}
-                    </span>
-                    <span style={{ fontSize: "0.85rem", color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {item.bodyText || "HTML content"}
-                    </span>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "15px" }}>
-                    <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
-                      {new Date(item.date).toLocaleString()}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteInboxEmail(item._id);
-                      }}
-                      style={{
-                        padding: "6px",
-                        borderRadius: "6px",
-                        border: "none",
-                        background: "none",
-                        color: "#ef4444",
-                        cursor: "pointer"
-                      }}
-                      title="Delete Email"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* View Inbox Email Detail Modal */}
-          {showInboxModal && selectedInboxEmail && (
-            <div style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(15, 23, 42, 0.4)",
-              backdropFilter: "blur(4px)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 9999
-            }}>
-              <div style={{
-                background: "white",
-                padding: "2rem",
-                borderRadius: "20px",
-                width: "90%",
-                maxWidth: "800px",
-                boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
-                display: "flex",
-                flexDirection: "column",
-                maxHeight: "85vh"
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px", marginBottom: "1rem" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                    <h3 style={{ fontSize: "1.25rem", fontWeight: "800", color: "#1e293b", margin: 0 }}>
-                      {selectedInboxEmail.subject || "(No Subject)"}
-                    </h3>
-                    <div style={{ fontSize: "0.85rem", color: "#475569" }}>
-                      <strong>From:</strong> {selectedInboxEmail.fromName ? `"${selectedInboxEmail.fromName}" <${selectedInboxEmail.from}>` : selectedInboxEmail.from}
-                    </div>
-                    <div style={{ fontSize: "0.85rem", color: "#475569" }}>
-                      <strong>To:</strong> {selectedInboxEmail.to}
-                    </div>
-                  </div>
-                  <span style={{ fontSize: "0.8rem", color: "#94a3b8" }}>
-                    {new Date(selectedInboxEmail.date).toLocaleString()}
-                  </span>
-                </div>
-
-                <div style={{ flex: 1, overflowY: "auto", border: "1px solid #cbd5e1", borderRadius: "8px", padding: "20px", background: "white" }}>
-                  {selectedInboxEmail.bodyHtml ? (
-                    <div dangerouslySetInnerHTML={{ __html: selectedInboxEmail.bodyHtml }} />
-                  ) : (
-                    <div style={{ whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{selectedInboxEmail.bodyText}</div>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1.5rem" }}>
-                  <button
-                    onClick={() => handleDeleteInboxEmail(selectedInboxEmail._id)}
-                    style={{
-                      padding: "10px 18px",
-                      borderRadius: "8px",
-                      background: "#fef2f2",
-                      color: "#ef4444",
-                      border: "1px solid #fee2e2",
-                      fontWeight: "700",
-                      cursor: "pointer"
-                    }}
-                  >
-                    Delete Email
-                  </button>
-                  <button
-                    onClick={() => { setShowInboxModal(false); setSelectedInboxEmail(null); }}
-                    style={{
-                      padding: "10px 20px",
-                      borderRadius: "8px",
-                      background: "var(--accent-primary, #00a884)",
-                      color: "white",
-                      border: "none",
-                      fontWeight: "700",
-                      cursor: "pointer"
-                    }}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Tab Panel 1: SEND EMAIL */}
       {activeTab === "send" && (
@@ -1585,44 +1253,7 @@ const EmailManager = () => {
                     </>
                   )}
 
-                  {/* IMAP Incoming Config */}
-                  <div style={{ marginTop: "0.5rem", borderTop: "1px dashed #cbd5e1", paddingTop: "0.75rem", paddingBottom: "0.5rem" }}>
-                    <h5 style={{ margin: "0 0 10px 0", fontSize: "0.9rem", color: "#1e293b", fontWeight: "700" }}>Inbound Mail Settings (IMAP)</h5>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                      <div className="input-group">
-                        <label style={{ display: "block", marginBottom: "4px", fontWeight: "600", fontSize: "0.85rem" }}>IMAP Host</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder={smtpForm.type === "gmail" ? "imap.gmail.com" : "e.g. imap.yourdomain.com"}
-                          value={smtpForm.imapHost}
-                          onChange={e => setSmtpForm({ ...smtpForm, imapHost: e.target.value })}
-                          style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                        />
-                      </div>
-                      <div className="input-group">
-                        <label style={{ display: "block", marginBottom: "4px", fontWeight: "600", fontSize: "0.85rem" }}>IMAP Port</label>
-                        <input
-                          type="number"
-                          required
-                          placeholder="993"
-                          value={smtpForm.imapPort}
-                          onChange={e => setSmtpForm({ ...smtpForm, imapPort: parseInt(e.target.value) || 993 })}
-                          style={{ width: "100%", padding: "10px 14px", borderRadius: "8px", border: "1px solid #cbd5e1" }}
-                        />
-                      </div>
-                    </div>
-                    <div className="input-group" style={{ marginTop: "10px" }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontWeight: "600", fontSize: "0.8rem" }}>
-                        <input
-                          type="checkbox"
-                          checked={smtpForm.imapSecure}
-                          onChange={e => setSmtpForm({ ...smtpForm, imapSecure: e.target.checked })}
-                        />
-                        Use IMAP SSL/TLS (Recommended: Port 993)
-                      </label>
-                    </div>
-                  </div>
+
 
                   <div className="input-group">
                     <label style={{ display: "block", marginBottom: "4px", fontWeight: "600", fontSize: "0.85rem" }}>Username / Email ID</label>

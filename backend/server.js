@@ -37,7 +37,6 @@ import { initSocket } from "./utils/socket.js";
 
 import { syncEnvAccount } from "./utils/accountSyncer.js";
 import { initAutomationCron } from "./utils/automationCron.js";
-import { initEmailSyncCron } from "./utils/emailSyncCron.js";
 
 dotenv.config();
 
@@ -46,7 +45,6 @@ connectDB().then(() => {
   // Step 2: Sync settings and start the Background Follow-up Cron Job
   syncEnvAccount();
   initAutomationCron();
-  initEmailSyncCron();
 });
 
 const app = express();
