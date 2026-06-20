@@ -359,25 +359,35 @@ export const handleWebhook = async (req, res) => {
         }
         
         let statusUpdated = false;
-        if (matchingRule && highestRuleScore >= 0.8) {
-          console.log(`🤖 Keyword Rule matched: "${textContent}" -> ${matchingRule.targetStatus} (Score: ${highestRuleScore})`);
-          contact.status = matchingRule.targetStatus;
-          contact.statusUpdatedAt = new Date();
-          statusUpdated = true;
-          
-          if (matchingRule.assignedTo) {
-            contact.assignedTo = matchingRule.assignedTo;
+        const hasAssignedUser = contact.assignedTo ? true : false;
+        const hasCustomStatus = (contact.status && contact.status.toLowerCase() !== "new") ? true : false;
+        const shouldApplyAutomation = !hasAssignedUser && !hasCustomStatus;
+
+        if (shouldApplyAutomation) {
+          if (matchingRule && highestRuleScore >= 0.8) {
+            console.log(`🤖 Keyword Rule matched: "${textContent}" -> ${matchingRule.targetStatus} (Score: ${highestRuleScore})`);
+            contact.status = matchingRule.targetStatus;
+            contact.statusUpdatedAt = new Date();
+            statusUpdated = true;
+            
+            if (matchingRule.assignedTo) {
+              contact.assignedTo = matchingRule.assignedTo;
+            }
+          } else if (wildcardRule) {
+            console.log(`🤖 Wildcard Rule matched for any message -> ${wildcardRule.targetStatus}`);
+            contact.status = wildcardRule.targetStatus;
+            contact.statusUpdatedAt = new Date();
+            statusUpdated = true;
+            
+            if (wildcardRule.assignedTo) {
+              contact.assignedTo = wildcardRule.assignedTo;
+            }
           }
-        } else if (wildcardRule) {
-          console.log(`🤖 Wildcard Rule matched for any message -> ${wildcardRule.targetStatus}`);
-          contact.status = wildcardRule.targetStatus;
-          contact.statusUpdatedAt = new Date();
-          statusUpdated = true;
-          
-          if (wildcardRule.assignedTo) {
-            contact.assignedTo = wildcardRule.assignedTo;
-          }
-        } else if (textContent === "stop") {
+        } else {
+          console.log(`ℹ️ Skipping status automation for ${from} because it already has an assigned agent (${contact.assignedTo}) or a custom status (${contact.status})`);
+        }
+
+        if (textContent === "stop") {
           contact.isBlocked = true; // Prevents the Cron Job and Campaigns from messaging this number
         }
 
@@ -421,7 +431,7 @@ export const handleWebhook = async (req, res) => {
 
         // Step 7: TRIGGER AUTOMATION (Chatbot AutoReplies)
         // Checks if the user's message matches any keyword rules created in the AutoReply UI.
-        if (type === "text" || type === "interactive" || type === "button") {
+        if (shouldApplyAutomation && (type === "text" || type === "interactive" || type === "button")) {
           processAutoReply(account, from, bodyContent, contact);
         }
       }

@@ -5,7 +5,7 @@ import { sendTextMessage, sendImageMessage } from "../services/whatsappService.j
 import Flow from "../models/Flow.js";
 import { smartEmit } from "./socket.js";
 import { normalizePhone } from "./phoneUtils.js";
-import { generateAIResponse } from "../services/aiService.js";
+import { generateAIResponse, matchOptionWithAI, generateAIResponseForFlow, validateFlowInput } from "../services/aiService.js";
 
 // --- STRING SIMILARITY ALGORITHM (Levenshtein Distance) ---
 export function getSimilarity(s1, s2) {
@@ -141,7 +141,12 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
 
     let triggeredFlow = null;
     if (bestFlowMatch && highestFlowScore >= 0.8) {
-      triggeredFlow = bestFlowMatch;
+      // Trigger keyword flow only if a campaign/template was recently sent to this contact
+      if (contact && contact.isCampaignSent) {
+        triggeredFlow = bestFlowMatch;
+      } else {
+        console.log(`⏳ Flow "${bestFlowMatch.name}" skipped because no new campaign/template has been sent to ${phone}`);
+      }
     } else if (wildcardFlow && (!contact || !contact.activeFlowId)) {
       // Trigger wildcard flow only if a campaign was recently sent to this contact
       if (contact && contact.isCampaignSent) {
@@ -158,10 +163,8 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       contact.currentStepIndex = 0; // ALWAYS START FROM BEGINNING
       contact.chatData = new Map(); // Reset data for new flow
       
-      // Consume the campaign trigger if we are starting the wildcard flow
-      if (triggeredFlow === wildcardFlow) {
-        contact.isCampaignSent = false;
-      }
+      // Consume the campaign trigger
+      contact.isCampaignSent = false;
       
       await contact.save();
 
@@ -366,7 +369,22 @@ async function processDynamicFlow(account, phone, text, contact) {
     return false;
   }
 
-  // 1. Save the user's response to the current step's field
+  // 1. Validate input using Gemini to filter out questions, queries, or objections (e.g. "kitna paisa lagega?")
+  if (currentStep.type !== "options") {
+    const validation = await validateFlowInput(text, currentStep.saveToField, currentStep.question);
+    if (validation && validation.isQueryOrQuestion) {
+      console.log(`⚠️ AI detected input as a query/question for field "${currentStep.saveToField}": "${text}"`);
+      const repeatedQuestion = replacePlaceholders(currentStep.question, contact.chatData);
+      const responseText = validation.politeResponse 
+        ? `${validation.politeResponse}\n\n(Please answer this question: ${repeatedQuestion})`
+        : `Please answer the question:\n\n${repeatedQuestion}`;
+      
+      await sendDelayedMessage(account, phone, responseText, contact, 1000);
+      return true;
+    }
+  }
+
+  // 2. Save the user's response to the current step's field
   if (!contact.chatData) contact.chatData = new Map();
   if (!contact.customFields) contact.customFields = new Map();
 
@@ -407,10 +425,21 @@ async function processDynamicFlow(account, phone, text, contact) {
     }
 
     if (!matchedOption) {
-      // Re-send current question (or validation error) to avoid getting stuck
-      const repeatedQuestion = replacePlaceholders(currentStep.question, contact.chatData);
-      await sendDelayedMessage(account, phone, "Vikalp sahi nahi hai. Kripya fir se koshish karein:\n\n" + repeatedQuestion, contact, 1000);
-      return true;
+      // 1. Try to semantically match using Gemini
+      const aiMatched = await matchOptionWithAI(text, currentStep.options);
+      if (aiMatched) {
+        matchedOption = aiMatched;
+      } else {
+        // 2. Unrelated message/fallback - respond with Gemini and repeat question
+        const repeatedQuestion = replacePlaceholders(currentStep.question, contact.chatData);
+        const aiMessage = await generateAIResponseForFlow(text, repeatedQuestion, contact);
+        const responseText = aiMessage
+          ? `${aiMessage}\n\n(Please choose one of the options above)`
+          : `Please choose a valid option:\n\n${repeatedQuestion}`;
+        
+        await sendDelayedMessage(account, phone, responseText, contact, 1000);
+        return true;
+      }
     }
   }
 

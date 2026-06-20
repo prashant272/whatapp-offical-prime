@@ -338,7 +338,11 @@ export const sendMessage = async (req, res) => {
 
     // Step 5: Claim the Customer/Contact!
     if (updatedConv && updatedConv.contact) {
-      const contactUpdate = { whatsappAccountId: account._id };
+      const contactUpdate = { 
+        whatsappAccountId: account._id,
+        activeFlowId: null,
+        currentStepIndex: 0
+      };
       // Also sync assignment to contact record
       if (updateFields.assignedTo) {
         contactUpdate.assignedTo = updateFields.assignedTo;
@@ -468,6 +472,13 @@ export const sendChatTemplateMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
+    if (updatedConv && updatedConv.contact) {
+      await Contact.findByIdAndUpdate(updatedConv.contact, { 
+        isCampaignSent: true,
+        whatsappAccountId: account._id
+      });
+    }
+
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
     await logActivity(req.user._id, "SEND_TEMPLATE", `Sent template: ${templateName}`, to);
@@ -550,6 +561,18 @@ export const sendChatImageMessage = async (req, res) => {
       updateFields,
       { upsert: true, new: true }
     );
+
+    if (updatedConv && updatedConv.contact) {
+      const contactUpdate = { 
+        whatsappAccountId: account._id,
+        activeFlowId: null,
+        currentStepIndex: 0
+      };
+      if (updateFields.assignedTo) {
+        contactUpdate.assignedTo = updateFields.assignedTo;
+      }
+      await Contact.findByIdAndUpdate(updatedConv.contact, contactUpdate);
+    }
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
