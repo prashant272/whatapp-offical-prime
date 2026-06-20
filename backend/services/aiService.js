@@ -151,19 +151,23 @@ Reply in the same language style they used (e.g., Hinglish, Hindi, or English).`
  */
 export async function validateFlowInput(incomingText, fieldName, questionText) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) return { isQueryOrQuestion: false };
+  if (!apiKey) return { isInvalidOrQuery: false };
 
   try {
     const systemPrompt = `You are an AI assistant validating inputs for a WhatsApp database.
 We asked the user the following question: "${questionText}" to collect the field: "${fieldName}".
 The user replied: "${incomingText}".
 
-Evaluate if the user's response is a genuine attempt to provide the requested information (like a name, company, email, location details, etc.) OR if it is a question, query, objection, or unrelated query (e.g., "kitna paisa lagega?", "who are you?", "what is this?", "no thanks").
+Analyze the user's reply carefully.
+The reply is INVALID if:
+1. It is a question, query, objection, or unrelated statement (e.g., "kitna paisa lagega?", "who are you?", "what is this?", "no thanks", "kuch nahi", "nothing").
+2. It is a generic chat message like greetings, acknowledgments, or filler words (e.g., "hi", "hello", "ok", "okay", "yes", "no", "kuch na").
+3. It does not contain a plausible or valid value for the requested field "${fieldName}" (e.g., "kuch na" is NOT a valid name, "ok" is NOT a valid email, "yes" is NOT a company name).
 
 Respond in JSON format:
 {
-  "isQueryOrQuestion": true/false, // true if it is a question, query, objection, or unrelated query rather than the requested info.
-  "politeResponse": "..." // if isQueryOrQuestion is true, provide a very short polite response answering their question or query in their language (Hinglish/Hindi/English). Otherwise null.
+  "isInvalidOrQuery": true, // true if the response is invalid, a query, a question, or unrelated. Otherwise false.
+  "politeResponse": "..." // if isInvalidOrQuery is true, provide a very short polite response answering their question (if they asked one) or asking them to provide the valid information in their language (Hinglish/Hindi/English). Otherwise null.
 }`;
 
     const response = await axios.post(
@@ -187,9 +191,9 @@ Respond in JSON format:
     if (result) {
       return JSON.parse(result.trim());
     }
-    return { isQueryOrQuestion: false };
+    return { isInvalidOrQuery: false };
   } catch (error) {
     console.error("❌ Gemini AI validation error:", error.message);
-    return { isQueryOrQuestion: false };
+    return { isInvalidOrQuery: false };
   }
 }

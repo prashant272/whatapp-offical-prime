@@ -372,7 +372,7 @@ async function processDynamicFlow(account, phone, text, contact) {
   // 1. Validate input using Gemini to filter out questions, queries, or objections (e.g. "kitna paisa lagega?")
   if (currentStep.type !== "options") {
     const validation = await validateFlowInput(text, currentStep.saveToField, currentStep.question);
-    if (validation && validation.isQueryOrQuestion) {
+    if (validation && validation.isInvalidOrQuery) {
       console.log(`⚠️ AI detected input as a query/question for field "${currentStep.saveToField}": "${text}"`);
       const repeatedQuestion = replacePlaceholders(currentStep.question, contact.chatData);
       const responseText = validation.politeResponse 
