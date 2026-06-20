@@ -440,7 +440,10 @@ export const handleWebhook = async (req, res) => {
 
         // Step 7: TRIGGER AUTOMATION (Chatbot AutoReplies)
         // Checks if the user's message matches any keyword rules created in the AutoReply UI.
-        if (shouldApplyAutomation && (type === "text" || type === "interactive" || type === "button")) {
+        const isInActiveFlow = contact && contact.activeFlowId ? true : false;
+        const canTriggerFlow = contact && contact.isCampaignSent ? true : false;
+
+        if ((shouldApplyAutomation || canTriggerFlow || isInActiveFlow) && (type === "text" || type === "interactive" || type === "button")) {
           processAutoReply(account, from, bodyContent, contact);
         }
       }
