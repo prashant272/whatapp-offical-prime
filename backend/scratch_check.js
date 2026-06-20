@@ -1,22 +1,32 @@
-import mongoose from "mongoose";
 import dotenv from "dotenv";
-import Contact from "./models/Contact.js";
-import Conversation from "./models/Conversation.js";
+import axios from "axios";
 
 dotenv.config();
 
 async function run() {
-  await mongoose.connect(process.env.MONGODB_URI);
-  console.log("Connected to DB");
-  
-  const phone = "919801017333";
-  const contact = await Contact.findOne({ phone });
-  console.log("CONTACT:", JSON.stringify(contact, null, 2));
-  
-  const conv = await Conversation.findOne({ phone });
-  console.log("CONVERSATION:", JSON.stringify(conv, null, 2));
-  
-  await mongoose.disconnect();
+  const apiKey = process.env.GEMINI_API_KEY;
+  console.log("Testing gemini-3.5-flash...");
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
+      {
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: 'Respond with JSON only: {"hello": "world"}' }]
+          }
+        ],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.1
+        }
+      },
+      { headers: { "Content-Type": "application/json" } }
+    );
+    console.log("RESULT:", response.data?.candidates?.[0]?.content?.parts?.[0]?.text);
+  } catch (err) {
+    console.error("ERROR:", err.response?.data || err.message);
+  }
 }
 
 run();

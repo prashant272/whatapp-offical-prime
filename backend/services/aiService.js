@@ -21,7 +21,7 @@ Keep your responses short, helpful, polite, and under 2-3 sentences.
 Always reply in the same language or style as the customer (use Hinglish, Hindi, or English as appropriate).`;
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
       {
         contents: [
           {
@@ -76,7 +76,7 @@ If it doesn't match any option, respond with the word "NONE".
 Do not include any other text, explanation, or punctuation.`;
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
       {
         contents: [
           {
@@ -122,7 +122,7 @@ Understand their message and give a very short, polite answer (1-2 sentences max
 Reply in the same language style they used (e.g., Hinglish, Hindi, or English).`;
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
       {
         contents: [
           {
@@ -171,7 +171,7 @@ Respond in JSON format:
 }`;
 
     const response = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`,
       {
         contents: [
           {
@@ -193,7 +193,7 @@ Respond in JSON format:
     }
     return { isInvalidOrQuery: false };
   } catch (error) {
-    console.error("❌ Gemini AI validation error:", error.message);
+    console.error("❌ Gemini AI validation error:", error.response?.data || error.message);
     return { isInvalidOrQuery: false };
   }
 }
