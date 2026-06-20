@@ -90,6 +90,15 @@ export const handleWebhook = async (req, res) => {
           { new: true, upsert: true, setDefaultsOnInsert: true }
         );
 
+        const SUCCESS_STATUSES = ["sent", "delivered", "read"];
+        if (updatedMsg && SUCCESS_STATUSES.includes(status.status) && (updatedMsg.type === "template" || updatedMsg.campaignId)) {
+          const recipientPhone = normalizePhone(status.recipient_id);
+          if (recipientPhone) {
+            await Contact.updateOne({ phone: recipientPhone }, { $set: { isCampaignSent: true } });
+            console.log(`🎯 Marked contact ${recipientPhone} as isCampaignSent: true because template/campaign message was sent.`);
+          }
+        }
+
         // SYNC WITH CAMPAIGN LOGS (ATOMIC UPDATE TO PREVENT CONCURRENCY OVERWRITES)
         let campaignId = updatedMsg?.campaignId;
         let targetPhone = updatedMsg?.to?.replace(/\D/g, "");
