@@ -4,10 +4,16 @@ import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 import { Plus, Trash2, Clock, MessageSquare, PlayCircle, PauseCircle } from "lucide-react";
 
 const FollowUpAutomation = () => {
+  const { accounts, refreshAccounts } = useWhatsAppAccount();
   const [rules, setRules] = useState([]);
   const [statuses, setStatuses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+
+  // 24-hour window reminder state
+  const [selectedAccounts, setSelectedAccounts] = useState([]);
+  const [windowReminderMessage, setWindowReminderMessage] = useState("");
+  const [isSavingReminder, setIsSavingReminder] = useState(false);
 
   const [newRule, setNewRule] = useState({
     name: "",
@@ -39,6 +45,36 @@ const FollowUpAutomation = () => {
   useEffect(() => {
     fetchRulesAndStatuses();
   }, []);
+
+  useEffect(() => {
+    if (accounts && accounts.length > 0) {
+      const activeIds = accounts.filter(a => a.windowReminderActive).map(a => a._id);
+      setSelectedAccounts(activeIds);
+      
+      const firstActive = accounts.find(a => a.windowReminderActive);
+      setWindowReminderMessage(firstActive?.windowReminderMessage || "Your 24-hour support window is closing in 1 hour. Please reply if you still need assistance.");
+    }
+  }, [accounts]);
+
+  const handleSaveReminderSettings = async () => {
+    setIsSavingReminder(true);
+    try {
+      const promises = accounts.map(acc => {
+        const isActive = selectedAccounts.includes(acc._id);
+        return api.put(`/whatsapp-accounts/${acc._id}`, {
+          windowReminderActive: isActive,
+          windowReminderMessage: windowReminderMessage
+        });
+      });
+      await Promise.all(promises);
+      refreshAccounts();
+      alert("Reminder settings saved for all accounts successfully!");
+    } catch (err) {
+      alert("Error saving settings");
+    } finally {
+      setIsSavingReminder(false);
+    }
+  };
 
   const handleCreateRule = async (e) => {
     e.preventDefault();
@@ -76,7 +112,60 @@ const FollowUpAutomation = () => {
 
   return (
     <div className="follow-up-automation">
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "2rem" }}>
+      {accounts && accounts.length > 0 && (
+        <div className="glass-card" style={{ marginBottom: "2rem", padding: "1.5rem", borderLeft: "4px solid #00a884" }}>
+          <h3 style={{ marginBottom: "1rem", color: "#111b21", display: "flex", alignItems: "center", gap: "8px" }}>
+            <Clock size={20} color="#00a884" /> 24-Hour Window Reminder Settings
+          </h3>
+          <p style={{ fontSize: "0.9rem", color: "#667781", marginBottom: "1rem" }}>
+            Automatically send a warning message exactly 1 hour before the 24-hour WhatsApp session closes for a customer.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <label style={{ fontWeight: "600", fontSize: "0.95rem" }}>Select Accounts for 24-Hour Reminder:</label>
+            <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "10px" }}>
+              {accounts.map(acc => (
+                <label key={acc._id} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.9rem" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedAccounts.includes(acc._id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedAccounts([...selectedAccounts, acc._id]);
+                      } else {
+                        setSelectedAccounts(selectedAccounts.filter(id => id !== acc._id));
+                      }
+                    }}
+                    style={{ width: "16px", height: "16px", accentColor: "#00a884" }}
+                  />
+                  {acc.name}
+                </label>
+              ))}
+            </div>
+
+            {selectedAccounts.length > 0 && (
+              <div style={{ marginTop: "10px" }}>
+                <label style={{ display: "block", marginBottom: "6px", fontWeight: "500", fontSize: "0.9rem" }}>Reminder Message (applies to all selected)</label>
+                <textarea
+                  rows="2"
+                  value={windowReminderMessage}
+                  onChange={e => setWindowReminderMessage(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd", resize: "none" }}
+                />
+              </div>
+            )}
+            <button
+              onClick={handleSaveReminderSettings}
+              disabled={isSavingReminder}
+              style={{ alignSelf: "flex-start", marginTop: "10px", padding: "8px 16px", borderRadius: "8px", background: "#00a884", color: "white", border: "none", fontWeight: "600", cursor: "pointer" }}
+            >
+              {isSavingReminder ? "Saving..." : "Save Settings"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
+        <h2 style={{ fontSize: "1.5rem", color: "#111b21" }}>Custom Follow-up Rules</h2>
         <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
           <Plus size={18} style={{ marginRight: "8px" }} />
           {showForm ? "Cancel" : "New Rule"}

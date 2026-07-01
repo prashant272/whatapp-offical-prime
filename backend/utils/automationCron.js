@@ -20,6 +20,52 @@ export const initAutomationCron = () => {
 
       console.log("⏰ Running Follow-up Automation Check...");
 
+      // --- NEW: 24-Hour Window Reminders (Send 1 hour before window closes) ---
+      const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
+      const reminderStart = new Date(Date.now() - 23 * 60 * 60 * 1000); // 23 hours ago
+
+      const windowReminders = await Conversation.find({
+        lastCustomerMessageAt: { $lte: reminderStart, $gt: windowStart },
+        status: { $ne: "Closed" }
+      }).populate("contact").populate("whatsappAccountId");
+
+      for (const conv of windowReminders) {
+        if (conv.windowReminderSentAt && conv.windowReminderSentAt > conv.lastCustomerMessageAt) {
+          continue; // Already sent in this 24h cycle
+        }
+
+        const account = conv.whatsappAccountId;
+        if (account && account.windowReminderActive && account.windowReminderMessage) {
+          console.log(`⏰ Sending 24h Window Reminder to ${conv.phone}`);
+          try {
+            const metaRes = await sendTextMessage(account, conv.phone, account.windowReminderMessage);
+            const messageId = metaRes?.messages?.[0]?.id;
+
+            const newMessage = new Message({
+              messageId,
+              from: "me",
+              to: conv.phone,
+              body: account.windowReminderMessage,
+              direction: "outbound",
+              isAutomated: true,
+              status: "sent",
+              whatsappAccountId: account._id
+            });
+            await newMessage.save();
+
+            conv.lastMessage = account.windowReminderMessage;
+            conv.lastMessageTime = new Date();
+            smartEmit("new_message", { message: newMessage, conversation: conv });
+          } catch (err) {
+            console.error(`❌ Failed to send 24h Window Reminder to ${conv.phone}:`, err.message);
+          } finally {
+            // ALWAYS update sentAt to prevent infinite retry loops if the API keeps failing
+            conv.windowReminderSentAt = new Date();
+            await conv.save();
+          }
+        }
+      }
+
       // --- NEW: Personal Follow-up Reminders ---
       const now = new Date();
       const dueReminders = await Conversation.find({

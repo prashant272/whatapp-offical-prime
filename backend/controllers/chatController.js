@@ -356,7 +356,8 @@ export const sendMessage = async (req, res) => {
 
     res.json({ success: true, message: newMessage, conversation: populatedConv });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    const errorMsg = error.response?.data?.error?.message || error.message;
+    res.status(500).json({ error: errorMsg });
   }
 };
 

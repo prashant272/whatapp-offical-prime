@@ -43,12 +43,16 @@ export function getSimilarity(s1, s2) {
 }
 
 // --- KEYWORD MATCHING WITH NEGATION DETECTION ---
-export function matchKeyword(text, keyword) {
+export function matchKeyword(text, keyword, matchType = "CONTAINS") {
   const cleanText = text.toLowerCase().trim();
   const cleanKeyword = keyword.toLowerCase().trim();
   
   if (cleanText === cleanKeyword) {
     return 1.0;
+  }
+
+  if (matchType === "EXACT") {
+    return 0.0;
   }
   
   // Escape keyword for regex
@@ -98,7 +102,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
 
     for (const ar of autoReplies) {
       const keyword = ar.keyword.toLowerCase();
-      const currentScore = matchKeyword(text, keyword);
+      const currentScore = matchKeyword(text, keyword, ar.matchType);
 
       if (currentScore > highestScore || (currentScore === highestScore && currentScore > 0 && keyword.length > bestMatchKeywordLength)) {
         highestScore = currentScore;

@@ -68,6 +68,12 @@ export const sendTextMessage = async (account, to, text, quotedMessageId = null)
     );
     return res.data;
   } catch (error) {
+    const metaError = error.response?.data?.error;
+    if (metaError) {
+      console.error(`❌ Meta API Error (Text):`, JSON.stringify(metaError, null, 2));
+    } else {
+      console.error("❌ Network/Axios Error (Text):", error.message);
+    }
     throw error;
   }
 };

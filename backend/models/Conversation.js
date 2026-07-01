@@ -14,7 +14,8 @@ const conversationSchema = new mongoose.Schema({
   subsector: { type: String, default: "Unassigned" },
   followUpTime: { type: Date },
   followUpActivity: { type: String },
-  followUpNotified: { type: Boolean, default: false }
+  followUpNotified: { type: Boolean, default: false },
+  windowReminderSentAt: { type: Date }
 }, { timestamps: true });
 
 conversationSchema.index({ whatsappAccountId: 1, lastMessageTime: -1 });
