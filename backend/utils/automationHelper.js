@@ -99,15 +99,27 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     let bestMatch = null;
     let highestScore = 0;
     let bestMatchKeywordLength = 0;
+    let wildcardMatch = null;
 
     for (const ar of autoReplies) {
-      const keyword = ar.keyword.toLowerCase();
+      const keyword = ar.keyword.toLowerCase().trim();
+      if (keyword === "*") {
+        wildcardMatch = ar;
+        continue;
+      }
       const currentScore = matchKeyword(text, keyword, ar.matchType);
 
       if (currentScore > highestScore || (currentScore === highestScore && currentScore > 0 && keyword.length > bestMatchKeywordLength)) {
         highestScore = currentScore;
         bestMatch = ar;
         bestMatchKeywordLength = keyword.length;
+      }
+    }
+
+    if (!bestMatch || highestScore < 0.8) {
+      if (wildcardMatch) {
+        bestMatch = wildcardMatch;
+        highestScore = 1.0;
       }
     }
 

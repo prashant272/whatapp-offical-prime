@@ -268,7 +268,12 @@ const ChatModule = () => {
       if (!cursor) {
         setConversations(finalConvs);
       } else {
-        setConversations(prev => [...(Array.isArray(prev) ? prev : []), ...newConvs]);
+        setConversations(prev => {
+          const current = Array.isArray(prev) ? prev : [];
+          // Filter out any incoming conversations that already exist in the local list
+          const uniqueNew = newConvs.filter(nc => !current.some(c => c._id === nc._id));
+          return [...current, ...uniqueNew];
+        });
       }
       setNextCursor(nCursor);
       setHasNextPage(hasMore);
@@ -555,14 +560,19 @@ const ChatModule = () => {
             const { message, conversation } = resultAction.payload;
             dispatch(updateMessageStatus({ tempId, realMsg: message }));
 
-            // Instantly update local conversations list to clear unread and move to top
+            // Instantly update local conversations list in place to avoid jumping
             if (conversation) {
               setConversations(prev => {
-                const filtered = prev.filter(c => c._id !== conversation._id);
-                return [conversation, ...filtered];
+                const index = prev.findIndex(c => c._id === conversation._id);
+                if (index > -1) {
+                  const newArray = [...prev];
+                  newArray[index] = conversation;
+                  return newArray;
+                } else {
+                  return [conversation, ...prev];
+                }
               });
             }
-            refetchConvs();
           } else {
             throw new Error(resultAction.payload || "Failed to send image");
           }
@@ -598,14 +608,19 @@ const ChatModule = () => {
             const { message, conversation } = resultAction.payload;
             dispatch(updateMessageStatus({ tempId, realMsg: message }));
 
-            // Instantly update local conversations list to clear unread and move to top
+            // Instantly update local conversations list in place to avoid jumping
             if (conversation) {
               setConversations(prev => {
-                const filtered = prev.filter(c => c._id !== conversation._id);
-                return [conversation, ...filtered];
+                const index = prev.findIndex(c => c._id === conversation._id);
+                if (index > -1) {
+                  const newArray = [...prev];
+                  newArray[index] = conversation;
+                  return newArray;
+                } else {
+                  return [conversation, ...prev];
+                }
               });
             }
-            refetchConvs();
 
             // NEW: Clear follow-up notifications when message is sent
             setUiNotifications(prev => prev.filter(n =>
@@ -1044,8 +1059,16 @@ const ChatModule = () => {
             updatedConv.unreadCount = 0;
           }
 
-          const filtered = prev.filter((_, i) => i !== index);
-          return [updatedConv, ...filtered];
+          if (isActiveChat) {
+            // Keep it in the exact same position so the UI doesn't jump abruptly
+            const newArray = [...prev];
+            newArray[index] = updatedConv;
+            return newArray;
+          } else {
+            // Move to top for other chats (like new incoming messages)
+            const filtered = prev.filter((_, i) => i !== index);
+            return [updatedConv, ...filtered];
+          }
         } else {
           updatedConv = {
             ...conversation,
@@ -1183,8 +1206,17 @@ const ChatModule = () => {
       setUiNotifications(prev => [newNotif, ...prev]);
     });
 
-    return () => socket.disconnect();
-  }, []);
+    return () => {
+      socket.disconnect();
+    };
+  }, [activeAccount]);
+
+  // Re-sort the conversation list when the active chat changes
+  // This ensures that any chat we just replied to (which was kept in place to avoid jumping)
+  // finally moves to the top in the background once we click away from it.
+  useEffect(() => {
+    setConversations(prev => [...prev].sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime)));
+  }, [chatId]);
 
   useEffect(() => {
     const updateTimer = () => {

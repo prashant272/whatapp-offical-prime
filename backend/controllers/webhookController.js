@@ -368,9 +368,8 @@ export const handleWebhook = async (req, res) => {
         }
         
         let statusUpdated = false;
-        const hasAssignedUser = contact.assignedTo ? true : false;
-        const hasCustomStatus = (contact.status && contact.status.toLowerCase() !== "new") ? true : false;
-        const shouldApplyAutomation = !hasAssignedUser && !hasCustomStatus;
+        // Always apply automation if a keyword matches. Admins expect keywords to fire even if assigned.
+        const shouldApplyAutomation = true;
 
         if (shouldApplyAutomation) {
           if (matchingRule && highestRuleScore >= 0.8) {
@@ -392,8 +391,6 @@ export const handleWebhook = async (req, res) => {
               contact.assignedTo = wildcardRule.assignedTo;
             }
           }
-        } else {
-          console.log(`ℹ️ Skipping status automation for ${from} because it already has an assigned agent (${contact.assignedTo}) or a custom status (${contact.status})`);
         }
 
         if (textContent === "stop") {

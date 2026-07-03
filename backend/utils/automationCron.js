@@ -4,7 +4,7 @@ import Contact from "../models/Contact.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
-import { sendTextMessage } from "../services/whatsappService.js";
+import { sendTextMessage, sendImageMessage } from "../services/whatsappService.js";
 import { smartEmit } from "./socket.js";
 
 export const initAutomationCron = () => {
@@ -36,9 +36,26 @@ export const initAutomationCron = () => {
 
         const account = conv.whatsappAccountId;
         if (account && account.windowReminderActive && account.windowReminderMessage) {
+          // Check target statuses
+          if (account.windowReminderTargetStatuses && account.windowReminderTargetStatuses.length > 0) {
+            const contactStatus = conv.contact?.status || "Lead"; // Fallback to Lead
+            if (!account.windowReminderTargetStatuses.includes(contactStatus)) {
+              continue; // Skip because contact status is not in the target list
+            }
+          }
+
           console.log(`⏰ Sending 24h Window Reminder to ${conv.phone}`);
           try {
-            const metaRes = await sendTextMessage(account, conv.phone, account.windowReminderMessage);
+            let metaRes;
+            let messageType = "text";
+            
+            if (account.windowReminderMediaUrl) {
+              metaRes = await sendImageMessage(account, conv.phone, account.windowReminderMediaUrl, account.windowReminderMessage);
+              messageType = "image";
+            } else {
+              metaRes = await sendTextMessage(account, conv.phone, account.windowReminderMessage);
+            }
+            
             const messageId = metaRes?.messages?.[0]?.id;
 
             const newMessage = new Message({
@@ -46,6 +63,8 @@ export const initAutomationCron = () => {
               from: "me",
               to: conv.phone,
               body: account.windowReminderMessage,
+              mediaUrl: account.windowReminderMediaUrl || undefined,
+              type: messageType,
               direction: "outbound",
               isAutomated: true,
               status: "sent",
@@ -135,11 +154,17 @@ export const initAutomationCron = () => {
         // Step 4: Find ALL customers (Contacts) who have the exact status we are looking for (e.g. "Interested").
         // We also make sure the customer is not blocked.
         // We "populate" whatsappAccountId so we know EXACTLY which account this customer belongs to.
-        const contacts = await Contact.find({
-          status: rule.status,
+        const query = {
+          status: { $in: rule.statuses && rule.statuses.length > 0 ? rule.statuses : [rule.status] },
           isBlocked: { $ne: true },
           isDeleted: { $ne: true }
-        }).populate("whatsappAccountId");
+        };
+
+        if (rule.whatsappAccountIds && rule.whatsappAccountIds.length > 0) {
+          query.whatsappAccountId = { $in: rule.whatsappAccountIds };
+        }
+
+        const contacts = await Contact.find(query).populate("whatsappAccountId");
 
         for (const contact of contacts) {
           // Step 5: Check if we ALREADY sent a follow-up for this specific rule to this customer.
@@ -162,7 +187,14 @@ export const initAutomationCron = () => {
               if (!accountToUse) continue; // If we STILL don't have an account, skip them.
 
               // Step 8: Actually SEND the WhatsApp message using the Official Meta API!
-              const metaRes = await sendTextMessage(accountToUse, contact.phone, rule.messageText);
+              let metaRes;
+              let messageType = "text";
+              if (rule.mediaUrl) {
+                metaRes = await sendImageMessage(accountToUse, contact.phone, rule.mediaUrl, rule.messageText);
+                messageType = "image";
+              } else {
+                metaRes = await sendTextMessage(accountToUse, contact.phone, rule.messageText);
+              }
 
               // Step 9: Extract the unique WhatsApp Message ID to track if it gets "Read" or "Delivered" later.
               const messageId = metaRes?.messages?.[0]?.id;
@@ -173,6 +205,8 @@ export const initAutomationCron = () => {
                 from: "me",
                 to: contact.phone,
                 body: rule.messageText,
+                mediaUrl: rule.mediaUrl || undefined,
+                type: messageType,
                 direction: "outbound",
                 isAutomated: true, // Mark it as a bot message
                 status: "sent",

@@ -28,7 +28,7 @@ import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 const AutoReplyManager = () => {
-  const { accounts } = useWhatsAppAccount();
+  const { accounts, activeAccount } = useWhatsAppAccount();
   const [replies, setReplies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -277,6 +277,16 @@ const AutoReplyManager = () => {
   };
 
   const filteredReplies = replies.filter(r => {
+    // 1. Filter by Active Account
+    if (activeAccount) {
+      const isGlobal = r.whatsappAccountIds && r.whatsappAccountIds.length === 0;
+      const isForAccount = r.whatsappAccountIds && r.whatsappAccountIds.includes(activeAccount._id);
+      if (!isGlobal && !isForAccount) {
+        return false;
+      }
+    }
+
+    // 2. Filter by Search
     const term = search.toLowerCase();
     const keywordMatch = r.keyword.toLowerCase().includes(term);
     const mainResponseMatch = (r.response || "").toLowerCase().includes(term);
@@ -784,18 +794,19 @@ const AutoReplyManager = () => {
                         setFormData({ ...formData, whatsappAccountIds: ids });
                       }}
                       style={{ 
-                        padding: "6px 12px", 
-                        borderRadius: "16px", 
-                        fontSize: "12px", 
+                        padding: "8px 16px", 
+                        borderRadius: "20px", 
+                        fontSize: "13px", 
                         fontWeight: "600",
                         cursor: "pointer",
                         border: "1px solid",
-                        borderColor: formData.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#d1d7db",
-                        background: formData.whatsappAccountIds.includes(acc._id) ? "#e7fce3" : "white",
-                        color: formData.whatsappAccountIds.includes(acc._id) ? "#008069" : "#667781",
+                        borderColor: formData.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#e2e8f0",
+                        background: formData.whatsappAccountIds.includes(acc._id) ? "rgba(0, 168, 132, 0.1)" : "white",
+                        color: formData.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#64748b",
                         display: "flex",
                         alignItems: "center",
-                        gap: "5px"
+                        gap: "6px",
+                        transition: "all 0.2s"
                       }}
                     >
                       <CheckCircle2 size={14} style={{ opacity: formData.whatsappAccountIds.includes(acc._id) ? 1 : 0.3 }} />

@@ -16,7 +16,6 @@ const autoReplySchema = new mongoose.Schema({
   keyword: { 
     type: String, 
     required: true, 
-    unique: true,
     lowercase: true,
     trim: true 
   },

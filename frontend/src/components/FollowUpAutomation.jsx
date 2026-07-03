@@ -1,40 +1,49 @@
 import React, { useState, useEffect } from "react";
 import api from "../api";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
-import { Plus, Trash2, Clock, MessageSquare, PlayCircle, PauseCircle } from "lucide-react";
+import { Plus, Trash2, Clock, MessageSquare, PlayCircle, PauseCircle, Users, Image as ImageIcon, Edit2, CheckCircle2 } from "lucide-react";
 
 const FollowUpAutomation = () => {
-  const { accounts, refreshAccounts } = useWhatsAppAccount();
+  const { accounts, activeAccount, refreshAccounts } = useWhatsAppAccount();
   const [rules, setRules] = useState([]);
   const [statuses, setStatuses] = useState([]);
+  const [quickReplies, setQuickReplies] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  
+  // Forms visibility
+  const [showRuleForm, setShowRuleForm] = useState(false);
+  const [show24HForm, setShow24HForm] = useState(false);
 
-  // 24-hour window reminder state
-  const [selectedAccounts, setSelectedAccounts] = useState([]);
-  const [windowReminderMessage, setWindowReminderMessage] = useState("");
+  const [reminderMessage, setReminderMessage] = useState("");
+  const [reminderMediaUrl, setReminderMediaUrl] = useState("");
+  const [reminderQuickReplyId, setReminderQuickReplyId] = useState("");
+  const [reminderTargetStatuses, setReminderTargetStatuses] = useState([]);
   const [isSavingReminder, setIsSavingReminder] = useState(false);
+  const [selectedAccountsToApply, setSelectedAccountsToApply] = useState([]);
 
   const [newRule, setNewRule] = useState({
     name: "",
-    status: "Interested", // Default
+    statuses: ["Interested"],
     messageText: "",
     delayDays: 0,
     delayHours: 0,
-    delayMinutes: 30
+    delayMinutes: 30,
+    whatsappAccountIds: [],
+    quickReplyId: "",
+    mediaUrl: ""
   });
 
   const fetchRulesAndStatuses = async () => {
     setLoading(true);
     try {
-      // Fetch both the Follow-up Rules and the available Customer Statuses at the same time.
-      // We don't send any "activeAccount" here because rules are Global for all accounts.
-      const [rulesRes, statusesRes] = await Promise.all([
+      const [rulesRes, statusesRes, qrRes] = await Promise.all([
         api.get("/follow-ups"),
-        api.get("/statuses")
+        api.get("/statuses"),
+        api.get("/quick-replies").catch(() => ({ data: [] }))
       ]);
       setRules(rulesRes.data);
       setStatuses(statusesRes.data);
+      setQuickReplies(qrRes.data);
     } catch (err) {
       console.error("Error fetching data:", err);
     } finally {
@@ -46,29 +55,40 @@ const FollowUpAutomation = () => {
     fetchRulesAndStatuses();
   }, []);
 
+  // When activeAccount changes, reset 24H form state
   useEffect(() => {
-    if (accounts && accounts.length > 0) {
-      const activeIds = accounts.filter(a => a.windowReminderActive).map(a => a._id);
-      setSelectedAccounts(activeIds);
+    setShow24HForm(false);
+    if (activeAccount) {
+      setReminderMessage(activeAccount.windowReminderMessage || "Your 24-hour support window is closing in 1 hour. Please reply if you still need assistance.");
+      setReminderMediaUrl(activeAccount.windowReminderMediaUrl || "");
+      setReminderTargetStatuses(activeAccount.windowReminderTargetStatuses || []);
+      setReminderQuickReplyId("");
       
-      const firstActive = accounts.find(a => a.windowReminderActive);
-      setWindowReminderMessage(firstActive?.windowReminderMessage || "Your 24-hour support window is closing in 1 hour. Please reply if you still need assistance.");
+      // Auto-select accounts that ALREADY have this exact message, plus the current account
+      const preSelected = accounts
+        .filter(a => (a.windowReminderActive && a.windowReminderMessage === activeAccount.windowReminderMessage) || a._id === activeAccount._id)
+        .map(a => a._id);
+      setSelectedAccountsToApply(preSelected);
     }
-  }, [accounts]);
+  }, [activeAccount, accounts]);
 
   const handleSaveReminderSettings = async () => {
+    if (!activeAccount || selectedAccountsToApply.length === 0) return;
     setIsSavingReminder(true);
     try {
-      const promises = accounts.map(acc => {
-        const isActive = selectedAccounts.includes(acc._id);
-        return api.put(`/whatsapp-accounts/${acc._id}`, {
-          windowReminderActive: isActive,
-          windowReminderMessage: windowReminderMessage
-        });
-      });
-      await Promise.all(promises);
-      refreshAccounts();
-      alert("Reminder settings saved for all accounts successfully!");
+      // Save to all selected accounts
+      await Promise.all(
+        selectedAccountsToApply.map(accountId => 
+          api.put(`/whatsapp-accounts/${accountId}`, {
+            windowReminderActive: true,
+            windowReminderMessage: reminderMessage,
+            windowReminderMediaUrl: reminderMediaUrl,
+            windowReminderTargetStatuses: reminderTargetStatuses
+          })
+        )
+      );
+      await refreshAccounts();
+      setShow24HForm(false);
     } catch (err) {
       alert("Error saving settings");
     } finally {
@@ -76,15 +96,41 @@ const FollowUpAutomation = () => {
     }
   };
 
+  const handleDeleteReminder = async () => {
+    if (!activeAccount) return;
+    if (!window.confirm("Are you sure you want to remove the 24-Hour Reminder for this account?")) return;
+    try {
+      await api.put(`/whatsapp-accounts/${activeAccount._id}`, {
+        windowReminderActive: false,
+        windowReminderMessage: "",
+        windowReminderMediaUrl: "",
+        windowReminderTargetStatuses: []
+      });
+      await refreshAccounts();
+    } catch (err) {
+      alert("Error removing reminder");
+    }
+  };
+
   const handleCreateRule = async (e) => {
     e.preventDefault();
     if (!newRule.name || !newRule.messageText) return alert("Name and Message are required!");
+    if (newRule.statuses.length === 0) return alert("Please select at least one status!");
 
     try {
-      // Send the new rule to the Node.js backend to be saved in the database
       await api.post("/follow-ups", newRule);
-      setShowForm(false);
-      setNewRule({ name: "", status: "Interested", messageText: "", delayDays: 0, delayHours: 0, delayMinutes: 30 });
+      setShowRuleForm(false);
+      setNewRule({ 
+        name: "", 
+        statuses: ["Interested"], 
+        messageText: "", 
+        delayDays: 0, 
+        delayHours: 0, 
+        delayMinutes: 30,
+        whatsappAccountIds: [],
+        quickReplyId: "",
+        mediaUrl: ""
+      });
       fetchRulesAndStatuses();
     } catch (err) {
       alert("Error creating rule: " + (err.response?.data?.error || err.message));
@@ -110,69 +156,264 @@ const FollowUpAutomation = () => {
     }
   };
 
+  const allStatusOptions = ["Interested", "Not Interested", "Pending", ...statuses.filter(s => !["Interested", "Not Interested", "Pending"].includes(s.name)).map(s => s.name)];
+
+  // Filter rules to show only those applicable to the currently active account
+  const visibleRules = rules.filter(r => {
+    if (!activeAccount) return false;
+    return r.whatsappAccountIds.length === 0 || r.whatsappAccountIds.includes(activeAccount._id);
+  });
+
+  if (!activeAccount) {
+    return <div>Please select a WhatsApp Account from the sidebar first.</div>;
+  }
+
   return (
     <div className="follow-up-automation">
-      {accounts && accounts.length > 0 && (
-        <div className="glass-card" style={{ marginBottom: "2rem", padding: "1.5rem", borderLeft: "4px solid #00a884" }}>
-          <h3 style={{ marginBottom: "1rem", color: "#111b21", display: "flex", alignItems: "center", gap: "8px" }}>
-            <Clock size={20} color="#00a884" /> 24-Hour Window Reminder Settings
-          </h3>
-          <p style={{ fontSize: "0.9rem", color: "#667781", marginBottom: "1rem" }}>
-            Automatically send a warning message exactly 1 hour before the 24-hour WhatsApp session closes for a customer.
+      {/* 24-HOUR REMINDER SECTION */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+        <div>
+          <h2 style={{ fontSize: "1.5rem", color: "#111b21", display: "flex", alignItems: "center", gap: "8px" }}>
+            <Clock size={24} color="#00a884" /> 24-Hour Window Reminders
+          </h2>
+          <p style={{ fontSize: "0.9rem", color: "#667781", marginTop: "4px" }}>
+            Settings for: <strong>{activeAccount.name}</strong>
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            <label style={{ fontWeight: "600", fontSize: "0.95rem" }}>Select Accounts for 24-Hour Reminder:</label>
-            <div style={{ display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "10px" }}>
-              {accounts.map(acc => (
-                <label key={acc._id} style={{ display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", fontSize: "0.9rem" }}>
+        </div>
+        {!activeAccount.windowReminderActive && !show24HForm && (
+          <button className="btn-primary" onClick={() => setShow24HForm(true)}>
+            <Plus size={18} style={{ marginRight: "8px" }} />
+            New 24H Reminder
+          </button>
+        )}
+      </div>
+
+      {show24HForm && (
+        <div className="glass-card" style={{ marginBottom: "2rem", padding: "1.5rem", borderLeft: "4px solid #00a884" }}>
+          <h3 style={{ marginBottom: "1rem" }}>Create 24-Hour Reminder for {activeAccount.name}</h3>
+          <p style={{ fontSize: "0.9rem", color: "#667781", marginBottom: "1rem" }}>
+            Automatically send a warning message exactly 1 hour before the 24-hour WhatsApp session closes.
+          </p>
+
+          <div style={{ marginBottom: "1rem" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.9rem", fontWeight: "500", marginBottom: "6px" }}><MessageSquare size={16} /> Use Quick Reply Template (Optional)</label>
+            <select
+              style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd" }}
+              value={reminderQuickReplyId}
+              onChange={e => {
+                const qr = quickReplies.find(q => q._id === e.target.value);
+                if (qr) {
+                  setReminderQuickReplyId(qr._id);
+                  setReminderMessage(qr.content || "");
+                  setReminderMediaUrl(qr.mediaUrl || "");
+                } else {
+                  setReminderQuickReplyId("");
+                  setReminderMediaUrl("");
+                }
+              }}
+            >
+              <option value="">-- Select a Quick Reply --</option>
+              {quickReplies.map(qr => (
+                <option key={qr._id} value={qr._id}>{qr.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <label style={{ display: "block", marginBottom: "6px", fontWeight: "500", fontSize: "0.9rem" }}>Reminder Message</label>
+          <textarea
+            rows="3"
+            value={reminderMessage}
+            onChange={e => setReminderMessage(e.target.value)}
+            style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", resize: "vertical" }}
+          />
+          {reminderMediaUrl && (
+            <div style={{ marginTop: "15px", borderRadius: "8px", overflow: "hidden", border: "1px solid #ddd", width: "fit-content" }}>
+              <div style={{ padding: "8px 12px", background: "#f8f9fa", borderBottom: "1px solid #ddd", fontSize: "0.75rem", fontWeight: "600", color: "#667781", display: "flex", alignItems: "center", gap: "6px" }}>
+                <ImageIcon size={14} /> Attached Media
+              </div>
+              <img src={reminderMediaUrl} alt="Attached Media" style={{ display: "block", maxWidth: "200px", maxHeight: "150px", objectFit: "cover" }} />
+            </div>
+          )}
+
+          <div style={{ marginTop: "15px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "500", fontSize: "0.9rem" }}>Target Statuses (Leave empty to send to ALL)</label>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", maxHeight: "100px", overflowY: "auto", border: "1px solid #ddd", padding: "10px", borderRadius: "10px", background: "#f8f9fa" }}>
+              {statuses.map(s => (
+                <label key={s._id} style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.85rem", cursor: "pointer" }}>
                   <input
                     type="checkbox"
-                    checked={selectedAccounts.includes(acc._id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedAccounts([...selectedAccounts, acc._id]);
-                      } else {
-                        setSelectedAccounts(selectedAccounts.filter(id => id !== acc._id));
-                      }
+                    checked={reminderTargetStatuses.includes(s.name)}
+                    onChange={e => {
+                      const current = reminderTargetStatuses;
+                      if (e.target.checked) setReminderTargetStatuses([...current, s.name]);
+                      else setReminderTargetStatuses(current.filter(st => st !== s.name));
                     }}
-                    style={{ width: "16px", height: "16px", accentColor: "#00a884" }}
+                    style={{ accentColor: "#00a884" }}
                   />
-                  {acc.name}
+                  {s.name}
                 </label>
               ))}
             </div>
+          </div>
 
-            {selectedAccounts.length > 0 && (
-              <div style={{ marginTop: "10px" }}>
-                <label style={{ display: "block", marginBottom: "6px", fontWeight: "500", fontSize: "0.9rem" }}>Reminder Message (applies to all selected)</label>
-                <textarea
-                  rows="2"
-                  value={windowReminderMessage}
-                  onChange={e => setWindowReminderMessage(e.target.value)}
-                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd", resize: "none" }}
-                />
-              </div>
-            )}
+          {/* Account matching info */}
+          <div style={{ marginTop: "15px", padding: "12px", background: "#f8f9fa", borderRadius: "8px", border: "1px solid #eee", fontSize: "0.85rem" }}>
+            <div style={{ marginBottom: "6px" }}>
+              <strong>Accounts with this exact message:</strong>{" "}
+              <span style={{ color: "#008069", fontWeight: "500" }}>
+                {accounts.filter(a => a.windowReminderActive && a.windowReminderMessage === reminderMessage.trim()).map(a => a.name).join(", ") || "None"}
+              </span>
+            </div>
+            <div style={{ marginBottom: "6px" }}>
+              <strong>Accounts with a different message:</strong>{" "}
+              <span style={{ color: "#d9534f", fontWeight: "500" }}>
+                {accounts.filter(a => a.windowReminderActive && a.windowReminderMessage !== reminderMessage.trim()).map(a => a.name).join(", ") || "None"}
+              </span>
+            </div>
+            <div>
+              <strong>Accounts with NO reminder set:</strong>{" "}
+              <span style={{ color: "#667781", fontWeight: "500" }}>
+                {accounts.filter(a => !a.windowReminderActive).map(a => a.name).join(", ") || "None"}
+              </span>
+            </div>
+          </div>
+
+          {/* Apply to accounts section */}
+          <div style={{ marginTop: "15px" }}>
+            <label style={{ display: "block", marginBottom: "8px", fontWeight: "600", fontSize: "0.9rem" }}>Save this reminder to:</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", padding: "10px", borderRadius: "10px", background: "#f8f9fa", border: "1px solid #eee" }}>
+              {accounts.map(acc => {
+                const isSelected = selectedAccountsToApply.includes(acc._id);
+                const isCurrent = acc._id === activeAccount._id;
+                return (
+                  <div 
+                    key={acc._id}
+                    onClick={() => {
+                      if (isCurrent) return; // Active account is always checked
+                      if (isSelected) {
+                        setSelectedAccountsToApply(selectedAccountsToApply.filter(id => id !== acc._id));
+                      } else {
+                        setSelectedAccountsToApply([...selectedAccountsToApply, acc._id]);
+                      }
+                    }}
+                    style={{ 
+                      padding: "8px 16px", 
+                      borderRadius: "20px", 
+                      fontSize: "0.8rem", 
+                      fontWeight: "600",
+                      cursor: isCurrent ? "not-allowed" : "pointer",
+                      border: "1px solid",
+                      borderColor: isSelected ? "#00a884" : "#e2e8f0",
+                      background: isSelected ? "rgba(0, 168, 132, 0.1)" : "white",
+                      color: isSelected ? "#00a884" : "#64748b",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      transition: "all 0.2s",
+                      opacity: isCurrent ? 0.7 : 1
+                    }}
+                  >
+                    <CheckCircle2 size={16} opacity={isSelected ? 1 : 0.3} />
+                    {acc.name} {isCurrent && "(Current)"}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
             <button
               onClick={handleSaveReminderSettings}
               disabled={isSavingReminder}
-              style={{ alignSelf: "flex-start", marginTop: "10px", padding: "8px 16px", borderRadius: "8px", background: "#00a884", color: "white", border: "none", fontWeight: "600", cursor: "pointer" }}
+              className="btn-primary"
             >
-              {isSavingReminder ? "Saving..." : "Save Settings"}
+              {isSavingReminder ? "Saving..." : "Save Reminder"}
+            </button>
+            <button
+              onClick={() => setShow24HForm(false)}
+              style={{ padding: "8px 16px", borderRadius: "8px", background: "#e2e8f0", color: "#111b21", border: "none", fontWeight: "600", cursor: "pointer" }}
+            >
+              Cancel
             </button>
           </div>
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2rem" }}>
-        <h2 style={{ fontSize: "1.5rem", color: "#111b21" }}>Custom Follow-up Rules</h2>
-        <button className="btn-primary" onClick={() => setShowForm(!showForm)}>
+      {!show24HForm && (
+        <div style={{ marginBottom: "3rem" }}>
+          {activeAccount.windowReminderActive ? (
+            <div className="glass-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderLeft: "4px solid #00a884" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "5px" }}>
+                  <h4 style={{ margin: 0 }}>24-Hour Session Warning</h4>
+                  <span style={{ fontSize: "0.75rem", background: "#e6fce5", color: "#008069", padding: "2px 8px", borderRadius: "12px", fontWeight: "bold" }}>
+                    Active
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "8px" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Clock size={14} /> Triggers at 23rd Hour</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Users size={14} /> Account: {activeAccount.name}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <strong>Target:</strong> {activeAccount.windowReminderTargetStatuses?.length > 0 ? activeAccount.windowReminderTargetStatuses.join(", ") : "All Statuses"}
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.85rem", marginTop: "10px", background: "#f8f9fa", padding: "10px", borderRadius: "8px", borderLeft: "3px solid #00a884" }}>
+                  {activeAccount.windowReminderMediaUrl && (
+                    <div style={{ marginBottom: "10px" }}>
+                      <img src={activeAccount.windowReminderMediaUrl} alt="Reminder Media" style={{ display: "block", maxWidth: "150px", maxHeight: "100px", borderRadius: "6px", objectFit: "cover", border: "1px solid #ddd" }} />
+                    </div>
+                  )}
+                  {activeAccount.windowReminderMessage}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "10px" }}>
+                <button
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#008069" }}
+                  onClick={() => { 
+                    setReminderMessage(activeAccount.windowReminderMessage); 
+                    setReminderMediaUrl(activeAccount.windowReminderMediaUrl || "");
+                    setReminderTargetStatuses(activeAccount.windowReminderTargetStatuses || []);
+                    setReminderQuickReplyId("");
+                    setShow24HForm(true); 
+                  }}
+                  title="Edit Reminder"
+                >
+                  <Edit2 size={20} />
+                </button>
+                <button
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#d9534f" }}
+                  onClick={handleDeleteReminder}
+                  title="Remove Reminder"
+                >
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="glass-card" style={{ textAlign: "center", padding: "2rem", background: "#f8f9fa" }}>
+              <Clock size={32} color="#ccc" style={{ marginBottom: "1rem" }} />
+              <h4 style={{ color: "#667781" }}>No 24-Hour Reminder Set</h4>
+              <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>Set up a warning message to remind customers before their session closes.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* CUSTOM FOLLOW-UP RULES SECTION */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+        <div>
+          <h2 style={{ fontSize: "1.5rem", color: "#111b21" }}>Custom Follow-up Rules</h2>
+          <p style={{ fontSize: "0.9rem", color: "#667781", marginTop: "4px" }}>
+            Showing rules applicable to: <strong>{activeAccount.name}</strong>
+          </p>
+        </div>
+        <button className="btn-primary" onClick={() => setShowRuleForm(!showRuleForm)}>
           <Plus size={18} style={{ marginRight: "8px" }} />
-          {showForm ? "Cancel" : "New Rule"}
+          {showRuleForm ? "Cancel" : "New Rule"}
         </button>
       </div>
 
-      {showForm && (
+      {showRuleForm && (
         <form className="glass-card" onSubmit={handleCreateRule} style={{ marginBottom: "2rem" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1.5rem", marginBottom: "1rem" }}>
             <div>
@@ -187,21 +428,87 @@ const FollowUpAutomation = () => {
               />
             </div>
             <div>
-              <label>Target Status</label>
+              <label>Target Statuses</label>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px", maxHeight: "100px", overflowY: "auto", border: "1px solid #ddd", padding: "8px", borderRadius: "10px" }}>
+                {allStatusOptions.map(sName => (
+                  <label key={sName} style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.85rem", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={newRule.statuses.includes(sName)}
+                      onChange={e => {
+                        const current = newRule.statuses;
+                        if (e.target.checked) setNewRule({ ...newRule, statuses: [...current, sName] });
+                        else setNewRule({ ...newRule, statuses: current.filter(s => s !== sName) });
+                      }}
+                      style={{ accentColor: "#00a884" }}
+                    />
+                    {sName}
+                  </label>
+                ))}
+              </div>
+            </div>
+            
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label>Apply to Accounts (Leave empty for all accounts)</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "8px", border: "1px solid #ddd", padding: "10px", borderRadius: "10px", background: "#f8f9fa" }}>
+                {accounts.map(acc => {
+                  const isSelected = newRule.whatsappAccountIds.includes(acc._id);
+                  return (
+                    <div 
+                      key={acc._id}
+                      onClick={() => {
+                        const current = newRule.whatsappAccountIds;
+                        if (isSelected) {
+                          setNewRule({ ...newRule, whatsappAccountIds: current.filter(id => id !== acc._id) });
+                        } else {
+                          setNewRule({ ...newRule, whatsappAccountIds: [...current, acc._id] });
+                        }
+                      }}
+                      style={{ 
+                        padding: "8px 16px", 
+                        borderRadius: "20px", 
+                        fontSize: "0.8rem", 
+                        fontWeight: "600",
+                        cursor: "pointer",
+                        border: "1px solid",
+                        borderColor: isSelected ? "#00a884" : "#e2e8f0",
+                        background: isSelected ? "rgba(0, 168, 132, 0.1)" : "white",
+                        color: isSelected ? "#00a884" : "#64748b",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      <CheckCircle2 size={16} opacity={isSelected ? 1 : 0.3} />
+                      {acc.name}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{ gridColumn: "1 / -1", borderTop: "1px solid #eee", paddingTop: "1rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "6px" }}><MessageSquare size={16} /> Use Quick Reply Template (Optional)</label>
               <select
                 style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
-                value={newRule.status}
-                onChange={e => setNewRule({ ...newRule, status: e.target.value })}
+                value={newRule.quickReplyId || ""}
+                onChange={e => {
+                  const qr = quickReplies.find(q => q._id === e.target.value);
+                  if (qr) {
+                    setNewRule({ ...newRule, quickReplyId: qr._id, messageText: qr.content || "", mediaUrl: qr.mediaUrl || "" });
+                  } else {
+                    setNewRule({ ...newRule, quickReplyId: "", mediaUrl: "" });
+                  }
+                }}
               >
-                <option value="Interested">Interested ("Yes" Reply)</option>
-                <option value="Not Interested">Not Interested ("No" Reply)</option>
-                <option value="Pending">Pending</option>
-                {statuses.map(s => (
-                  !["Interested", "Not Interested", "Pending"].includes(s.name) &&
-                  <option key={s._id} value={s.name}>{s.name}</option>
+                <option value="">-- Select a Quick Reply --</option>
+                {quickReplies.map(qr => (
+                  <option key={qr._id} value={qr._id}>{qr.name}</option>
                 ))}
               </select>
             </div>
+
             <div>
               <label>Delay (Days)</label>
               <input
@@ -246,6 +553,11 @@ const FollowUpAutomation = () => {
               placeholder="Hi! We noticed you were interested. Do you have any questions?"
               required
             ></textarea>
+            {newRule.mediaUrl && (
+              <div style={{ marginTop: "10px", fontSize: "0.85rem", color: "#00a884", display: "flex", alignItems: "center", gap: "6px" }}>
+                <ImageIcon size={16} /> Media attached from Quick Reply
+              </div>
+            )}
           </div>
 
           <button type="submit" className="btn-primary" style={{ marginTop: "1.5rem" }}>
@@ -256,15 +568,15 @@ const FollowUpAutomation = () => {
 
       {loading ? (
         <div>Loading rules...</div>
-      ) : rules.length === 0 && !showForm ? (
+      ) : visibleRules.length === 0 && !showRuleForm ? (
         <div className="glass-card" style={{ textAlign: "center", padding: "3rem" }}>
           <Clock size={48} color="#ccc" style={{ marginBottom: "1rem" }} />
-          <h4>No Follow-up Rules Yet</h4>
+          <h4>No Custom Rules For This Account</h4>
           <p style={{ color: "var(--text-secondary)" }}>Create rules to automatically engage with your audience.</p>
         </div>
       ) : (
         <div style={{ display: "grid", gap: "1rem" }}>
-          {rules.map(rule => (
+          {visibleRules.map(rule => (
             <div key={rule._id} className="glass-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "5px" }}>
@@ -273,11 +585,23 @@ const FollowUpAutomation = () => {
                     {rule.active ? "Active" : "Paused"}
                   </span>
                 </div>
-                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", display: "flex", gap: "15px" }}>
-                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><MessageSquare size={14} /> Status: {rule.status}</span>
-                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}><Clock size={14} /> Delay: {rule.delayDays}d {rule.delayHours}h {rule.delayMinutes}m</span>
+                <div style={{ fontSize: "0.85rem", color: "var(--text-secondary)", display: "flex", gap: "15px", flexWrap: "wrap", marginBottom: "8px" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <MessageSquare size={14} /> 
+                    Statuses: {rule.statuses && rule.statuses.length > 0 ? rule.statuses.join(", ") : rule.status}
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <Clock size={14} /> Delay: {rule.delayDays}d {rule.delayHours}h {rule.delayMinutes}m
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                    <Users size={14} />
+                    Accounts: {rule.whatsappAccountIds && rule.whatsappAccountIds.length > 0 
+                      ? rule.whatsappAccountIds.map(a => a.name).join(", ") 
+                      : "All Accounts"}
+                  </span>
                 </div>
                 <div style={{ fontSize: "0.85rem", marginTop: "10px", background: "#f8f9fa", padding: "10px", borderRadius: "8px", borderLeft: "3px solid #00a884" }}>
+                  {rule.mediaUrl && <ImageIcon size={14} style={{ display: "inline", marginRight: "4px", color: "#667781" }} />}
                   {rule.messageText}
                 </div>
               </div>

@@ -196,20 +196,20 @@ const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
                       : [...formData.whatsappAccountIds, acc._id];
                     setFormData({ ...formData, whatsappAccountIds: ids });
                   }}
-                  style={{ 
+                  style={{
                     padding: "8px 16px", 
                     borderRadius: "20px", 
-                    fontSize: "12px", 
-                    fontWeight: "700",
+                    fontSize: "13px", 
+                    fontWeight: "600",
                     cursor: "pointer",
-                    border: "2px solid",
+                    border: "1px solid",
                     borderColor: formData.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#e2e8f0",
-                    background: formData.whatsappAccountIds.includes(acc._id) ? "#e7fce3" : "white",
-                    color: formData.whatsappAccountIds.includes(acc._id) ? "#008069" : "#64748b",
+                    background: formData.whatsappAccountIds.includes(acc._id) ? "rgba(0, 168, 132, 0.1)" : "white",
+                    color: formData.whatsappAccountIds.includes(acc._id) ? "#00a884" : "#64748b",
                     display: "flex",
                     alignItems: "center",
-                    gap: "8px",
-                    transition: "all 0.2s ease"
+                    gap: "6px",
+                    transition: "all 0.2s"
                   }}
                 >
                   <CheckCircle2 size={16} style={{ opacity: formData.whatsappAccountIds.includes(acc._id) ? 1 : 0.3 }} />
