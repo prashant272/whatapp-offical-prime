@@ -27,6 +27,7 @@ export const createFollowUpRule = async (req, res) => {
       active,
       whatsappAccountIds,
       quickReplyId,
+      templatePresetId,
       mediaUrl
     } = req.body;
 
@@ -43,6 +44,7 @@ export const createFollowUpRule = async (req, res) => {
       active: active !== undefined ? active : true,
       whatsappAccountIds: whatsappAccountIds || [],
       quickReplyId: quickReplyId || null,
+      templatePresetId: templatePresetId || null,
       mediaUrl: mediaUrl || null
     });
 

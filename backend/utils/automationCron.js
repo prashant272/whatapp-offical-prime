@@ -4,8 +4,37 @@ import Contact from "../models/Contact.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import Message from "../models/Message.js";
 import Conversation from "../models/Conversation.js";
-import { sendTextMessage, sendImageMessage } from "../services/whatsappService.js";
+import TemplatePreset from "../models/TemplatePreset.js";
+import { sendTextMessage, sendImageMessage, sendTemplateMessage } from "../services/whatsappService.js";
 import { smartEmit } from "./socket.js";
+
+const buildTemplateComponents = (configMap) => {
+  if (!configMap) return [];
+  const components = [];
+  const config = typeof configMap.toJSON === 'function' ? configMap.toJSON() : configMap;
+
+  const headerParams = [];
+  if (config.HEADER_TEXT) headerParams.push({ type: "text", text: config.HEADER_TEXT });
+  if (config.HEADER_IMAGE) headerParams.push({ type: "image", image: { link: config.HEADER_IMAGE } });
+  if (config.HEADER_VIDEO) headerParams.push({ type: "video", video: { link: config.HEADER_VIDEO } });
+  if (config.HEADER_DOCUMENT) headerParams.push({ type: "document", document: { link: config.HEADER_DOCUMENT } });
+  
+  if (headerParams.length > 0) {
+    components.push({ type: "header", parameters: headerParams });
+  }
+
+  const bodyParams = [];
+  let i = 1;
+  while (config[`BODY_${i}`]) {
+    bodyParams.push({ type: "text", text: config[`BODY_${i}`] });
+    i++;
+  }
+  if (bodyParams.length > 0) {
+    components.push({ type: "body", parameters: bodyParams });
+  }
+
+  return components;
+};
 
 export const initAutomationCron = () => {
   // We use node-cron to run this function every 1 minute automatically in the background
@@ -24,6 +53,10 @@ export const initAutomationCron = () => {
       const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000); // 24 hours ago
       const reminderStart = new Date(Date.now() - 23 * 60 * 60 * 1000); // 23 hours ago
 
+      // Fetch all active window reminders
+      const WindowReminder = (await import("../models/WindowReminder.js")).default;
+      const activeWindowReminders = await WindowReminder.find({ active: true });
+
       const windowReminders = await Conversation.find({
         lastCustomerMessageAt: { $lte: reminderStart, $gt: windowStart },
         status: { $ne: "Closed" }
@@ -35,25 +68,40 @@ export const initAutomationCron = () => {
         }
 
         const account = conv.whatsappAccountId;
-        if (account && account.windowReminderActive && account.windowReminderMessage) {
-          // Check target statuses
-          if (account.windowReminderTargetStatuses && account.windowReminderTargetStatuses.length > 0) {
-            const contactStatus = conv.contact?.status || "Lead"; // Fallback to Lead
-            if (!account.windowReminderTargetStatuses.includes(contactStatus)) {
-              continue; // Skip because contact status is not in the target list
+        if (!account) continue;
+
+        const contactStatus = conv.contact?.status || "Lead"; // Fallback to Lead
+
+        // Find a matching window reminder for this conversation
+        const matchingReminder = activeWindowReminders.find(reminder => {
+          // Check if this reminder applies to this account (empty means all or we enforce selection)
+          if (reminder.whatsappAccountIds && reminder.whatsappAccountIds.length > 0) {
+            if (!reminder.whatsappAccountIds.map(id => id.toString()).includes(account._id.toString())) {
+              return false;
             }
           }
 
+          // Check if this reminder applies to this status
+          if (reminder.targetStatuses && reminder.targetStatuses.length > 0) {
+            if (!reminder.targetStatuses.includes(contactStatus)) {
+              return false;
+            }
+          }
+
+          return true;
+        });
+
+        if (matchingReminder) {
           console.log(`⏰ Sending 24h Window Reminder to ${conv.phone}`);
           try {
             let metaRes;
             let messageType = "text";
             
-            if (account.windowReminderMediaUrl) {
-              metaRes = await sendImageMessage(account, conv.phone, account.windowReminderMediaUrl, account.windowReminderMessage);
+            if (matchingReminder.mediaUrl) {
+              metaRes = await sendImageMessage(account, conv.phone, matchingReminder.mediaUrl, matchingReminder.message);
               messageType = "image";
             } else {
-              metaRes = await sendTextMessage(account, conv.phone, account.windowReminderMessage);
+              metaRes = await sendTextMessage(account, conv.phone, matchingReminder.message);
             }
             
             const messageId = metaRes?.messages?.[0]?.id;
@@ -62,8 +110,8 @@ export const initAutomationCron = () => {
               messageId,
               from: "me",
               to: conv.phone,
-              body: account.windowReminderMessage,
-              mediaUrl: account.windowReminderMediaUrl || undefined,
+              body: matchingReminder.message,
+              mediaUrl: matchingReminder.mediaUrl || undefined,
               type: messageType,
               direction: "outbound",
               isAutomated: true,
@@ -72,7 +120,7 @@ export const initAutomationCron = () => {
             });
             await newMessage.save();
 
-            conv.lastMessage = account.windowReminderMessage;
+            conv.lastMessage = matchingReminder.message;
             conv.lastMessageTime = new Date();
             smartEmit("new_message", { message: newMessage, conversation: conv });
           } catch (err) {
@@ -133,7 +181,10 @@ export const initAutomationCron = () => {
 
       // Step 1: Find all Follow-up rules that are currently turned ON (active: true).
       // This is global, meaning it checks rules for all accounts at once.
-      const activeRules = await FollowUpRule.find({ active: true });
+      const activeRules = await FollowUpRule.find({ active: true }).populate({
+        path: "templatePresetId",
+        populate: { path: "template" }
+      });
       if (activeRules.length === 0) return; // If no rules are active, stop doing work and exit.
 
       // Step 2: Fetch the primary WhatsApp account.
@@ -168,13 +219,21 @@ export const initAutomationCron = () => {
 
         for (const contact of contacts) {
           // Step 5: Check if we ALREADY sent a follow-up for this specific rule to this customer.
-          // If we did, we look at the last time we sent it (lastSentAt).
-          // If we never sent it, we look at the time their status was changed (statusUpdatedAt).
           const logEntry = contact.followUpsLog?.find(log => log.ruleId.toString() === rule._id.toString());
-          const lastTime = logEntry ? logEntry.lastSentAt : contact.statusUpdatedAt;
-
-          // If there is no time recorded at all (old customer), we skip them to avoid spamming.
-          if (!lastTime) continue;
+          let lastTime;
+          
+          if (logEntry) {
+            lastTime = logEntry.lastSentAt;
+          } else {
+            // If never sent before, we check when their status was changed.
+            if (!contact.statusUpdatedAt) continue; // Skip if no status time recorded
+            
+            // To prevent new or edited rules from instantly spamming old contacts, 
+            // we start the countdown from whichever is newer: the status change time OR the rule's last update time.
+            const statusTime = new Date(contact.statusUpdatedAt).getTime();
+            const ruleTime = new Date(rule.updatedAt || rule.createdAt || 0).getTime();
+            lastTime = new Date(Math.max(statusTime, ruleTime));
+          }
 
           // Step 6: Check if enough time has passed. 
           // We check if (Current Time - Last Time) is greater than our Rule's Delay Time.
@@ -189,7 +248,32 @@ export const initAutomationCron = () => {
               // Step 8: Actually SEND the WhatsApp message using the Official Meta API!
               let metaRes;
               let messageType = "text";
-              if (rule.mediaUrl) {
+              let messageBodyToSave = rule.messageText;
+              let templateData = undefined;
+
+              if (rule.templatePresetId && rule.templatePresetId.template) {
+                const preset = rule.templatePresetId;
+                const components = buildTemplateComponents(preset.config);
+                metaRes = await sendTemplateMessage(accountToUse, contact.phone, preset.template.name, preset.template.language, components);
+                messageType = "template";
+                
+                // Save template metadata for Chat UI
+                templateData = { name: preset.template.name, components };
+                
+                // Reconstruct actual body text for UI display
+                messageBodyToSave = `[Template: ${preset.template.name}]`;
+                if (preset.template.components) {
+                  const bodyComp = preset.template.components.find(c => c.type === "BODY");
+                  if (bodyComp && bodyComp.text) {
+                    let text = bodyComp.text;
+                    const bodyParams = components.find(c => c.type === "body")?.parameters || [];
+                    bodyParams.forEach((p, idx) => {
+                      text = text.replace(`{{${idx + 1}}}`, p.text || "");
+                    });
+                    messageBodyToSave = text;
+                  }
+                }
+              } else if (rule.mediaUrl) {
                 metaRes = await sendImageMessage(accountToUse, contact.phone, rule.mediaUrl, rule.messageText);
                 messageType = "image";
               } else {
@@ -204,9 +288,10 @@ export const initAutomationCron = () => {
                 messageId,
                 from: "me",
                 to: contact.phone,
-                body: rule.messageText,
+                body: messageBodyToSave,
                 mediaUrl: rule.mediaUrl || undefined,
                 type: messageType,
+                templateData,
                 direction: "outbound",
                 isAutomated: true, // Mark it as a bot message
                 status: "sent",
@@ -221,7 +306,7 @@ export const initAutomationCron = () => {
               const updatedConv = await Conversation.findOneAndUpdate(
                 { phone: normalizedPhone, $or: [{ whatsappAccountId: accountToUse._id }, { whatsappAccountId: null }] },
                 {
-                  lastMessage: rule.messageText,
+                  lastMessage: messageBodyToSave,
                   lastMessageTime: new Date(),
                   unreadCount: 0,
                   whatsappAccountId: accountToUse._id

@@ -28,6 +28,7 @@ import quickReplyRoutes from "./routes/quickReplyRoutes.js";
 import callRoutes from "./routes/callRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import emailRoutes from "./routes/emailRoutes.js";
+import windowReminderRoutes from "./routes/windowReminderRoutes.js";
 import { protect, restrictTo } from "./middleware/authMiddleware.js";
 import { attachWhatsAppAccount } from "./middleware/accountMiddleware.js";
 import { errorHandler } from "./utils/errorHandler.js";
@@ -85,6 +86,7 @@ app.use("/api/quick-replies", quickReplyRoutes);
 app.use("/api/calls", callRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/window-reminders", windowReminderRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({
