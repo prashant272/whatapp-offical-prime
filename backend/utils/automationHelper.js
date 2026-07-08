@@ -117,7 +117,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     if (!bestMatch || highestScore < 0.8) {
-      if (wildcardMatch) {
+      if (wildcardMatch && (!contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned")) {
         bestMatch = wildcardMatch;
         highestScore = 1.0;
       }
@@ -163,7 +163,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       } else {
         console.log(`⏳ Flow "${bestFlowMatch.name}" skipped because no new campaign/template has been sent to ${phone}`);
       }
-    } else if (wildcardFlow && (!contact || !contact.activeFlowId)) {
+    } else if (wildcardFlow && (!contact || !contact.activeFlowId) && (!contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned")) {
       // Trigger wildcard flow only if a campaign was recently sent to this contact
       if (contact && contact.isCampaignSent) {
         triggeredFlow = wildcardFlow;
