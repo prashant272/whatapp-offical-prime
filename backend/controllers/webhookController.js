@@ -368,6 +368,7 @@ export const handleWebhook = async (req, res) => {
         }
         
         let statusUpdated = false;
+        let appliedRule = null;
         // Always apply automation if a keyword matches. Admins expect keywords to fire even if assigned.
         const shouldApplyAutomation = true;
 
@@ -377,15 +378,17 @@ export const handleWebhook = async (req, res) => {
             contact.status = matchingRule.targetStatus;
             contact.statusUpdatedAt = new Date();
             statusUpdated = true;
+            appliedRule = matchingRule;
             
             if (matchingRule.assignedTo) {
               contact.assignedTo = matchingRule.assignedTo;
             }
-          } else if (wildcardRule) {
+          } else if (wildcardRule && (!contact.status || contact.status.toLowerCase() === "new")) {
             console.log(`🤖 Wildcard Rule matched for any message -> ${wildcardRule.targetStatus}`);
             contact.status = wildcardRule.targetStatus;
             contact.statusUpdatedAt = new Date();
             statusUpdated = true;
+            appliedRule = wildcardRule;
             
             if (wildcardRule.assignedTo) {
               contact.assignedTo = wildcardRule.assignedTo;
@@ -421,9 +424,8 @@ export const handleWebhook = async (req, res) => {
         // Step 5: If a keyword or wildcard rule matched, update the Conversation status and assignment too!
         if (statusUpdated) {
           conversation.status = contact.status;
-          const targetAssignee = (matchingRule && matchingRule.assignedTo) || (wildcardRule && wildcardRule.assignedTo);
-          if (targetAssignee) {
-            conversation.assignedTo = targetAssignee;
+          if (appliedRule && appliedRule.assignedTo) {
+            conversation.assignedTo = appliedRule.assignedTo;
           }
         }
 
