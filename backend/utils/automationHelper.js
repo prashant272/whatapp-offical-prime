@@ -46,7 +46,7 @@ export function getSimilarity(s1, s2) {
 export function matchKeyword(text, keyword, matchType = "CONTAINS") {
   const cleanText = text.toLowerCase().trim();
   const cleanKeyword = keyword.toLowerCase().trim();
-  
+
   if (cleanText === cleanKeyword) {
     return 1.0;
   }
@@ -54,19 +54,19 @@ export function matchKeyword(text, keyword, matchType = "CONTAINS") {
   if (matchType === "EXACT") {
     return 0.0;
   }
-  
+
   // Escape keyword for regex
   const escapedKeyword = cleanKeyword.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   const wordRegex = new RegExp(`\\b${escapedKeyword}\\b`, "i");
-  
+
   if (wordRegex.test(cleanText)) {
     const negationWords = ["not", "no", "don't", "dont", "never", "nahi", "nahin", "na", "mat", "gair"];
-    
+
     // Check if the keyword itself contains/starts with any negation word
-    const keywordHasNegation = negationWords.some(neg => 
+    const keywordHasNegation = negationWords.some(neg =>
       new RegExp(`\\b${neg}\\b`, "i").test(cleanKeyword)
     );
-    
+
     if (!keywordHasNegation) {
       // Check for a negation word within 1-2 words before the keyword in text
       const negationRegex = new RegExp(`\\b(${negationWords.join("|")})\\b\\s+(?:\\w+\\s+)?${escapedKeyword}\\b`, "i");
@@ -76,7 +76,7 @@ export function matchKeyword(text, keyword, matchType = "CONTAINS") {
     }
     return 0.9;
   }
-  
+
   // Fuzzy Match fallback
   const words = cleanText.split(/\s+/);
   const wordScores = words.map(word => getSimilarity(word, cleanKeyword));
@@ -117,7 +117,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     if (!bestMatch || highestScore < 0.8) {
-      if (wildcardMatch && (!contact.status || contact.status.toLowerCase() === "new")) {
+      if (wildcardMatch) {
         bestMatch = wildcardMatch;
         highestScore = 1.0;
       }
@@ -163,7 +163,7 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       } else {
         console.log(`⏳ Flow "${bestFlowMatch.name}" skipped because no new campaign/template has been sent to ${phone}`);
       }
-    } else if (wildcardFlow && (!contact || !contact.activeFlowId) && (!contact.status || contact.status.toLowerCase() === "new")) {
+    } else if (wildcardFlow && (!contact || !contact.activeFlowId)) {
       // Trigger wildcard flow only if a campaign was recently sent to this contact
       if (contact && contact.isCampaignSent) {
         triggeredFlow = wildcardFlow;
@@ -178,10 +178,10 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       contact.activeFlowId = triggeredFlow._id;
       contact.currentStepIndex = 0; // ALWAYS START FROM BEGINNING
       contact.chatData = new Map(); // Reset data for new flow
-      
+
       // Consume the campaign trigger
       contact.isCampaignSent = false;
-      
+
       await contact.save();
 
       const firstQuestion = triggeredFlow.steps[0].question;
@@ -391,10 +391,10 @@ async function processDynamicFlow(account, phone, text, contact) {
     if (validation && validation.isInvalidOrQuery) {
       console.log(`⚠️ AI detected input as a query/question for field "${currentStep.saveToField}": "${text}"`);
       const repeatedQuestion = replacePlaceholders(currentStep.question, contact.chatData);
-      const responseText = validation.politeResponse 
+      const responseText = validation.politeResponse
         ? `${validation.politeResponse}\n\n(Please answer this question: ${repeatedQuestion})`
         : `Please answer the question:\n\n${repeatedQuestion}`;
-      
+
       await sendDelayedMessage(account, phone, responseText, contact, 1000);
       return true;
     }
@@ -452,7 +452,7 @@ async function processDynamicFlow(account, phone, text, contact) {
         const responseText = aiMessage
           ? `${aiMessage}\n\n(Please choose one of the options above)`
           : `Please choose a valid option:\n\n${repeatedQuestion}`;
-        
+
         await sendDelayedMessage(account, phone, responseText, contact, 1000);
         return true;
       }

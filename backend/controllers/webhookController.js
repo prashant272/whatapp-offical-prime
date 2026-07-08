@@ -30,7 +30,7 @@ export const handleWebhook = async (req, res) => {
   console.log("-------------------------------\n");
 
   const body = req.body;
-  
+
   if (body.object === "whatsapp_business_account") {
     try {
       const value = body.entry?.[0]?.changes?.[0]?.value;
@@ -42,13 +42,13 @@ export const handleWebhook = async (req, res) => {
       const phoneNumberId = metadata?.phone_number_id;
       console.log(`📩 Webhook received for Phone ID: ${phoneNumberId}`);
       const account = await WhatsAppAccount.findOne({ phoneNumberId });
-      
+
       if (!account) {
         console.warn(`⚠️ No account found in DB for Phone ID: ${phoneNumberId}. Message ignored.`);
-        return res.sendStatus(200); 
+        return res.sendStatus(200);
       }
       console.log(`✅ Webhook matched to Account: ${account.name}`);
-      
+
       if (!account && (message || status)) {
         console.warn(`⚠️ Received message for unknown Phone Number ID: ${phoneNumberId}`);
         // Optional: you could still process it, but let's stick to known accounts
@@ -76,10 +76,10 @@ export const handleWebhook = async (req, res) => {
         }
         const updatedMsg = await Message.findOneAndUpdate(
           { messageId: status.id },
-          { 
+          {
             $set: updateFields,
-            $setOnInsert: { 
-              messageId: status.id, 
+            $setOnInsert: {
+              messageId: status.id,
               direction: "outbound",
               from: "me",
               to: status.recipient_id || "",
@@ -204,7 +204,7 @@ export const handleWebhook = async (req, res) => {
       }
 
       if (message) {
-        const from = normalizePhone(message.from); 
+        const from = normalizePhone(message.from);
 
         // Reject incoming messages from blocked contacts
         const existingBlockedContact = await Contact.findOne({ phone: from, isBlocked: true });
@@ -308,21 +308,21 @@ export const handleWebhook = async (req, res) => {
 
         // Step 1: Find or Create Contact (Always normalize phone)
         let contact = await Contact.findOne({ phone: from });
-        
+
         // Step 2: Find existing Conversation (Checking both current account and unassigned/legacy)
-        let conversation = await Conversation.findOne({ 
-          phone: from, 
-          $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] 
+        let conversation = await Conversation.findOne({
+          phone: from,
+          $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }]
         }).sort({ lastMessageTime: -1 });
-        
+
         // Extract Profile Name from Meta Webhook
         const profileName = value?.contacts?.[0]?.profile?.name;
 
         if (!contact) {
-          contact = new Contact({ 
-            name: profileName || `User ${from}`, 
+          contact = new Contact({
+            name: profileName || `User ${from}`,
             phone: from,
-            whatsappAccountId: account?._id 
+            whatsappAccountId: account?._id
           });
         } else if (!contact.whatsappAccountId) {
           // Associate legacy contact with this account
@@ -334,9 +334,9 @@ export const handleWebhook = async (req, res) => {
 
         // Step 3: Check dynamic Keyword Rules for automation
         const textContent = bodyContent.trim().toLowerCase();
-        
+
         // Fetch all active rules for this account or global
-        const allRules = await KeywordRule.find({ 
+        const allRules = await KeywordRule.find({
           active: true,
           $or: [
             { whatsappAccountIds: account._id },
@@ -366,9 +366,8 @@ export const handleWebhook = async (req, res) => {
             bestRuleKeywordLength = keyword.length;
           }
         }
-        
+
         let statusUpdated = false;
-        let appliedRule = null;
         // Always apply automation if a keyword matches. Admins expect keywords to fire even if assigned.
         const shouldApplyAutomation = true;
 
@@ -378,18 +377,16 @@ export const handleWebhook = async (req, res) => {
             contact.status = matchingRule.targetStatus;
             contact.statusUpdatedAt = new Date();
             statusUpdated = true;
-            appliedRule = matchingRule;
-            
+
             if (matchingRule.assignedTo) {
               contact.assignedTo = matchingRule.assignedTo;
             }
-          } else if (wildcardRule && (!contact.status || contact.status.toLowerCase() === "new")) {
+          } else if (wildcardRule) {
             console.log(`🤖 Wildcard Rule matched for any message -> ${wildcardRule.targetStatus}`);
             contact.status = wildcardRule.targetStatus;
             contact.statusUpdatedAt = new Date();
             statusUpdated = true;
-            appliedRule = wildcardRule;
-            
+
             if (wildcardRule.assignedTo) {
               contact.assignedTo = wildcardRule.assignedTo;
             }
@@ -403,8 +400,8 @@ export const handleWebhook = async (req, res) => {
         await contact.save();
 
         if (!conversation) {
-          conversation = new Conversation({ 
-            contact: contact._id, 
+          conversation = new Conversation({
+            contact: contact._id,
             phone: from,
             whatsappAccountId: account?._id,
             status: contact.status || "New", // Sync status from contact if it's a fresh conversation record
@@ -413,19 +410,20 @@ export const handleWebhook = async (req, res) => {
             subsector: contact.subsector || "Unassigned"
           });
         }
-        
+
         // Step 4: Update the Conversation and CLAIM it for this account
         conversation.whatsappAccountId = account?._id;
         conversation.lastMessage = bodyContent;
         conversation.lastMessageTime = new Date();
         conversation.lastCustomerMessageAt = new Date();
         conversation.unreadCount += 1;
-        
+
         // Step 5: If a keyword or wildcard rule matched, update the Conversation status and assignment too!
         if (statusUpdated) {
           conversation.status = contact.status;
-          if (appliedRule && appliedRule.assignedTo) {
-            conversation.assignedTo = appliedRule.assignedTo;
+          const targetAssignee = (matchingRule && matchingRule.assignedTo) || (wildcardRule && wildcardRule.assignedTo);
+          if (targetAssignee) {
+            conversation.assignedTo = targetAssignee;
           }
         }
 
