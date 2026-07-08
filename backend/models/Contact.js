@@ -84,6 +84,7 @@ contactSchema.index({ status: 1 });
 contactSchema.index({ assignedTo: 1 });
 contactSchema.index({ isCampaignSent: 1, isCampaignFailed: 1 });
 contactSchema.index({ isDeleted: 1 });
+contactSchema.index({ createdAt: -1 });
 
 // Pre-validate hook to clean data before validation runs
 contactSchema.pre("validate", function(next) {

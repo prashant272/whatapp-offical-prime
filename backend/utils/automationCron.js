@@ -37,8 +37,8 @@ const buildTemplateComponents = (configMap) => {
 };
 
 export const initAutomationCron = () => {
-  // We use node-cron to run this function every 1 minute automatically in the background
-  cron.schedule("* * * * *", async () => {
+  // We use node-cron to run this function every 5 minutes automatically in the background
+  cron.schedule("*/5 * * * *", async () => {
     try {
       // --- Business Hours Check (8 AM - 7 PM IST) ---
       const istHour = parseInt(new Date().toLocaleString("en-US", { hour: 'numeric', hour12: false, timeZone: "Asia/Kolkata" }));
@@ -60,7 +60,7 @@ export const initAutomationCron = () => {
       const windowReminders = await Conversation.find({
         lastCustomerMessageAt: { $lte: reminderStart, $gt: windowStart },
         status: { $ne: "Closed" }
-      }).populate("contact").populate("whatsappAccountId");
+      }).allowDiskUse(true).populate("contact").populate("whatsappAccountId");
 
       for (const conv of windowReminders) {
         if (conv.windowReminderSentAt && conv.windowReminderSentAt > conv.lastCustomerMessageAt) {
@@ -138,7 +138,7 @@ export const initAutomationCron = () => {
       const dueReminders = await Conversation.find({
         followUpTime: { $lte: now },
         followUpNotified: { $ne: true }
-      }).populate("contact");
+      }).allowDiskUse(true).populate("contact");
 
       for (const conv of dueReminders) {
         console.log(`🔔 Reminder due for ${conv.phone}`);
@@ -153,7 +153,7 @@ export const initAutomationCron = () => {
         status: { $regex: /follow/i }, // Matches "Follow-up" or similar
         followUpTime: { $lt: thirtyMinsAgo },
         followUpNotified: true // Only check those that were already alerted
-      });
+      }).allowDiskUse(true);
 
       for (const conv of missedFollowUps) {
         // Check if there's any timeline entry for this contact after followUpTime
@@ -215,7 +215,7 @@ export const initAutomationCron = () => {
           query.whatsappAccountId = { $in: rule.whatsappAccountIds };
         }
 
-        const contacts = await Contact.find(query).populate("whatsappAccountId");
+        const contacts = await Contact.find(query).allowDiskUse(true).populate("whatsappAccountId");
 
         for (const contact of contacts) {
           // Step 5: Check if we ALREADY sent a follow-up for this specific rule to this customer.

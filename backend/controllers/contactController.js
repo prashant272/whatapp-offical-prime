@@ -141,9 +141,10 @@ export const getContacts = async (req, res, next) => {
     if (onlyPhones === 'true') {
       const rawContacts = await Contact.find(query)
         .select("phone")
-        .sort({ updatedAt: -1 })
+        .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitInt)
+        .allowDiskUse(true)
         .lean();
       
       return res.json({
@@ -160,9 +161,10 @@ export const getContacts = async (req, res, next) => {
       .populate("whatsappAccountId", "name")
       .populate("accountsData.whatsappAccountId", "name phoneNumber")
       .populate("accountsData.assignedTo", "name")
-      .sort({ updatedAt: -1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitInt)
+      .allowDiskUse(true)
       .lean();
 
 
