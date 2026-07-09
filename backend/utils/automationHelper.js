@@ -84,7 +84,7 @@ export function matchKeyword(text, keyword, matchType = "CONTAINS") {
 }
 
 
-export const processAutoReply = async (account, phone, incomingText, contact) => {
+export const processAutoReply = async (account, phone, incomingText, contact, originalStatus) => {
   try {
     const text = incomingText.toLowerCase().trim();
     console.log(`🔍 Automation Check: incomingText="${text}" | phone="${phone}" | accountId="${account?._id}"`);
@@ -117,7 +117,8 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
     }
 
     if (!bestMatch || highestScore < 0.8) {
-      if (wildcardMatch && (!contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned")) {
+      const effectiveStatus = originalStatus || contact.status;
+      if (wildcardMatch && (!effectiveStatus || effectiveStatus.toLowerCase() === "new" || effectiveStatus.toLowerCase() === "unassigned")) {
         bestMatch = wildcardMatch;
         highestScore = 1.0;
       }
@@ -163,13 +164,16 @@ export const processAutoReply = async (account, phone, incomingText, contact) =>
       } else {
         console.log(`⏳ Flow "${bestFlowMatch.name}" skipped because no new campaign/template has been sent to ${phone}`);
       }
-    } else if (wildcardFlow && (!contact || !contact.activeFlowId) && (!contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned")) {
-      // Trigger wildcard flow only if a campaign was recently sent to this contact
+    } else {
+      const effectiveStatus = originalStatus || contact.status;
+      if (wildcardFlow && (!contact || !contact.activeFlowId) && (!effectiveStatus || effectiveStatus.toLowerCase() === "new" || effectiveStatus.toLowerCase() === "unassigned")) {
+        // Trigger wildcard flow only if a campaign was recently sent to this contact
       if (contact && contact.isCampaignSent) {
         triggeredFlow = wildcardFlow;
         highestFlowScore = 1.0;
       } else {
         console.log(`⏳ Wildcard Flow skipped because no new campaign has been sent to ${phone}`);
+      }
       }
     }
 

@@ -367,6 +367,7 @@ export const handleWebhook = async (req, res) => {
           }
         }
 
+        const originalStatus = contact.status || "New";
         let statusUpdated = false;
         let appliedRule = null;
         // Always apply automation if a keyword matches. Admins expect keywords to fire even if assigned.
@@ -380,7 +381,7 @@ export const handleWebhook = async (req, res) => {
             statusUpdated = true;
             appliedRule = matchingRule;
             
-            if (matchingRule.assignedTo) {
+            if (matchingRule.assignedTo && !contact.assignedTo) {
               contact.assignedTo = matchingRule.assignedTo;
             }
           } else if (wildcardRule && (!contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned")) {
@@ -390,7 +391,7 @@ export const handleWebhook = async (req, res) => {
             statusUpdated = true;
             appliedRule = wildcardRule;
             
-            if (wildcardRule.assignedTo) {
+            if (wildcardRule.assignedTo && !contact.assignedTo) {
               contact.assignedTo = wildcardRule.assignedTo;
             }
           }
@@ -424,9 +425,7 @@ export const handleWebhook = async (req, res) => {
         // Step 5: If a keyword or wildcard rule matched, update the Conversation status and assignment too!
         if (statusUpdated) {
           conversation.status = contact.status;
-          if (appliedRule && appliedRule.assignedTo) {
-            conversation.assignedTo = appliedRule.assignedTo;
-          }
+          conversation.assignedTo = contact.assignedTo;
         }
 
         await conversation.save();
@@ -443,7 +442,7 @@ export const handleWebhook = async (req, res) => {
         const canTriggerFlow = contact && contact.isCampaignSent ? true : false;
 
         if ((shouldApplyAutomation || canTriggerFlow || isInActiveFlow) && (type === "text" || type === "interactive" || type === "button")) {
-          processAutoReply(account, from, bodyContent, contact);
+          processAutoReply(account, from, bodyContent, contact, originalStatus);
         }
       }
       res.sendStatus(200);
