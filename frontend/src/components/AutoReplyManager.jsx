@@ -23,6 +23,7 @@ import {
 import FollowUpAutomation from "./FollowUpAutomation";
 import QuickReplyManager from "./QuickReplyManager";
 import KeywordStatusAutomation from "./KeywordStatusAutomation";
+import AIHintAutomation from "./AIHintAutomation";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
@@ -64,6 +65,13 @@ const AutoReplyManager = () => {
     fetchBlockConfig();
   }, []);
 
+  // Fetch updated quick replies when switching back to the keywords tab or account changes
+  useEffect(() => {
+    if (activeTab === "keywords") {
+      fetchQuickReplies();
+    }
+  }, [activeTab, activeAccount]);
+
   const fetchExecutives = async () => {
     try {
       const { data } = await axios.get(`${API_BASE}/api/users`, config);
@@ -80,7 +88,12 @@ const AutoReplyManager = () => {
 
   const fetchQuickReplies = async () => {
     try {
-      const { data } = await axios.get(`${API_BASE}/api/quick-replies`, config);
+      const { data } = await axios.get(`${API_BASE}/api/quick-replies`, {
+        headers: {
+          ...config.headers,
+          "x-whatsapp-account-id": activeAccount?._id || "all"
+        }
+      });
       setQuickReplies(Array.isArray(data) ? data : []);
     } catch (err) { console.error(err); }
   };
@@ -425,6 +438,24 @@ const AutoReplyManager = () => {
             <XCircle size={18} />
             Stop Campaign Rules
           </button>
+          <button
+            onClick={() => setActiveTab("ai_hint")}
+            style={{
+              background: activeTab === "ai_hint" ? "#00a884" : "transparent",
+              color: activeTab === "ai_hint" ? "white" : "#54656f",
+              border: "none",
+              padding: "10px 20px",
+              borderRadius: "20px",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px"
+            }}
+          >
+            <Bot size={18} />
+            AI Hint
+          </button>
         </div>
 
         {activeTab === "keywords" ? (
@@ -699,6 +730,8 @@ const AutoReplyManager = () => {
               </button>
             </form>
           </div>
+        ) : activeTab === "ai_hint" ? (
+          <AIHintAutomation />
         ) : (
           <QuickReplyManager />
         )}
