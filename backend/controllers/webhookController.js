@@ -442,7 +442,7 @@ export const handleWebhook = async (req, res) => {
         const canTriggerFlow = contact && contact.isCampaignSent ? true : false;
 
         if ((shouldApplyAutomation || canTriggerFlow || isInActiveFlow) && (type === "text" || type === "interactive" || type === "button")) {
-          processAutoReply(account, from, bodyContent, contact, originalStatus);
+          processAutoReply(account, from, bodyContent, contact, originalStatus, conversation);
         }
       }
       res.sendStatus(200);

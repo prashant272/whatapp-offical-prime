@@ -4,9 +4,10 @@ import axios from "axios";
  * Generates an AI response using Google Gemini 1.5 Flash API
  * @param {string} incomingText - The message from the customer
  * @param {object} contact - The Contact Mongoose document
+ * @param {object} account - The WhatsAppAccount document
  * @returns {Promise<string|null>} The AI response, or null if key is missing or error occurs
  */
-export async function generateAIResponse(incomingText, contact) {
+export async function generateAIResponse(incomingText, contact, account) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.log("⚠️ GEMINI_API_KEY is not defined in the environment. Skipping AI response.");
@@ -15,7 +16,11 @@ export async function generateAIResponse(incomingText, contact) {
 
   try {
     // Define a system prompt to keep the bot polite, helpful, and matching the user's language
-    const systemPrompt = `You are an intelligent, helpful WhatsApp customer service assistant for our business.
+    const basePrompt = account?.aiHint 
+      ? `You are an AI assistant for a business. The business has provided the following specific instructions/context for you:\n"${account.aiHint}"\n` 
+      : `You are an intelligent, helpful WhatsApp customer service assistant for our business.`;
+
+    const systemPrompt = `${basePrompt}
 The customer's name is "${contact?.name || "Customer"}".
 Keep your responses short, helpful, polite, and under 2-3 sentences.
 Always reply in the same language or style as the customer (use Hinglish, Hindi, or English as appropriate).`;

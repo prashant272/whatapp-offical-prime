@@ -84,7 +84,7 @@ export function matchKeyword(text, keyword, matchType = "CONTAINS") {
 }
 
 
-export const processAutoReply = async (account, phone, incomingText, contact, originalStatus) => {
+export const processAutoReply = async (account, phone, incomingText, contact, originalStatus, conversation) => {
   try {
     const text = incomingText.toLowerCase().trim();
     console.log(`🔍 Automation Check: incomingText="${text}" | phone="${phone}" | accountId="${account?._id}"`);
@@ -201,8 +201,14 @@ export const processAutoReply = async (account, phone, incomingText, contact, or
     }
 
     if (!bestMatch || highestScore < 0.8) {
+      // --- IF CHAT IS ASSIGNED TO A HUMAN, STOP AI FALLBACK ---
+      if (conversation && conversation.assignedTo) {
+        console.log(`👤 Chat is assigned to an agent. AI fallback disabled for ${phone}`);
+        return false;
+      }
+
       // --- GEMINI AI FALLBACK RESPONDER ---
-      const aiReply = await generateAIResponse(incomingText, contact);
+      const aiReply = await generateAIResponse(incomingText, contact, account);
       if (aiReply) {
         console.log(`🤖 Gemini AI responding: "${aiReply}"`);
         return await sendDelayedMessage(account, phone, aiReply, contact, 1000);

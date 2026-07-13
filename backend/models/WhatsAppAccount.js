@@ -6,6 +6,7 @@ const whatsappAccountSchema = new mongoose.Schema({
   wabaId: { type: String, required: true },
   accessToken: { type: String, required: true },
   phoneNumber: { type: String }, // Optional display number
+  aiHint: { type: String }, // Custom AI Prompt/Hint for fallback responder
   isActive: { type: Boolean, default: true },
   isDefault: { type: Boolean, default: false }
 }, { timestamps: true });
