@@ -70,9 +70,19 @@ const TimelineModal = ({
             }}>
               <Clock size={28} />
             </div>
-            <div>
+            <div style={{ flex: 1, overflow: "hidden" }}>
               <h3 style={{ margin: 0, fontSize: "1.4rem", fontWeight: "900", letterSpacing: "-0.5px" }}>Interaction Timeline</h3>
-              <p style={{ margin: "2px 0 0 0", opacity: 0.85, fontSize: "0.85rem", fontWeight: "600" }}>Logging updates for {contactName}</p>
+              <p style={{ 
+                margin: "2px 0 0 0", 
+                opacity: 0.85, 
+                fontSize: "0.85rem", 
+                fontWeight: "600",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis"
+              }}>
+                Logging updates for {contactName}
+              </p>
             </div>
           </div>
           <button 
