@@ -137,11 +137,13 @@ export const getContacts = async (req, res, next) => {
     const skip = skipParam ? parseInt(skipParam) : (parseInt(page) - 1) * limitInt;
     const total = await Contact.countDocuments(query);
 
+    const sortOrderParam = req.query.sortOrder === 'asc' ? 1 : -1;
+
     // HIGH SPEED MODE for Campaign Manager loading (RESTORED)
     if (onlyPhones === 'true') {
       const rawContacts = await Contact.find(query)
         .select("phone")
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: sortOrderParam })
         .skip(skip)
         .limit(limitInt)
         .allowDiskUse(true)
@@ -161,7 +163,7 @@ export const getContacts = async (req, res, next) => {
       .populate("whatsappAccountId", "name")
       .populate("accountsData.whatsappAccountId", "name phoneNumber")
       .populate("accountsData.assignedTo", "name")
-      .sort({ createdAt: -1 })
+      .sort({ createdAt: sortOrderParam })
       .skip(skip)
       .limit(limitInt)
       .allowDiskUse(true)

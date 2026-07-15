@@ -1240,7 +1240,7 @@ const CampaignManager = () => {
                     type="button"
                     onClick={async () => {
                       try {
-                        let url = `/contacts?limit=${loadLimit}&skip=${loadSkip}&showAllAccounts=true&onlyPhones=true`;
+                        let url = `/contacts?limit=${loadLimit}&skip=${loadSkip}&showAllAccounts=true&onlyPhones=true&sortOrder=asc`;
                         if (selectedSourceType && selectedSourceValues.length > 0) {
                           const valuesEscaped = encodeURIComponent(selectedSourceValues.join(","));
                           if (selectedSourceType === "campaign") {
