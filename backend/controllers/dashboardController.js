@@ -182,3 +182,145 @@ export const getDashboardStats = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch dashboard stats" });
   }
 };
+
+// POST /api/dashboard/bulk-delete-by-status
+export const bulkDeleteByStatus = async (req, res) => {
+  try {
+    const { statuses, olderThanDays } = req.body;
+    if (!statuses || !Array.isArray(statuses) || statuses.length === 0) {
+      return res.status(400).json({ message: "Please provide an array of statuses." });
+    }
+
+    // 1. Find all Contacts and Conversations with these statuses
+    const contacts = await Contact.find({ status: { $in: statuses } }, "phone").lean();
+    const conversations = await Conversation.find({ status: { $in: statuses } }, "phone").lean();
+    
+    const phoneNumbers = [...new Set([
+      ...contacts.map(c => c.phone),
+      ...conversations.map(c => c.phone)
+    ].filter(Boolean))];
+
+    if (phoneNumbers.length === 0) {
+      return res.json({ message: "No contacts found with the selected statuses.", deletedCount: 0 });
+    }
+
+    // 2. Build match condition
+    const matchCondition = {
+      $or: [
+        { from: { $in: phoneNumbers } },
+        { to: { $in: phoneNumbers } }
+      ]
+    };
+
+    if (olderThanDays && parseInt(olderThanDays) > 0) {
+      const dateLimit = new Date();
+      dateLimit.setDate(dateLimit.getDate() - parseInt(olderThanDays));
+      matchCondition.timestamp = { $lt: dateLimit };
+    }
+
+    // 3. Delete matching messages
+    const result = await Message.deleteMany(matchCondition);
+
+    // 4. Clear lastMessage in Conversations ONLY if we deleted everything (olderThanDays = 0)
+    if (!olderThanDays || parseInt(olderThanDays) === 0) {
+      await Conversation.updateMany(
+        { phone: { $in: phoneNumbers } },
+        { $unset: { lastMessage: "", lastMessageTime: "" } }
+      );
+    }
+
+    res.json({
+      message: `Successfully deleted ${result.deletedCount} messages for ${phoneNumbers.length} contacts.`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error("Error bulk deleting messages:", error);
+    res.status(500).json({ message: "Failed to delete messages." });
+  }
+};
+
+import mongoose from "mongoose";
+
+// GET /api/dashboard/db-stats
+export const getDbStats = async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    if (!db) {
+      return res.status(500).json({ message: "Database connection not ready." });
+    }
+
+    // Command to get stats for the current database
+    const stats = await db.command({ dbStats: 1 });
+    
+    // Convert to MB
+    const logicalSizeMB = (stats.dataSize / (1024 * 1024)).toFixed(2);
+    const storageSizeMB = (stats.storageSize / (1024 * 1024)).toFixed(2);
+
+    res.json({
+      logicalSizeMB,
+      storageSizeMB,
+      objects: stats.objects,
+      collections: stats.collections
+    });
+  } catch (error) {
+    console.error("Error fetching DB stats:", error);
+    res.status(500).json({ message: "Failed to fetch DB stats." });
+  }
+};
+
+// POST /api/dashboard/bulk-delete-estimate
+export const estimateBulkDelete = async (req, res) => {
+  try {
+    const { statuses, olderThanDays } = req.body;
+    if (!statuses || !Array.isArray(statuses) || statuses.length === 0) {
+      return res.json({ contactCount: 0, messageCount: 0, estimatedSizeMB: "0.00" });
+    }
+
+    // 1. Get exact number of unique matching phone numbers
+    const contacts = await Contact.find({ status: { $in: statuses } }, "phone").lean();
+    const conversations = await Conversation.find({ status: { $in: statuses } }, "phone").lean();
+    
+    const phoneNumbers = new Set();
+    contacts.forEach(c => c.phone && phoneNumbers.add(c.phone));
+    conversations.forEach(c => c.phone && phoneNumbers.add(c.phone));
+    
+    const uniqueContactCount = phoneNumbers.size;
+
+    if (uniqueContactCount === 0) {
+      return res.json({ contactCount: 0, messageCount: 0, estimatedSizeMB: "0.00" });
+    }
+
+    // 2. Statistical estimation for speed
+    const totalMessages = await Message.estimatedDocumentCount();
+    const totalConversations = await Conversation.estimatedDocumentCount();
+    
+    const msgStats = await mongoose.connection.db.command({ collStats: "messages" });
+    const avgObjSize = msgStats.avgObjSize || 1024; // fallback to 1KB
+
+    // Estimate average messages per contact/conversation
+    const avgMessagesPerConv = totalConversations > 0 ? (totalMessages / totalConversations) : 1;
+    
+    // Time ratio if days are provided
+    let timeRatio = 1;
+    if (olderThanDays && parseInt(olderThanDays) > 0) {
+      const dateLimit = new Date();
+      dateLimit.setDate(dateLimit.getDate() - parseInt(olderThanDays));
+      const oldMessagesCount = await Message.countDocuments({ timestamp: { $lt: dateLimit } });
+      timeRatio = totalMessages > 0 ? (oldMessagesCount / totalMessages) : 0;
+    }
+    
+    // We assume the matching contacts have the average number of messages * timeRatio
+    const estimatedMessageCount = Math.round(uniqueContactCount * avgMessagesPerConv * timeRatio);
+    const estimatedSizeMB = ((estimatedMessageCount * avgObjSize) / (1024 * 1024)).toFixed(2);
+
+    res.json({
+      contactCount: uniqueContactCount,
+      messageCount: estimatedMessageCount,
+      estimatedSizeMB
+    });
+
+  } catch (error) {
+    console.error("Error estimating bulk delete:", error);
+    res.status(500).json({ message: "Failed to estimate." });
+  }
+};

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Plus, Trash2, CheckCircle2, Phone, Key, Hash, ShieldCheck, Globe, Pencil } from "lucide-react";
 import api from "../api";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
+import DataCleanupManager from "./DataCleanupManager";
 
 const WhatsAppAccountSettings = () => {
   const { accounts, activeAccount, switchAccount, refreshAccounts } = useWhatsAppAccount();
@@ -197,6 +198,10 @@ const WhatsAppAccountSettings = () => {
           </div>
         </div>
       )}
+
+      {/* Mount Data Cleanup Manager here */}
+      <DataCleanupManager />
+
     </div>
   );
 };

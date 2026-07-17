@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: whatsapp_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whatsapp_backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override MONGODB_URI to connect to the docker container instead of localhost
+      - MONGODB_URI=mongodb://mongodb:27017/whatappprimeapi
+    depends_on:
+      - mongodb
+
+volumes:
+  mongodb_data:
+    name: whatsapp_mongodb_data
