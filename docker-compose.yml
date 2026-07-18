@@ -7,6 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=SecureWhatsApp123!
     volumes:
       - mongodb_data:/data/db
 
@@ -22,9 +25,33 @@ services:
       - ./backend/.env
     environment:
       # Override MONGODB_URI to connect to the docker container instead of localhost
-      - MONGODB_URI=mongodb://mongodb:27017/whatappprimeapi
+      - MONGODB_URI=mongodb://admin:SecureWhatsApp123!@mongodb:27017/whatappprimeapi?authSource=admin
     depends_on:
       - mongodb
+
+  mongodb-backup:
+    image: mongo:latest
+    container_name: whatsapp_mongodb_backup
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+    volumes:
+      - ./backups:/backups
+    environment:
+      - MONGODB_URI=mongodb://admin:SecureWhatsApp123!@mongodb:27017/whatappprimeapi?authSource=admin
+    entrypoint: >
+      bash -c "
+      echo 'Backup bot started!';
+      while true; do
+        TIMESTAMP=\$$(date +%Y-%m-%d_%H-%M-%S);
+        echo \"Taking backup at \$$TIMESTAMP...\";
+        mongodump --uri=\"\$$MONGODB_URI\" --out=/backups/backup_\$$TIMESTAMP;
+        echo 'Cleaning up backups older than 7 days...';
+        find /backups -type d -mtime +7 -exec rm -rf {} +;
+        echo 'Backup complete. Sleeping for 24 hours...';
+        sleep 86400;
+      done
+      "
 
 volumes:
   mongodb_data:
