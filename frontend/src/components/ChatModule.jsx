@@ -1034,9 +1034,11 @@ const ChatModule = () => {
       }
 
       setConversations(prev => {
-        const incoming10 = String(conversation.phone).replace(/\D/g, "").slice(-10);
-        const index = prev.findIndex(c => String(c.phone).replace(/\D/g, "").slice(-10) === incoming10);
-        const isActiveChat = selectedChatRef.current && String(selectedChatRef.current.phone).replace(/\D/g, "").slice(-10) === incoming10;
+        const index = prev.findIndex(c => String(c._id) === String(conversation._id));
+        const isActiveChat = selectedChatRef.current && (
+          String(selectedChatRef.current._id) === String(conversation._id) || 
+          (String(selectedChatRef.current.phone).replace(/\D/g, "").slice(-10) === String(conversation.phone).replace(/\D/g, "").slice(-10) && String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId))
+        );
 
         let updatedConv;
         if (index > -1) {
@@ -1081,7 +1083,10 @@ const ChatModule = () => {
         }
       });
 
-      if (selectedChatRef.current && String(selectedChatRef.current.phone).replace(/\D/g, "").slice(-10) === String(conversation.phone).replace(/\D/g, "").slice(-10)) {
+      if (selectedChatRef.current && (
+        String(selectedChatRef.current._id) === String(conversation._id) || 
+        (String(selectedChatRef.current.phone).replace(/\D/g, "").slice(-10) === String(conversation.phone).replace(/\D/g, "").slice(-10) && String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId))
+      )) {
         dispatch(addMessage(message));
         // Mark as read in backend background for active chat
         if (message.direction === "inbound") {
