@@ -309,11 +309,19 @@ export const handleWebhook = async (req, res) => {
         // Step 1: Find or Create Contact (Always normalize phone)
         let contact = await Contact.findOne({ phone: from });
 
-        // Step 2: Find existing Conversation (Checking both current account and unassigned/legacy)
+        // Step 2: Find existing Conversation (Prioritize current account first)
         let conversation = await Conversation.findOne({
           phone: from,
-          $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }]
-        }).sort({ lastMessageTime: -1 });
+          whatsappAccountId: account?._id
+        });
+
+        if (!conversation) {
+          // If no conversation for this account, check if a legacy unassigned one exists
+          conversation = await Conversation.findOne({
+            phone: from,
+            whatsappAccountId: null
+          });
+        }
 
         // Extract Profile Name from Meta Webhook
         const profileName = value?.contacts?.[0]?.profile?.name;

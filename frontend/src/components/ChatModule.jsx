@@ -357,7 +357,14 @@ const ChatModule = () => {
   }, [activeAccount, accounts]);
 
   const fetchMessages = useCallback(async (phone, page = 1) => {
-    const accId = selectedChat?.whatsappAccountId || (selectedAccountIds && selectedAccountIds.length > 0 ? selectedAccountIds.join(",") : activeAccount?._id);
+    let accId = null;
+    if (selectedChat?.whatsappAccountId) {
+      accId = typeof selectedChat.whatsappAccountId === "object" ? selectedChat.whatsappAccountId._id : selectedChat.whatsappAccountId;
+    } else if (selectedAccountIds && selectedAccountIds.length > 0) {
+      accId = selectedAccountIds.join(",");
+    } else {
+      accId = activeAccount?._id;
+    }
     if (!phone) return;
     dispatch(fetchReduxMessages({ phone, page, accountId: accId }));
   }, [selectedChat?.whatsappAccountId, selectedAccountIds, activeAccount, dispatch]);
