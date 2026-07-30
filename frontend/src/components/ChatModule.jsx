@@ -587,7 +587,11 @@ const ChatModule = () => {
           }
         } catch (err) {
           dispatch(updateMessageStatus({ tempId, realMsg: { ...optimisticMsg, status: "failed" } }));
-          alert("Failed to send image: " + (err.response?.data?.error || err.message));
+          let errMsg = err.message;
+          if (err.response?.data) {
+            errMsg = typeof err.response.data === 'string' ? err.response.data : JSON.stringify(err.response.data);
+          }
+          alert("Failed to send image: " + errMsg);
         } finally {
           setIsUploading(false);
         }
