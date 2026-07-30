@@ -581,7 +581,9 @@ const ChatModule = () => {
               });
             }
           } else {
-            throw new Error(resultAction.payload || "Failed to send image");
+            const errorPayload = resultAction.payload;
+            const errorMsg = typeof errorPayload === 'object' && errorPayload !== null ? (errorPayload.error || JSON.stringify(errorPayload)) : errorPayload;
+            throw new Error(errorMsg || "Failed to send image");
           }
         } catch (err) {
           dispatch(updateMessageStatus({ tempId, realMsg: { ...optimisticMsg, status: "failed" } }));

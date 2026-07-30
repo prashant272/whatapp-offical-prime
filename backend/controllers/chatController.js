@@ -582,7 +582,8 @@ export const sendChatImageMessage = async (req, res) => {
     res.json({ success: true, message: newMessage, conversation: populatedConv });
   } catch (err) {
     console.error(`❌ Error in sendChatMedia:`, err);
-    res.status(500).json({ error: err.message });
+    const metaError = err.response?.data?.error?.message || err.response?.data?.error || err.message;
+    res.status(500).json({ error: metaError });
   }
 };
 

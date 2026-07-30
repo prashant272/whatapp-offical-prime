@@ -56,13 +56,37 @@ const MessageBubble = memo(({ msg, templateMap, formatWhatsAppText, getProxiedUr
       )}
       {msg.type === "template" && msg.templateData ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {msg.templateData.components?.find(c => c.type === "header")?.parameters?.[0]?.image?.link && (
-            <img
-              src={getProxiedUrl(msg.templateData.components.find(c => c.type === "header")?.parameters?.[0]?.image?.link, msg.whatsappAccountId)}
-              alt="Template"
-              style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }}
-            />
-          )}
+          {(() => {
+            const headerParam = msg.templateData.components?.find(c => c.type === "header")?.parameters?.[0];
+            if (!headerParam) return null;
+            
+            if (headerParam.image?.link) {
+              return (
+                <img
+                  src={getProxiedUrl(headerParam.image.link, msg.whatsappAccountId)}
+                  alt="Template Image"
+                  style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", objectFit: "cover", marginBottom: "5px" }}
+                />
+              );
+            } else if (headerParam.video?.link) {
+              return (
+                <video
+                  src={getProxiedUrl(headerParam.video.link, msg.whatsappAccountId)}
+                  controls
+                  style={{ width: "100%", borderRadius: "8px", maxHeight: "180px", marginBottom: "5px", backgroundColor: "#000" }}
+                />
+              );
+            } else if (headerParam.document?.link) {
+              return (
+                <div style={{ background: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px", marginBottom: "5px" }}>
+                  <div style={{ flex: 1, overflow: "hidden" }}>
+                    <a href={getProxiedUrl(headerParam.document.link, msg.whatsappAccountId)} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download Document</a>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
 
           <div
             style={{ whiteSpace: "pre-wrap", fontSize: "0.9rem" }}
