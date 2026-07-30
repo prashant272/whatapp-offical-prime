@@ -395,7 +395,13 @@ const TemplateManager = () => {
                     ) : (
                       <div style={{ width: "100%", aspectRatio: "16/9", background: "#f0f2f5", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                         {formData.headerSampleUrl ? (
-                          <img src={formData.headerSampleUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          formData.headerType === "VIDEO" ? (
+                            <video src={formData.headerSampleUrl} controls style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : formData.headerType === "DOCUMENT" ? (
+                            <a href={formData.headerSampleUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#00a884", fontWeight: "600", textDecoration: "none" }}>📄 View Document</a>
+                          ) : (
+                            <img src={formData.headerSampleUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          )
                         ) : (
                           <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{formData.headerType} Preview</span>
                         )}
@@ -465,8 +471,14 @@ const TemplateManager = () => {
                 </div>
                 
                 {imageUrl && (
-                  <div style={{ width: "100%", height: "200px", borderRadius: "10px", overflow: "hidden", background: "#f1f5f9" }}>
-                    <img src={imageUrl} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} alt="Preset" />
+                  <div style={{ width: "100%", height: "200px", borderRadius: "10px", overflow: "hidden", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {p.config?.HEADER_VIDEO ? (
+                      <video src={imageUrl} controls style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} />
+                    ) : p.config?.HEADER_DOCUMENT ? (
+                      <a href={imageUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#00a884", fontWeight: "600", textDecoration: "none", fontSize: "1.2rem" }}>📄 View Document</a>
+                    ) : (
+                      <img src={imageUrl} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#000" }} alt="Preset" />
+                    )}
                   </div>
                 )}
                 
@@ -566,7 +578,7 @@ const TemplateManager = () => {
                         <input type="text" style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }} value={templateVars[key] || ""} onChange={e => setTemplateVars({ ...templateVars, [key]: e.target.value })} placeholder="https://..." />
                         <label className="btn-primary" style={{ padding: "10px 20px", cursor: "pointer", fontSize: "0.8rem" }}>
                           Upload
-                          <input type="file" hidden onChange={(e) => handleFileUpload(e, key)} />
+                          <input type="file" hidden onChange={(e) => handleFileUpload(e, key)} accept={comp.format === "VIDEO" ? "video/*" : comp.format === "DOCUMENT" ? ".pdf,.doc,.docx" : "image/*"} />
                         </label>
                       </div>
                     </div>
@@ -618,7 +630,13 @@ const TemplateManager = () => {
                     return (
                       <div style={{ width: "100%", aspectRatio: "16/9", background: "#f0f2f5", borderRadius: "10px", marginBottom: "10px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
                         {mediaUrl ? (
-                          <img src={mediaUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          headerComp.format === "VIDEO" ? (
+                            <video src={mediaUrl} controls style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : headerComp.format === "DOCUMENT" ? (
+                            <a href={mediaUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#00a884", fontWeight: "600", textDecoration: "none" }}>📄 View Document</a>
+                          ) : (
+                            <img src={mediaUrl} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          )
                         ) : (
                           <span style={{ color: "#94a3b8", fontSize: "0.8rem" }}>{headerComp.format} Preview</span>
                         )}

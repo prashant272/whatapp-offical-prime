@@ -171,8 +171,10 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
             if (templateComponents) {
               const headerComp = templateComponents.find(c => c.type === "header");
               if (headerComp && headerComp.parameters) {
-                const imgParam = headerComp.parameters.find(p => p.type === "image");
-                if (imgParam) mediaUrl = imgParam.image?.link;
+                const mediaParam = headerComp.parameters.find(p => ["image", "video", "document"].includes(p.type));
+                if (mediaParam) {
+                  mediaUrl = mediaParam[mediaParam.type]?.link;
+                }
               }
             }
 

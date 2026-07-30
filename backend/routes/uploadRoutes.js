@@ -1,46 +1,51 @@
 import express from "express";
 import multer from "multer";
-import { v2 as cloudinary } from "cloudinary";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
+import multerS3 from "multer-s3";
+import { S3Client } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const router = express.Router();
 
-// Cloudinary Configuration
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+// Cloudflare R2 Configuration
+const s3 = new S3Client({
+  region: "auto",
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+  },
 });
 
 // Storage Engine
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
-    return {
-      folder: "whatsapp_templates",
-      resource_type: file.mimetype === "application/pdf" ? "raw" : "auto", // PDFs must be 'raw' to avoid 401 errors
-      access_mode: "public", 
-      type: "upload",        // Explicitly public upload
-      allowed_formats: ["jpg", "png", "jpeg", "mp4", "pdf", "doc", "docx", "xls", "xlsx"],
-      public_id: file.originalname.split('.')[0] + "_" + Date.now(),
-    };
-  }
+const upload = multer({
+  storage: multerS3({
+    s3: s3,
+    bucket: process.env.R2_BUCKET_NAME,
+    contentType: function (req, file, cb) {
+      cb(null, file.mimetype);
+    },
+    key: function (req, file, cb) {
+      const extension = file.originalname.split('.').pop();
+      const baseName = file.originalname.split('.')[0].replace(/[^a-zA-Z0-9_-]/g, "_");
+      cb(null, `whatsapp_templates/${baseName}_${Date.now()}.${extension}`);
+    }
+  })
 });
-
-const upload = multer({ storage: storage });
 
 // Upload Endpoint
 router.post("/", upload.single("file"), (req, res) => {
   try {
     console.log("📂 Received upload request for:", req.file?.originalname);
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-    console.log("✅ Cloudinary URL:", req.file.path);
-    res.json({ url: req.file.path });
+    
+    // Ensure the key doesn't have spaces or special characters, and encode it just in case
+    const fileUrl = `${process.env.R2_PUBLIC_URL}/${encodeURIComponent(req.file.key).replace(/%2F/g, '/')}`;
+    console.log("✅ R2 URL:", fileUrl);
+    res.json({ url: fileUrl });
   } catch (err) {
-    console.error("❌ CLOUDINARY UPLOAD ERROR:", err);
+    console.error("❌ R2 UPLOAD ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });

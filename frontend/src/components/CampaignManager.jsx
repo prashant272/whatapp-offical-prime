@@ -593,7 +593,17 @@ const CampaignManager = () => {
                     const imgUrl = templateVars[`HEADER_${comp.format}`] || templateVars[`HEADER_HANDLE`] || templateVars[`Variable_HANDLE`];
                     return (
                       <div key={idx} style={{ background: "#ddd", height: "140px", borderRadius: "8px", marginBottom: "10px", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {imgUrl ? <img src={imgUrl} alt="Header" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <div style={{ fontSize: "0.7rem", color: "#888" }}>[{comp.format} PREVIEW]</div>}
+                        {imgUrl ? (
+                          comp.format === "VIDEO" ? (
+                            <video src={imgUrl} controls style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : comp.format === "DOCUMENT" ? (
+                            <a href={imgUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#00a884", fontWeight: "600", textDecoration: "none" }}>📄 View Document</a>
+                          ) : (
+                            <img src={imgUrl} alt="Header" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          )
+                        ) : (
+                          <div style={{ fontSize: "0.7rem", color: "#888" }}>[{comp.format} PREVIEW]</div>
+                        )}
                       </div>
                     );
                   }

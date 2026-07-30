@@ -73,6 +73,9 @@ export const throttleCampaign = async (account, contacts, templateName, sendFunc
       
       logs.push({ phone: contact.phone, status: "failed", error: errorMessage, sentAt: new Date() });
       console.error(`❌ Meta API Reject for ${contact.phone}:`, errorMessage);
+      if (error.response && error.response.data) {
+        console.error("Full Meta Error:", JSON.stringify(error.response.data, null, 2));
+      }
     }
 
     if (onProgress) {
