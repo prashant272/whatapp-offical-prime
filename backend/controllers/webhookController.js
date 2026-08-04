@@ -392,7 +392,10 @@ export const handleWebhook = async (req, res) => {
             if (matchingRule.assignedTo && !contact.assignedTo) {
               contact.assignedTo = matchingRule.assignedTo;
             }
-          } else if (wildcardRule && (!contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned")) {
+          } else if (wildcardRule && (
+            !contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned" ||
+            !conversation || !conversation.status || conversation.status.toLowerCase() === "new" || conversation.status.toLowerCase() === "unassigned"
+          )) {
             console.log(`🤖 Wildcard Rule matched for any message -> ${wildcardRule.targetStatus}`);
             contact.status = wildcardRule.targetStatus;
             contact.statusUpdatedAt = new Date();

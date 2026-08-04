@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_URL = 'https://api1.primeimpact.in/api'; 
+const API_URL = 'https://whatapp.primeimpact.in/api'; 
 
 const api = axios.create({
   baseURL: API_URL,
