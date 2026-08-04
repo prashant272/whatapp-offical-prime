@@ -4,7 +4,7 @@ import Template from "../models/Template.js";
 import Message from "../models/Message.js";
 import Contact from "../models/Contact.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
-import { sendTextMessage, sendTemplateMessage, sendImageMessage, sendDocumentMessage } from "../services/whatsappService.js";
+import { sendTextMessage, sendTemplateMessage, sendImageMessage, sendVideoMessage, sendDocumentMessage } from "../services/whatsappService.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
 import { getIO, smartEmit } from "../utils/socket.js";
@@ -504,13 +504,17 @@ export const sendChatImageMessage = async (req, res) => {
       return res.status(400).json({ error: "Cannot send messages to a blocked contact." });
     }
 
-    // Detect if it's a document based on URL or provided type
     const isDocument = providedType === "document" ||
       imageUrl.toLowerCase().endsWith(".pdf") ||
       imageUrl.toLowerCase().endsWith(".doc") ||
       imageUrl.toLowerCase().endsWith(".docx") ||
       imageUrl.toLowerCase().endsWith(".xlsx") ||
       imageUrl.toLowerCase().endsWith(".xls");
+      
+    const isVideo = providedType === "video" ||
+      imageUrl.toLowerCase().endsWith(".mp4") ||
+      imageUrl.toLowerCase().endsWith(".webm") ||
+      imageUrl.toLowerCase().endsWith(".ogg");
 
     let metaRes;
     let type = "image";
@@ -522,6 +526,11 @@ export const sendChatImageMessage = async (req, res) => {
       type = "document";
       bodyText = filename || caption || "Document sent";
       lastMsgIcon = "📄 Document";
+    } else if (isVideo) {
+      metaRes = await sendVideoMessage(account, to, imageUrl, caption);
+      type = "video";
+      bodyText = caption || "Video sent";
+      lastMsgIcon = "🎥 Video";
     } else {
       metaRes = await sendImageMessage(account, to, imageUrl, caption);
     }
@@ -577,7 +586,7 @@ export const sendChatImageMessage = async (req, res) => {
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
-    await logActivity(req.user._id, isDocument ? "SEND_DOCUMENT" : "SEND_IMAGE", `Sent ${type}: ${imageUrl}`, to);
+    await logActivity(req.user._id, isDocument ? "SEND_DOCUMENT" : isVideo ? "SEND_VIDEO" : "SEND_IMAGE", `Sent ${type}: ${imageUrl}`, to);
 
     res.json({ success: true, message: newMessage, conversation: populatedConv });
   } catch (err) {

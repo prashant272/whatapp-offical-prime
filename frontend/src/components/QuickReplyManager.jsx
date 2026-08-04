@@ -219,7 +219,11 @@ const QuickReplyManager = () => {
             <div key={qr._id} className="qr-card" style={{ background: "white", borderRadius: "16px", padding: "18px", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid #e9edef", transition: "all 0.3s ease", cursor: "default" }}>
               <div style={{ display: "flex", gap: "15px", marginBottom: "15px" }}>
                 {qr.mediaUrl ? (
-                  <img src={qr.mediaUrl} alt="" style={{ width: "70px", height: "70px", borderRadius: "12px", objectFit: "cover" }} />
+                  qr.mediaUrl.match(/\.(mp4|webm|ogg)$/i) ? (
+                    <video src={qr.mediaUrl} style={{ width: "70px", height: "70px", borderRadius: "12px", objectFit: "cover" }} />
+                  ) : (
+                    <img src={qr.mediaUrl} alt="" style={{ width: "70px", height: "70px", borderRadius: "12px", objectFit: "cover" }} />
+                  )
                 ) : (
                   <div style={{ width: "70px", height: "70px", borderRadius: "12px", background: "#f0f2f5", display: "flex", alignItems: "center", justifyContent: "center", color: "#8696a0" }}>
                     <ImageIcon size={28} />
@@ -335,11 +339,15 @@ const QuickReplyManager = () => {
                   </div>
 
                   <div style={{ marginBottom: "25px" }}>
-                    <label style={{ display: "block", fontSize: "13px", color: "#00a884", marginBottom: "12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px" }}>Rich Media (Image)</label>
+                    <label style={{ display: "block", fontSize: "13px", color: "#00a884", marginBottom: "12px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "1px" }}>Rich Media (Image / Video)</label>
                     <div style={{ display: "flex", gap: "15px", alignItems: "center", background: "#f8f9fa", padding: "15px", borderRadius: "16px", border: "1px dashed #d1d7db" }}>
                       {preview ? (
                         <div style={{ position: "relative" }}>
-                          <img src={preview} alt="Preview" style={{ width: "80px", height: "80px", borderRadius: "12px", objectFit: "cover", border: "3px solid white", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
+                          {(file?.type?.startsWith("video/") || preview.match(/\.(mp4|webm|ogg)$/i)) ? (
+                            <video src={preview} style={{ width: "80px", height: "80px", borderRadius: "12px", objectFit: "cover", border: "3px solid white", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
+                          ) : (
+                            <img src={preview} alt="Preview" style={{ width: "80px", height: "80px", borderRadius: "12px", objectFit: "cover", border: "3px solid white", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
+                          )}
                           <button type="button" onClick={() => { setFile(null); setPreview(""); setFormData({...formData, mediaUrl: ""}); }} style={{ position: "absolute", top: -8, right: -8, background: "#ff4757", color: "white", border: "none", borderRadius: "50%", width: "22px", height: "22px", fontSize: "12px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(0,0,0,0.2)" }}>✕</button>
                         </div>
                       ) : (
@@ -348,8 +356,8 @@ const QuickReplyManager = () => {
                         </div>
                       )}
                       <div style={{ flex: 1 }}>
-                        <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#54656f" }}>Select an image to send with this reply.</p>
-                        <input type="file" accept="image/*" onChange={handleFileChange} style={{ fontSize: "12px", width: "100%" }} />
+                        <p style={{ margin: "0 0 8px 0", fontSize: "13px", color: "#54656f" }}>Select an image or video to send with this reply.</p>
+                        <input type="file" accept="image/*,video/*" onChange={handleFileChange} style={{ fontSize: "12px", width: "100%" }} />
                       </div>
                     </div>
                   </div>
@@ -400,7 +408,11 @@ const QuickReplyManager = () => {
                   <div className="wa-preview-bubble">
                     {preview && (
                       <div style={{ width: "100%", marginBottom: "5px", borderRadius: "8px", overflow: "hidden" }}>
-                        <img src={preview} alt="" style={{ width: "100%", maxHeight: "250px", objectFit: "cover" }} />
+                        {(file?.type?.startsWith("video/") || preview.match(/\.(mp4|webm|ogg)$/i)) ? (
+                          <video src={preview} controls style={{ width: "100%", maxHeight: "250px", objectFit: "cover", background: "#000" }} />
+                        ) : (
+                          <img src={preview} alt="" style={{ width: "100%", maxHeight: "250px", objectFit: "cover" }} />
+                        )}
                       </div>
                     )}
                     <div style={{ 

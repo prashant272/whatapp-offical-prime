@@ -187,7 +187,7 @@ const ChatModule = () => {
 
   const loadConversations = useCallback(async (cursor = null) => {
     const accIds = selectedAccountIds.length > 0 ? selectedAccountIds.join(",") : activeAccount?._id;
-    
+
     // Skip redundant fresh loads if the query parameters haven't changed
     const currentParams = {
       accIds,
@@ -198,8 +198,8 @@ const ChatModule = () => {
       filter
     };
 
-    if (!cursor && lastFetchParamsRef.current && 
-        JSON.stringify(lastFetchParamsRef.current) === JSON.stringify(currentParams)) {
+    if (!cursor && lastFetchParamsRef.current &&
+      JSON.stringify(lastFetchParamsRef.current) === JSON.stringify(currentParams)) {
       return;
     }
 
@@ -308,7 +308,7 @@ const ChatModule = () => {
     }
     const found = conversations.find(c => c._id === chatId || c.phone === chatId);
     if (found) return found;
-    
+
     // If it's a phone number (not a 24-char ObjectId)
     if (!/^[0-9a-fA-F]{24}$/.test(chatId)) {
       return { phone: chatId, status: "New", isPlaceholder: true, whatsappAccountId: activeAccount?._id };
@@ -538,16 +538,21 @@ const ChatModule = () => {
           }
 
           let isDocument = false;
+          let isVideo = false;
           let filename = "image.jpg";
 
           if (file) {
-            isDocument = file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp";
+            isDocument = file.type !== "image/jpeg" && file.type !== "image/png" && file.type !== "image/webp" && !file.type.startsWith("video/");
+            isVideo = file.type.startsWith("video/");
             filename = file.name;
           } else if (pendingImage.isRemote) {
             const urlLower = pendingImage.remoteUrl.toLowerCase();
             if (urlLower.endsWith(".pdf") || urlLower.endsWith(".doc") || urlLower.endsWith(".docx") || urlLower.endsWith(".xls") || urlLower.endsWith(".xlsx")) {
               isDocument = true;
               filename = "document.file";
+            } else if (urlLower.endsWith(".mp4") || urlLower.endsWith(".webm") || urlLower.endsWith(".ogg") || pendingImage.isVideo) {
+              isVideo = true;
+              filename = "video.mp4";
             } else {
               isDocument = false;
               filename = "image.jpg";
@@ -559,7 +564,7 @@ const ChatModule = () => {
             imageUrl,
             caption,
             accountId: selectedChat.whatsappAccountId,
-            type: isDocument ? "document" : "image",
+            type: isDocument ? "document" : isVideo ? "video" : "image",
             filename: filename
           }));
 
@@ -1049,7 +1054,7 @@ const ChatModule = () => {
       setConversations(prev => {
         const index = prev.findIndex(c => String(c._id) === String(conversation._id));
         const isActiveChat = selectedChatRef.current && (
-          String(selectedChatRef.current._id) === String(conversation._id) || 
+          String(selectedChatRef.current._id) === String(conversation._id) ||
           (String(selectedChatRef.current.phone).replace(/\D/g, "").slice(-10) === String(conversation.phone).replace(/\D/g, "").slice(-10) && String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId))
         );
 
@@ -1097,7 +1102,7 @@ const ChatModule = () => {
       });
 
       if (selectedChatRef.current && (
-        String(selectedChatRef.current._id) === String(conversation._id) || 
+        String(selectedChatRef.current._id) === String(conversation._id) ||
         (String(selectedChatRef.current.phone).replace(/\D/g, "").slice(-10) === String(conversation.phone).replace(/\D/g, "").slice(-10) && String(selectedChatRef.current.whatsappAccountId) === String(conversation.whatsappAccountId))
       )) {
         dispatch(addMessage(message));

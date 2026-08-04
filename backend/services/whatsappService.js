@@ -78,6 +78,31 @@ export const sendTextMessage = async (account, to, text, quotedMessageId = null)
   }
 };
 
+export const sendVideoMessage = async (account, to, videoUrl, caption = "") => {
+  let cleanTo = to.toString().replace(/\D/g, "");
+  if (cleanTo.length === 10) cleanTo = "91" + cleanTo;
+  try {
+    const res = await axios.post(
+      `${BASE_URL}/${account.phoneNumberId}/messages`,
+      {
+        messaging_product: "whatsapp",
+        recipient_type: "individual",
+        to: cleanTo,
+        type: "video",
+        video: { link: videoUrl, caption },
+      },
+      { headers: getHeaders(account.accessToken) }
+    );
+    return res.data;
+  } catch (error) {
+    const metaError = error.response?.data?.error;
+    if (metaError) {
+      console.error("❌ Meta API Error (Video):", JSON.stringify(metaError, null, 2));
+    }
+    throw error;
+  }
+};
+
 export const sendImageMessage = async (account, to, imageUrl, caption = "") => {
   let cleanTo = to.toString().replace(/\D/g, "");
   if (cleanTo.length === 10) cleanTo = "91" + cleanTo;

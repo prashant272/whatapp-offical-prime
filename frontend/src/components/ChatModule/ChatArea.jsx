@@ -265,10 +265,13 @@ const ChatArea = ({
                       type="button"
                       onClick={() => {
                         if (p.mediaUrl) {
+                          const isVid = !!p.mediaUrl.match(/\.(mp4|webm|ogg)$/i);
                           setPendingImage({
                             previewUrl: p.mediaUrl,
                             remoteUrl: p.mediaUrl,
-                            isRemote: true
+                            isRemote: true,
+                            isVideo: isVid,
+                            isImage: !isVid
                           });
                         }
                         setNewMessage(p.content || "");
@@ -277,7 +280,11 @@ const ChatArea = ({
                       style={{ textAlign: "left", background: "#f8f9fa", border: "1px solid #e9edef", padding: "8px 12px", borderRadius: "8px", cursor: "pointer", display: "flex", gap: "10px", alignItems: "center" }}
                     >
                       {p.mediaUrl && (
-                        <img src={p.mediaUrl} alt="" style={{ width: "40px", height: "40px", borderRadius: "4px", objectFit: "cover" }} />
+                        p.mediaUrl.match(/\.(mp4|webm|ogg)$/i) ? (
+                          <video src={p.mediaUrl} style={{ width: "40px", height: "40px", borderRadius: "4px", objectFit: "cover" }} />
+                        ) : (
+                          <img src={p.mediaUrl} alt="" style={{ width: "40px", height: "40px", borderRadius: "4px", objectFit: "cover" }} />
+                        )
                       )}
                       <div style={{ flex: 1, overflow: "hidden" }}>
                         <span style={{ fontWeight: "600", display: "block", fontSize: "0.85rem", color: "#111b21" }}>{p.name}</span>
@@ -315,7 +322,9 @@ const ChatArea = ({
             {pendingImage && (
               <div style={{ padding: "10px 16px", background: "#f0f2f5", borderBottom: "1px solid #e2e8f0", display: "flex", alignItems: "center", gap: "15px" }}>
                 <div style={{ position: "relative", width: "80px", height: "80px", borderRadius: "10px", overflow: "hidden", border: "2px solid #00a884", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", background: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {pendingImage.isImage ? (
+                  {pendingImage.isVideo ? (
+                    <video src={pendingImage.previewUrl} style={{ width: "100%", height: "100%", objectFit: "cover", background: "#000" }} />
+                  ) : pendingImage.isImage ? (
                     <img src={pendingImage.previewUrl} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", color: "#00a884" }}>
@@ -329,9 +338,9 @@ const ChatArea = ({
                   >✕</button>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "700", color: "#111b21" }}>{pendingImage.isImage ? "Image selected" : "Document selected"}</p>
+                  <p style={{ margin: 0, fontSize: "0.85rem", fontWeight: "700", color: "#111b21" }}>{pendingImage.isVideo ? "Video selected" : pendingImage.isImage ? "Image selected" : "Document selected"}</p>
                   <p style={{ margin: 0, fontSize: "0.75rem", color: "#667781", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "200px" }}>
-                    {pendingImage.name || (pendingImage.isImage ? "Ready to send" : "document.pdf")}
+                    {pendingImage.name || (pendingImage.isVideo || pendingImage.isImage ? "Ready to send" : "document.pdf")}
                   </p>
                 </div>
               </div>
