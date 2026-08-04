@@ -89,14 +89,17 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
     return {
       template,
       variables: vars.filter(v => v !== undefined),
-      mediaUrl: config.HEADER_IMAGE || config.mediaUrl || preset.mediaUrl
+      mediaUrl: config.HEADER_IMAGE || config.HEADER_VIDEO || config.HEADER_DOCUMENT || config.mediaUrl || preset.mediaUrl
     };
   };
 
-  const hasImageHeader = (template) => {
-    if (!template) return false;
+  const getMediaHeaderType = (template) => {
+    if (!template) return null;
     const header = template.components?.find(c => c.type === "HEADER");
-    return header && header.format === "IMAGE";
+    if (header && ["IMAGE", "VIDEO", "DOCUMENT"].includes(header.format)) {
+      return header.format;
+    }
+    return null;
   };
 
   const handleSend = () => {
@@ -119,10 +122,11 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
 
       if (mediaUrl) {
         const header = template.components?.find(c => c.type === "HEADER");
-        if (header && header.format === "IMAGE") {
+        if (header && ["IMAGE", "VIDEO", "DOCUMENT"].includes(header.format)) {
+          const typeLower = header.format.toLowerCase();
           components.unshift({
             type: "header",
-            parameters: [{ type: "image", image: { link: mediaUrl } }]
+            parameters: [{ type: typeLower, [typeLower]: { link: mediaUrl } }]
           });
         }
       }
@@ -139,11 +143,13 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
           }))
         });
       }
-      // Handle Image Header
-      if (hasImageHeader(selectedItem) && itemImageUrl) {
+      // Handle Media Header
+      const headerType = getMediaHeaderType(selectedItem);
+      if (headerType && itemImageUrl) {
+        const typeLower = headerType.toLowerCase();
         components.unshift({
           type: "header",
-          parameters: [{ type: "image", image: { link: itemImageUrl } }]
+          parameters: [{ type: typeLower, [typeLower]: { link: itemImageUrl } }]
         });
       }
       onSend(selectedItem.name, components);
@@ -165,7 +171,8 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
 
     let bodyText = "";
     let mediaUrl = null;
-    let isImageRequired = false;
+    let isMediaRequired = false;
+    let requiredMediaType = null;
 
     if (selectedItem._type === "preset") {
       const { template, variables: presetVars, mediaUrl: pMediaUrl } = getPresetData(selectedItem);
@@ -181,8 +188,9 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
       Object.keys(variables).forEach(key => {
         bodyText = bodyText.replace(`{{${key}}}`, variables[key] || `{{${key}}}`);
       });
-      isImageRequired = hasImageHeader(selectedItem);
-      mediaUrl = isImageRequired ? itemImageUrl : null;
+      requiredMediaType = getMediaHeaderType(selectedItem);
+      isMediaRequired = !!requiredMediaType;
+      mediaUrl = isMediaRequired ? itemImageUrl : null;
     }
 
     return (
@@ -198,11 +206,19 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
         <div style={{ alignSelf: "flex-start", maxWidth: "85%", minWidth: "250px", position: "relative" }}>
           <div style={{ background: "white", borderRadius: "0 12px 12px 12px", padding: "6px", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
             {mediaUrl ? (
-              <img src={mediaUrl} alt="Preview" style={{ width: "100%", borderRadius: "8px", marginBottom: "8px", maxHeight: "200px", objectFit: "cover" }} />
-            ) : isImageRequired ? (
+              (selectedItem._type === "preset" ? getPresetData(selectedItem).template : selectedItem)?.components?.find(c => c.type === "HEADER")?.format === "VIDEO" ? (
+                <video src={mediaUrl} controls style={{ width: "100%", borderRadius: "8px", marginBottom: "8px", maxHeight: "200px" }} />
+              ) : (selectedItem._type === "preset" ? getPresetData(selectedItem).template : selectedItem)?.components?.find(c => c.type === "HEADER")?.format === "DOCUMENT" ? (
+                <div style={{ background: "rgba(0,0,0,0.05)", padding: "12px", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+                  <a href={mediaUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", color: "#00a884", textDecoration: "none", fontWeight: "600" }}>Download Document</a>
+                </div>
+              ) : (
+                <img src={mediaUrl} alt="Preview" style={{ width: "100%", borderRadius: "8px", marginBottom: "8px", maxHeight: "200px", objectFit: "cover" }} />
+              )
+            ) : isMediaRequired ? (
               <div style={{ width: "100%", height: "120px", background: "#f1f5f9", borderRadius: "8px", marginBottom: "8px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", border: "2px dashed #cbd5e1" }}>
                 <ImageIcon size={30} color="#94a3b8" />
-                <span style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "5px" }}>Image required</span>
+                <span style={{ fontSize: "0.7rem", color: "#94a3b8", marginTop: "5px" }}>Media required ({requiredMediaType})</span>
               </div>
             ) : null}
             <div style={{ padding: "8px", fontSize: "0.95rem", color: "#111b21", whiteSpace: "pre-wrap", lineHeight: "1.4" }}>
@@ -219,10 +235,10 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
         <div style={{ marginTop: "auto", background: "rgba(255,255,255,0.9)", padding: "20px", borderRadius: "18px", backdropFilter: "blur(10px)", border: "1.5px solid #ffffff", boxShadow: "0 10px 30px rgba(0,0,0,0.1)" }}>
           {selectedItem._type === "template" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-              {isImageRequired && (
+              {isMediaRequired && (
                 <div>
                   <label style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", marginBottom: "6px", display: "flex", alignItems: "center", gap: "5px" }}>
-                    <ImageIcon size={14} /> Image Header
+                    <ImageIcon size={14} /> {requiredMediaType} Header
                   </label>
                   <div style={{ display: "flex", gap: "10px" }}>
                     <input
@@ -236,7 +252,7 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
                       type="file"
                       ref={fileInputRef}
                       onChange={handleFileUpload}
-                      accept="image/*"
+                      accept={requiredMediaType === "VIDEO" ? "video/*" : requiredMediaType === "DOCUMENT" ? "application/*" : "image/*"}
                       style={{ display: "none" }}
                     />
                     <button
@@ -277,8 +293,8 @@ const TemplateModal = ({ isOpen, onClose, templates, presets = [], selectedChat,
           )}
           <button
             onClick={handleSend}
-            disabled={isImageRequired && !itemImageUrl}
-            style={{ width: "100%", marginTop: "20px", padding: "16px", background: (isImageRequired && !itemImageUrl) ? "#cbd5e1" : "#00a884", color: "white", border: "none", borderRadius: "16px", fontWeight: "800", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 10px 20px rgba(0,168,132,0.3)" }}
+            disabled={isMediaRequired && !itemImageUrl}
+            style={{ width: "100%", marginTop: "20px", padding: "16px", background: (isMediaRequired && !itemImageUrl) ? "#cbd5e1" : "#00a884", color: "white", border: "none", borderRadius: "16px", fontWeight: "800", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px", boxShadow: "0 10px 20px rgba(0,168,132,0.3)" }}
           >
             <Send size={20} /> Send Template
           </button>
