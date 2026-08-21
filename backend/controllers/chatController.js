@@ -598,13 +598,14 @@ export const sendChatImageMessage = async (req, res) => {
 
 export const assignConversation = async (req, res) => {
   try {
-    const { phone, userId, sector, subsector } = req.body;
+    const { phone, userId, sector, subsector, source } = req.body;
     const account = req.whatsappAccount;
 
     const updateData = {};
     if (userId !== undefined) updateData.assignedTo = userId || null;
     if (sector !== undefined) updateData.sector = sector || "Unassigned";
     if (subsector !== undefined) updateData.subsector = subsector || "Unassigned";
+    if (source !== undefined) updateData.source = source || "Unassigned";
 
     const conversation = await Conversation.findOneAndUpdate(
       { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
@@ -619,6 +620,9 @@ export const assignConversation = async (req, res) => {
     if (subsector !== undefined) {
       await Conversation.updateMany({ phone }, { $set: { subsector: subsector || "Unassigned" } });
     }
+    if (source !== undefined) {
+      await Conversation.updateMany({ phone }, { $set: { source: source || "Unassigned" } });
+    }
 
     // SYNC: Update the master Contact record as well
     if (conversation && conversation.contact) {
@@ -626,6 +630,7 @@ export const assignConversation = async (req, res) => {
       if (userId !== undefined) contactUpdate.assignedTo = userId || null;
       if (sector !== undefined) contactUpdate.sector = sector || "Unassigned";
       if (subsector !== undefined) contactUpdate.subsector = subsector || "Unassigned";
+      if (source !== undefined) contactUpdate.source = source || "Unassigned";
 
       await Contact.findByIdAndUpdate(conversation.contact, contactUpdate);
     }
@@ -633,7 +638,8 @@ export const assignConversation = async (req, res) => {
     const assignedName = conversation.assignedTo ? conversation.assignedTo.name : "Unassigned";
     const sectorName = conversation.sector || "Unassigned";
     const subsectorName = conversation.subsector || "Unassigned";
-    await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName}, Subsector: ${subsectorName})`, phone);
+    const sourceName = conversation.source || "Unassigned";
+    await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName}, Subsector: ${subsectorName}, Source: ${sourceName})`, phone);
 
     const populatedConv = await Conversation.findById(conversation._id).populate("assignedTo", "name").populate("contact");
     smartEmit("chat_assigned", { conversation: populatedConv, isNewAssignment: userId !== undefined });
