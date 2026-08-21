@@ -12,6 +12,7 @@ import ContactFilters from "./ContactFilters";
 import ContactDrawer from "./ContactDrawer";
 import ImportMapperModal from "./ImportMapperModal";
 import EditContactModal from "./EditContactModal";
+import AddContactModal from "./AddContactModal";
 
 const ContactManagerMain = ({ deleted = false }) => {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ const ContactManagerMain = ({ deleted = false }) => {
   // Metadata
   const [customFields, setCustomFields] = useState([]);
   const [sectors, setSectors] = useState([]);
+  const [sources, setSources] = useState([]);
   const [customStatuses, setCustomStatuses] = useState([]);
 
   // Selection
@@ -41,6 +43,7 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [timelineEntries, setTimelineEntries] = useState([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
 
@@ -93,16 +96,18 @@ const ContactManagerMain = ({ deleted = false }) => {
 
   const fetchMetadata = async () => {
     try {
-      const [fieldsRes, sectorsRes, statusRes] = await Promise.all([
+      const [fieldsRes, sectorsRes, sourcesRes, statusRes] = await Promise.all([
         api.get("/custom-fields"),
         api.get("/sectors"),
+        api.get("/sources"),
         api.get("/statuses")
       ]);
       setCustomFields(fieldsRes.data);
       setSectors(sectorsRes.data);
+      setSources(Array.isArray(sourcesRes.data) ? sourcesRes.data : []);
       setCustomStatuses(statusRes.data);
     } catch (err) {
-      console.error("Metadata error:", err);
+      console.error("Meta fetch error:", err);
     }
   };
 
@@ -263,6 +268,8 @@ const ContactManagerMain = ({ deleted = false }) => {
         total={total}
         showImportModal={showImportModal}
         setShowImportModal={setShowImportModal}
+        showAddModal={showAddModal}
+        setShowAddModal={setShowAddModal}
         selectedCount={isUniversalSelect ? total : selectedContactIds.size}
         handleSendCampaign={() => navigate("/campaigns", { state: { bulkIds: Array.from(selectedContactIds), isUniversal: isUniversalSelect, filters } })}
         deleted={deleted}
@@ -344,13 +351,27 @@ const ContactManagerMain = ({ deleted = false }) => {
         </div>
       )}
 
+      {/* Modals */}
+      <AddContactModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        sectors={sectors}
+        sources={sources}
+        onSuccess={() => fetchContacts(1)}
+      />
+
       {/* Drawer */}
       {showDrawer && selectedContact && (
         <ContactDrawer
           contact={selectedContact}
           onClose={() => setShowDrawer(false)}
+          onEdit={() => setShowEditModal(true)}
           loadingTimeline={loadingTimeline}
           timelineEntries={timelineEntries}
+          sectors={sectors}
+          sources={sources}
+          customStatuses={customStatuses}
+          customFields={customFields}
           navigate={navigate}
           onOpenChat={handleOpenChat}
           onUpdateContact={handleUpdateContact}
@@ -387,20 +408,24 @@ const ContactManagerMain = ({ deleted = false }) => {
         onComplete={handleMappingComplete}
         customFields={customFields}
         sectors={sectors}
+        sources={sources}
       />
 
-      <EditContactModal
-        isOpen={showEditModal}
-        onClose={() => {
-          setShowEditModal(false);
-          setEditingContact(null);
-        }}
-        contact={editingContact}
-        onUpdate={handleUpdateContact}
-        sectors={sectors}
-        customFields={customFields}
-        customStatuses={customStatuses}
-      />
+      {showEditModal && (
+        <EditContactModal
+          isOpen={showEditModal}
+          onClose={() => {
+            setShowEditModal(false);
+            setEditingContact(null);
+          }}
+          contact={editingContact || selectedContact}
+          onUpdate={handleUpdateContact}
+          sectors={sectors}
+          sources={sources}
+          customFields={customFields}
+          customStatuses={customStatuses}
+        />
+      )}
 
 
       <style>{`

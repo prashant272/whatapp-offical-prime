@@ -15,7 +15,7 @@ import { getIO, smartEmit } from "../utils/socket.js";
 // Global set to track which campaigns have active throttlers running in memory
 const activeThrottlers = new Set();
 
-const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req, sectorName, subsectorName) => {
+const processCampaignExecution = async (campaign, account, contacts, template, templateComponents, delay, req, sectorName, subsectorName, sourceName) => {
   if (!template) {
     console.error(`❌ Campaign Execution Error: Template missing for campaign "${campaign.name}"`);
     return;
@@ -100,6 +100,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
                 sourceCampaign: campaign.name,
                 sector: sectorName || "Unassigned",
                 subsector: subsectorName || "Unassigned",
+                source: sourceName || "Unassigned",
                 isCampaignSent: isSent,
                 isCampaignFailed: isFailed,
                 isDeleted: isUndeliverable || false,
@@ -146,6 +147,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
               if (!contactObj.sourceCampaign) contactObj.sourceCampaign = campaign.name;
               if (sectorName && contactObj.sector !== sectorName) contactObj.sector = sectorName;
               if (subsectorName && contactObj.subsector !== subsectorName) contactObj.subsector = subsectorName;
+              if (sourceName && contactObj.source !== sourceName) contactObj.source = sourceName;
               contactObj.whatsappAccountId = account._id;
               
               await contactObj.save();
@@ -214,7 +216,8 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
                 lastMessageTime: new Date(),
                 unreadCount: 0,
                 sector: sectorName || "Unassigned",
-                subsector: subsectorName || "Unassigned"
+                subsector: subsectorName || "Unassigned",
+                source: sourceName || "Unassigned"
               },
               { upsert: true, new: true }
             ).populate("contact");
@@ -277,7 +280,7 @@ const processCampaignExecution = async (campaign, account, contacts, template, t
 
 export const startCampaign = async (req, res) => {
   try {
-    let { name, templateName, contacts, templateComponents, whatsappAccountId, delay, sector, subsector } = req.body;
+    let { name, templateName, contacts, templateComponents, whatsappAccountId, delay, sector, subsector, source } = req.body;
     
     let accountId = whatsappAccountId;
     if (!accountId || accountId === "all") {
@@ -348,7 +351,8 @@ export const startCampaign = async (req, res) => {
       failedCount: blockedLogs.length,
       logs: blockedLogs,
       sector,
-      subsector
+      subsector,
+      source
     });
     if (allowedPhones.length === 0) {
       campaign.completedAt = new Date();
@@ -358,7 +362,7 @@ export const startCampaign = async (req, res) => {
     await logActivity(req.user._id, "START_CAMPAIGN", `Started campaign with ${uniquePhones.length} contacts and sector ${sector || 'None'}`, name);
 
     if (allowedPhones.length > 0) {
-      processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req, sector, subsector);
+      processCampaignExecution(campaign, account, allowedPhones.map(p => ({ phone: p })), template, templateComponents, delay, req, sector, subsector, source);
     }
 
     res.status(202).json({ message: "Campaign started", campaignId: campaign._id });

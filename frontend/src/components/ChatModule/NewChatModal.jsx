@@ -1,16 +1,20 @@
 import React, { useState } from "react";
 import { X, Send } from "lucide-react";
 
-const NewChatModal = ({ isOpen, onClose, onStart }) => {
+const NewChatModal = ({ isOpen, onClose, onStart, sectors = [], sources = [], accounts = [] }) => {
   const [phone, setPhone] = useState("");
+  const [sector, setSector] = useState("");
+  const [source, setSource] = useState("");
 
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!phone.trim()) return;
-    onStart(phone);
+    onStart(phone, undefined, sector, source);
     setPhone("");
+    setSector("");
+    setSource("");
     onClose();
   };
 
@@ -32,6 +36,22 @@ const NewChatModal = ({ isOpen, onClose, onStart }) => {
               style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
               autoFocus
             />
+          </div>
+          <div style={{ marginBottom: "15px", display: "flex", gap: "10px" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: "0.85rem", color: "#667781", marginBottom: "5px" }}>Sector (Optional)</label>
+              <select value={sector} onChange={e => setSector(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                <option value="">Unassigned</option>
+                {sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: "0.85rem", color: "#667781", marginBottom: "5px" }}>Source (Optional)</label>
+              <select value={source} onChange={e => setSource(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                <option value="">Unassigned</option>
+                {sources.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
           </div>
           <button
             type="submit"

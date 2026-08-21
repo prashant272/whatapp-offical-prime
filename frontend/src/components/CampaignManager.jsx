@@ -39,6 +39,7 @@ const CampaignManager = () => {
   });
   const [tags, setTags] = useState([]);
   const [sectors, setSectors] = useState([]);
+  const [sources, setSources] = useState([]);
   const [selectedSourceType, setSelectedSourceType] = useState(""); // "tag" or "sector"
   const [selectedSourceValues, setSelectedSourceValues] = useState([]);
   const [selectedSubsectorValue, setSelectedSubsectorValue] = useState("");
@@ -159,10 +160,11 @@ const CampaignManager = () => {
         api.get("/contacts/tags").catch(e => ({ data: [] }))
       ]);
 
-      const [sectorRes, statusRes, userRes] = await Promise.all([
+      const [sectorRes, statusRes, userRes, srcRes] = await Promise.all([
         api.get("/sectors").catch(e => ({ data: [] })),
         api.get("/statuses").catch(e => ({ data: [] })),
-        api.get("/users").catch(e => ({ data: [] }))
+        api.get("/users").catch(e => ({ data: [] })),
+        api.get("/sources").catch(e => ({ data: [] }))
       ]);
 
       setCampaigns(Array.isArray(campRes.data) ? campRes.data : []);
@@ -171,6 +173,7 @@ const CampaignManager = () => {
       setPresets(Array.isArray(presetRes.data) ? presetRes.data : []);
       setTags(Array.isArray(tagRes.data) ? tagRes.data : []);
       setSectors(Array.isArray(sectorRes.data) ? sectorRes.data : []);
+      setSources(Array.isArray(srcRes.data) ? srcRes.data : []);
       setCustomStatuses(Array.isArray(statusRes.data) ? statusRes.data : []);
       setUsers(Array.isArray(userRes.data) ? userRes.data : []);
     } catch (err) {
@@ -337,6 +340,7 @@ const CampaignManager = () => {
       delay: 2,
       sector: camp.sector || "",
       subsector: camp.subsector || "",
+      source: camp.source || "",
       whatsappAccountId: activeAccount?._id || camp.whatsappAccountId?._id || ""
     });
 
@@ -940,6 +944,17 @@ const CampaignManager = () => {
                 </select>
               </div>
             )}
+            <div>
+              <label>Assign Source to Contacts</label>
+              <select
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1px solid #ddd", marginTop: "8px" }}
+                value={newCampaign.source || ""}
+                onChange={(e) => setNewCampaign({ ...newCampaign, source: e.target.value })}
+              >
+                <option value="">-- Choose Source (Optional) --</option>
+                {sources.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
           </div>
 
           <div style={{ marginBottom: "20px" }}>
@@ -952,7 +967,7 @@ const CampaignManager = () => {
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: "0.7rem", color: "#667781", fontWeight: "600" }}>Active Filters:</span>
                   {selectedSourceType && selectedSourceValues.length > 0
-                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "campaign" ? "Campaigns" : "Sectors"}: {selectedSourceValues.join(", ")} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
+                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "campaign" ? "Campaigns" : selectedSourceType === "sector" ? "Sectors" : "Sources"}: {selectedSourceValues.join(", ")} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
                     : <span style={{ background: "#f0f2f5", color: "#667781", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem" }}>All Categories</span>
                   }
                   {selectedStatuses.length > 0
@@ -985,6 +1000,7 @@ const CampaignManager = () => {
                     <option value="">All Contacts</option>
                     <option value="campaign">By Campaign</option>
                     <option value="sector">By Sector</option>
+                    <option value="source">By Source</option>
                   </select>
                 </div>
 
@@ -1031,6 +1047,25 @@ const CampaignManager = () => {
                           })
                         ) : selectedSourceType === "sector" ? (
                           sectors.map(s => {
+                            const isSelected = selectedSourceValues.includes(s.name);
+                            return (
+                              <div
+                                key={s._id}
+                                onClick={() => {
+                                  setSelectedSourceValues(prev => prev.includes(s.name) ? prev.filter(x => x !== s.name) : [...prev, s.name]);
+                                  setSelectedSubsectorValue("");
+                                }}
+                                style={{ padding: "8px 14px", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: isSelected ? "#f0fdf4" : "transparent", color: isSelected ? "#00a884" : "#111b21" }}
+                              >
+                                <span style={{ width: "16px", height: "16px", borderRadius: "4px", border: `2px solid ${isSelected ? "#00a884" : "#ccc"}`, background: isSelected ? "#00a884" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", color: "white", flexShrink: 0 }}>
+                                  {isSelected ? "✓" : ""}
+                                </span>
+                                {s.name}
+                              </div>
+                            );
+                          })
+                        ) : selectedSourceType === "source" ? (
+                          sources.map(s => {
                             const isSelected = selectedSourceValues.includes(s.name);
                             return (
                               <div

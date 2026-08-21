@@ -475,16 +475,18 @@ export const ManageStatusSectorModal = ({ isOpen, onClose, type, allStatusOption
   );
 };
 
-export const NewChatModal = ({ isOpen, onClose, accounts, onStart }) => {
+export const NewChatModal = ({ isOpen, onClose, accounts, onStart, sectors = [], sources = [] }) => {
   const [phone, setPhone] = useState("");
   const [selectedAcc, setSelectedAcc] = useState(accounts[0]?._id || "");
+  const [sector, setSector] = useState("");
+  const [source, setSource] = useState("");
 
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!phone.trim()) return;
-    onStart(phone, selectedAcc);
+    onStart(phone, selectedAcc, sector, source);
     onClose();
   };
 
@@ -517,6 +519,22 @@ export const NewChatModal = ({ isOpen, onClose, accounts, onStart }) => {
               onChange={(e) => setPhone(e.target.value)}
               style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}
             />
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "5px" }}>Sector</label>
+              <select value={sector} onChange={e => setSector(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                <option value="">Unassigned</option>
+                {sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "bold", marginBottom: "5px" }}>Source</label>
+              <select value={source} onChange={e => setSource(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                <option value="">Unassigned</option>
+                {sources.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
           </div>
           <button type="submit" style={{ width: "100%", padding: "12px", background: "#00a884", color: "white", border: "none", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", marginTop: "10px" }}>
             Start Chat

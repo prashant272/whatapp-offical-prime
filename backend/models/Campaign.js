@@ -22,6 +22,7 @@ const campaignSchema = new mongoose.Schema({
   whatsappAccountId: { type: mongoose.Schema.Types.ObjectId, ref: "WhatsAppAccount" },
   sector: { type: String },
   subsector: { type: String },
+  source: { type: String },
   startedAt: { type: Date },
   completedAt: { type: Date },
   createdAt: { type: Date, default: Date.now },

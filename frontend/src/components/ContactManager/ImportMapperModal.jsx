@@ -3,12 +3,13 @@ import { X, Check, AlertCircle, FileText, ChevronRight, Layers, Smartphone, User
 import api from "../../api";
 
 
-const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors }) => {
+const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [] }) => {
   const [headers, setHeaders] = useState([]);
   const [mappings, setMappings] = useState({
     name: "",
     phone: "",
     sector: "",
+    source: "",
     tags: ""
   });
   const [customMappings, setCustomMappings] = useState({});
@@ -23,6 +24,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
   const defaultBatchTag = `import-${today.getDate()}-${today.toLocaleString('en', { month: 'short' }).toLowerCase()}-${today.getFullYear()}`;
   const [batchTag, setBatchTag] = useState(defaultBatchTag);
   const [defaultSector, setDefaultSector] = useState(""); // Override sector for all leads
+  const [defaultSource, setDefaultSource] = useState(""); // Override source for all leads
 
   useEffect(() => {
     if (rawData && rawData.length > 0) {
@@ -35,6 +37,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         if (lowerH.includes("name")) newMappings.name = h;
         if (lowerH.includes("phone") || lowerH.includes("mobile") || lowerH.includes("contact")) newMappings.phone = h;
         if (lowerH.includes("sector") || lowerH.includes("department")) newMappings.sector = h;
+        if (lowerH.includes("source") || lowerH.includes("lead source") || lowerH.includes("origin")) newMappings.source = h;
       });
       setMappings(newMappings);
     }
@@ -55,8 +58,9 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       const contact = {
         name: row[mappings.name] || "Unknown",
         phone: phone,
-        // If user picked a default sector, use it. Else use Excel column. Else "Unassigned"
+        // If user picked a default sector/source, use it. Else use Excel column. Else default string
         sector: defaultSector || row[mappings.sector] || "Unassigned",
+        source: defaultSource || row[mappings.source] || "",
         tags: allTags,
         customFields: {}
       };
@@ -215,9 +219,9 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                     <MappingRow label="Lead Name *" icon={<User size={14} />} value={mappings.name} onChange={(v) => setMappings({ ...mappings, name: v })} headers={headers} required />
                     <MappingRow label="Phone / Mobile *" icon={<Smartphone size={14} />} value={mappings.phone} onChange={(v) => setMappings({ ...mappings, phone: v })} headers={headers} required />
                     <MappingRow label="Sector" icon={<Layers size={14} />} value={mappings.sector} onChange={(v) => setMappings({ ...mappings, sector: v })} headers={headers} />
+                    <MappingRow label="Lead Source" icon={<Layers size={14} />} value={mappings.source} onChange={(v) => setMappings({ ...mappings, source: v })} headers={headers} />
                   </div>
 
-                  {/* Default Sector Override */}
                   <div style={{ marginTop: "16px", padding: "14px", background: "linear-gradient(135deg, #eff6ff, #e0f2fe)", borderRadius: "14px", border: "1.5px solid #93c5fd" }}>
                     <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                       🏢 Bulk Assign Sector (Override)
@@ -225,15 +229,30 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                     <select
                       value={defaultSector}
                       onChange={e => setDefaultSector(e.target.value)}
-                      style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #93c5fd", fontSize: "0.85rem", fontWeight: "700", color: defaultSector ? "#1d4ed8" : "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer" }}
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #93c5fd", fontSize: "0.85rem", fontWeight: "700", color: defaultSector ? "#1d4ed8" : "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer", marginBottom: "6px" }}
                     >
                       <option value="">-- Use Excel Column / Keep Original --</option>
                       {sectors.map(s => (
                         <option key={s._id || s.name} value={s.name}>{s.name}</option>
                       ))}
                     </select>
-                    <p style={{ margin: "6px 0 0", fontSize: "0.72rem", color: "#60a5fa", fontWeight: "600" }}>
-                      {defaultSector ? `✅ All leads will be assigned to "${defaultSector}"` : "ℹ️ Leave blank to use Excel sector column"}
+
+                    <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                      📂 Bulk Assign Source (Override)
+                    </label>
+                    <select
+                      value={defaultSource}
+                      onChange={e => setDefaultSource(e.target.value)}
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #93c5fd", fontSize: "0.85rem", fontWeight: "700", color: defaultSource ? "#1d4ed8" : "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer" }}
+                    >
+                      <option value="">-- Use Excel Column / Keep Original --</option>
+                      {sources.map(s => (
+                        <option key={s._id || s.name} value={s.name}>{s.name}</option>
+                      ))}
+                    </select>
+
+                    <p style={{ margin: "10px 0 0", fontSize: "0.72rem", color: "#60a5fa", fontWeight: "600" }}>
+                      {defaultSector || defaultSource ? `✅ Bulk overrides active.` : "ℹ️ Leave blank to use Excel columns"}
                     </p>
                   </div>
 

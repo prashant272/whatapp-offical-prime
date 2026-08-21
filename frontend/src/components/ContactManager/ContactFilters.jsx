@@ -4,6 +4,7 @@ import { Search, Filter, Layers, List, LayoutGrid, Download, Upload, Plus, Send 
 const ContactFilters = ({ 
   filters, setFilters, handleSearch, viewMode, setViewMode, 
   customStatuses, sectors, total, showImportModal, setShowImportModal,
+  showAddModal, setShowAddModal,
   isUniversalSelect, selectedCount, handleSendCampaign, deleted = false
 }) => {
   return (
@@ -62,9 +63,14 @@ const ContactFilters = ({
           )}
 
           {!deleted && (
-            <button onClick={() => setShowImportModal(true)} style={{ padding: "8px 14px", borderRadius: "10px", border: "1px solid #10b981", color: "#10b981", background: "white", fontSize: "0.75rem", fontWeight: "800", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-              <Upload size={14} /> Import
-            </button>
+            <>
+              <button onClick={() => setShowAddModal(true)} style={{ padding: "8px 14px", borderRadius: "10px", border: "1px solid #10b981", color: "white", background: "#10b981", fontSize: "0.75rem", fontWeight: "800", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Plus size={14} /> Add Contact
+              </button>
+              <button onClick={() => setShowImportModal(true)} style={{ padding: "8px 14px", borderRadius: "10px", border: "1px solid #10b981", color: "#10b981", background: "white", fontSize: "0.75rem", fontWeight: "800", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                <Upload size={14} /> Import
+              </button>
+            </>
           )}
           
           {!deleted && selectedCount > 0 && (

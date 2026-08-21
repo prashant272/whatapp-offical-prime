@@ -45,6 +45,7 @@ export const getContacts = async (req, res, next) => {
       statuses, excludeStatuses,
       campaignStatus, excludeCampaignStatus,
       campaignName,
+      source,
       deleted
     } = req.query;
 
@@ -96,6 +97,11 @@ export const getContacts = async (req, res, next) => {
     if (sector) {
       const sectorArr = Array.isArray(sector) ? sector : sector.split(',');
       query.sector = { $in: sectorArr };
+    }
+    
+    if (source) {
+      const sourceArr = Array.isArray(source) ? source : source.split(',');
+      query.source = { $in: sourceArr };
     }
     
     if (subsector) query.subsector = subsector;
@@ -337,6 +343,9 @@ export const updateContact = async (req, res, next) => {
     if (updateData.subsector !== undefined) {
       await Conversation.updateMany({ phone: contact.phone }, { $set: { subsector: updateData.subsector || "Unassigned" } });
     }
+    if (updateData.source !== undefined) {
+      await Conversation.updateMany({ phone: contact.phone }, { $set: { source: updateData.source || "Unassigned" } });
+    }
 
     const updatedContact = await Contact.findById(id);
 
@@ -365,6 +374,7 @@ export const importContacts = async (req, res, next) => {
       const setObj = {
         name: c.name,
         sector: c.sector,
+        source: c.source,
         updatedAt: new Date() // Force bump to top
       };
 

@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { X, Trash2, Plus, Pencil, Check, Settings2, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
 
-const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allStatusOptions, sectors, onAdd, onDelete, onUpdate }) => {
+const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allStatusOptions, sectors, sources, onAdd, onDelete, onUpdate }) => {
   const [activeTab, setActiveTab] = useState(initialType || "status");
   const [name, setName] = useState("");
   const [color, setColor] = useState("#00a884");
@@ -15,7 +15,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
 
   if (!isOpen) return null;
 
-  const list = activeTab === "status" ? allStatusOptions : sectors;
+  const list = activeTab === "status" ? allStatusOptions : (activeTab === "sector" ? sectors : sources);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -35,7 +35,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
     const updatePayload = { name: editName };
     if (activeTab === "status") {
       updatePayload.color = editColor;
-    } else {
+    } else if (activeTab === "sector") {
       updatePayload.subsectors = item.subsectors || [];
     }
     onUpdate(activeTab, id, updatePayload);
@@ -59,7 +59,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "800" }}>System Configuration</h3>
-              <p style={{ margin: 0, opacity: 0.7, fontSize: "0.8rem" }}>Manage lead statuses and business sectors</p>
+              <p style={{ margin: 0, opacity: 0.7, fontSize: "0.8rem" }}>Manage lead statuses, business sectors, and sources</p>
             </div>
           </div>
           <button onClick={onClose} style={{ position: "absolute", top: "20px", right: "20px", background: "none", border: "none", color: "white", cursor: "pointer", opacity: 0.7 }}>
@@ -93,6 +93,18 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
           >
             Business Sectors
           </button>
+          <button
+            onClick={() => setActiveTab("source")}
+            style={{ 
+              flex: 1, padding: "12px", borderRadius: "12px", border: "none", 
+              background: activeTab === "source" ? "white" : "transparent",
+              color: activeTab === "source" ? "#1e293b" : "#64748b",
+              fontWeight: "700", cursor: "pointer", transition: "all 0.2s",
+              boxShadow: activeTab === "source" ? "0 4px 12px rgba(0,0,0,0.05)" : "none"
+            }}
+          >
+            Lead Sources
+          </button>
         </div>
 
         <div style={{ padding: "24px", flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -100,7 +112,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
           <form onSubmit={handleSubmit} style={{ display: "flex", gap: "10px", alignItems: "center", background: "#f1f5f9", padding: "12px", borderRadius: "16px" }}>
             <input
               type="text"
-              placeholder={`Add new ${activeTab === "status" ? "status" : "sector"}...`}
+              placeholder={`Add new ${activeTab === "status" ? "status" : (activeTab === "sector" ? "sector" : "source")}...`}
               value={name}
               onChange={(e) => setName(e.target.value)}
               style={{ flex: 1, padding: "10px 14px", borderRadius: "10px", border: "1.5px solid #e2e8f0", outline: "none", fontSize: "0.95rem" }}
@@ -164,14 +176,16 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
                         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                           {activeTab === "status" ? (
                             <div style={{ width: "14px", height: "14px", borderRadius: "50%", background: item.color || "#00a884", boxShadow: `0 0 0 3px ${item.color}15` }}></div>
-                          ) : (
+                          ) : (activeTab === "sector" ? (
                             <button 
                               onClick={() => toggleExpandSector(itemId)}
                               style={{ background: "#f1f5f9", border: "none", padding: "6px", borderRadius: "8px", color: "#64748b", display: "flex", alignItems: "center", cursor: "pointer" }}
                             >
                               {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
-                          )}
+                          ) : (
+                            <div style={{ width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0" }}></div>
+                          ))}
                           <span 
                             style={{ fontWeight: "600", color: "#1e293b", cursor: activeTab === "sector" ? "pointer" : "default" }}
                             onClick={() => activeTab === "sector" && toggleExpandSector(itemId)}

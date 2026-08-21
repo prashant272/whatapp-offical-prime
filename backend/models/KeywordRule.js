@@ -15,6 +15,10 @@ const keywordRuleSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  targetSource: {
+    type: String,
+    default: null
+  },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",

@@ -275,7 +275,7 @@ const ContactDetailSidebar = ({
   selectedChat, activeContact,
   setShowTimelineModal, fetchTimelineEntries,
   allStatusOptions, handleUpdateStatus,
-  sectors, handleAssign,
+  sectors, sources, handleAssign,
   executives, customFieldsDef,
   isUpdatingField, handleUpdateCustomField,
   setActiveContact, handleToggleBlock
@@ -513,6 +513,46 @@ const ContactDetailSidebar = ({
                       </div>
                     </div>
                   ) : (
+                    <>
+                    <div style={{ marginBottom: "12px" }}>
+                      <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Source</label>
+                      <div style={{ position: "relative" }}>
+                        <select
+                          style={{
+                            width: "100%",
+                            padding: "10px 14px",
+                            background: "#f8fafc",
+                            border: "1.5px solid #e2e8f0",
+                            borderRadius: "10px",
+                            color: "#1e293b",
+                            fontSize: "0.9rem",
+                            fontWeight: "600",
+                            outline: "none",
+                            cursor: "pointer",
+                            appearance: "none",
+                            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+                          }}
+                          value={activeContact?.source || selectedChat.source || "Unassigned"}
+                          onChange={(e) => handleAssign(undefined, undefined, undefined, e.target.value)}
+                          onFocus={e => {
+                            e.target.style.borderColor = "#4f46e5";
+                            e.target.style.background = "#ffffff";
+                          }}
+                          onBlur={e => {
+                            e.target.style.borderColor = "#e2e8f0";
+                            e.target.style.background = "#f8fafc";
+                          }}
+                        >
+                          <option value="Unassigned">Unassigned</option>
+                          {[...(sources || [])]
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map(s => (
+                              <option key={s._id} value={s.name}>{s.name}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                      </div>
+                    </div>
                     <div>
                       <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Sector</label>
                       <div style={{ position: "relative" }}>
@@ -552,6 +592,7 @@ const ContactDetailSidebar = ({
                         <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
                       </div>
                     </div>
+                    </>
                   )}
                 </div>
 

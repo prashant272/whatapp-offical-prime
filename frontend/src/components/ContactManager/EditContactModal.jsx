@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, User, Smartphone, Save } from "lucide-react";
 import api from "../../api";
 
-const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, customFields, customStatuses = [] }) => {
+const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources = [], customFields, customStatuses = [] }) => {
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -12,6 +12,7 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, customF
         name: contact.name || "",
         phone: contact.phone || "",
         sector: contact.sector || "",
+        source: contact.source || "",
         priority: contact.priority || "",
         status: contact.status || "",
         customFields: contact.customFields || {}
@@ -79,6 +80,20 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, customF
               </select>
             </div>
             
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Source</label>
+              <select 
+                value={formData.source} 
+                onChange={e => setFormData({...formData, source: e.target.value})}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
+              >
+                <option value="">No Source</option>
+                {sources.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
+          
+          <div style={{ display: "flex", gap: "16px" }}>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Priority</label>
               <select 

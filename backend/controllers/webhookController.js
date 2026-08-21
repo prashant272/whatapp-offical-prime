@@ -392,6 +392,9 @@ export const handleWebhook = async (req, res) => {
             if (matchingRule.assignedTo && !contact.assignedTo) {
               contact.assignedTo = matchingRule.assignedTo;
             }
+            if (matchingRule.targetSource && (!contact.source || contact.source === "Unassigned")) {
+              contact.source = matchingRule.targetSource;
+            }
           } else if (wildcardRule && (
             !contact.status || contact.status.toLowerCase() === "new" || contact.status.toLowerCase() === "unassigned" ||
             !conversation || !conversation.status || conversation.status.toLowerCase() === "new" || conversation.status.toLowerCase() === "unassigned"
@@ -404,6 +407,9 @@ export const handleWebhook = async (req, res) => {
             
             if (wildcardRule.assignedTo && !contact.assignedTo) {
               contact.assignedTo = wildcardRule.assignedTo;
+            }
+            if (wildcardRule.targetSource && (!contact.source || contact.source === "Unassigned")) {
+              contact.source = wildcardRule.targetSource;
             }
           }
         }
@@ -422,7 +428,8 @@ export const handleWebhook = async (req, res) => {
             status: contact.status || "New", // Sync status from contact if it's a fresh conversation record
             assignedTo: contact.assignedTo, // Carry over assignment if any
             sector: contact.sector || "Unassigned",
-            subsector: contact.subsector || "Unassigned"
+            subsector: contact.subsector || "Unassigned",
+            source: contact.source || "Unassigned"
           });
         }
 
@@ -437,6 +444,9 @@ export const handleWebhook = async (req, res) => {
         if (statusUpdated) {
           conversation.status = contact.status;
           conversation.assignedTo = contact.assignedTo;
+          if (appliedRule && appliedRule.targetSource) {
+            conversation.source = contact.source;
+          }
         }
 
         await conversation.save();

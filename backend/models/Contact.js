@@ -11,6 +11,7 @@ const contactSchema = new mongoose.Schema({
   sourceCampaign: { type: String, default: null },
   sector: { type: String, default: "Unassigned" },
   subsector: { type: String, default: "Unassigned" },
+  source: { type: String, default: "Unassigned" },
   tags: [String],
   
   // The current label for this customer (e.g. "Interested", "Pending"). Used by the Cron Job.
@@ -80,6 +81,7 @@ contactSchema.index({ "accountsData.whatsappAccountId": 1 });
 contactSchema.index({ whatsappAccountId: 1, createdAt: -1 });
 contactSchema.index({ sector: 1 });
 contactSchema.index({ subsector: 1 });
+contactSchema.index({ source: 1 });
 contactSchema.index({ status: 1 });
 contactSchema.index({ assignedTo: 1 });
 contactSchema.index({ isCampaignSent: 1, isCampaignFailed: 1 });

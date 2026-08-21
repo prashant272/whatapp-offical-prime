@@ -5,7 +5,7 @@ import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
+const KeywordStatusAutomation = ({ users = [], statusOptions = [], sources = [] }) => {
   const { accounts, activeAccount } = useWhatsAppAccount();
   const [rules, setRules] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -16,6 +16,7 @@ const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
   const [formData, setFormData] = useState({
     keyword: "",
     targetStatus: statusOptions[0]?.name || "",
+    targetSource: "",
     assignedTo: "",
     whatsappAccountIds: []
   });
@@ -76,6 +77,7 @@ const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
     setFormData({
       keyword: rule.keyword,
       targetStatus: rule.targetStatus,
+      targetSource: rule.targetSource || "",
       assignedTo: rule.assignedTo?._id || rule.assignedTo || "",
       whatsappAccountIds: rule.whatsappAccountIds || []
     });
@@ -88,6 +90,7 @@ const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
     setFormData({
       keyword: "",
       targetStatus: statusOptions[0]?.name || "",
+      targetSource: "",
       assignedTo: "",
       whatsappAccountIds: []
     });
@@ -182,6 +185,17 @@ const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
                 {users.map(u => <option key={u._id} value={u._id}>{u.name}</option>)}
               </select>
             </div>
+            <div>
+              <label style={{ fontSize: "12px", fontWeight: "800", color: "#94a3b8", display: "block", marginBottom: "8px", textTransform: "uppercase" }}>TARGET SOURCE</label>
+              <select 
+                value={formData.targetSource}
+                onChange={(e) => setFormData({ ...formData, targetSource: e.target.value })}
+                style={{ width: "100%", padding: "12px", borderRadius: "10px", border: "1.5px solid #e2e8f0", outline: "none", fontSize: "15px", background: "white" }}
+              >
+                <option value="">No Source</option>
+                {sources.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
           </div>
 
           <div style={{ marginBottom: "25px" }}>
@@ -272,6 +286,11 @@ const KeywordStatusAutomation = ({ users = [], statusOptions = [] }) => {
                   {rule.assignedTo && (
                     <div style={{ fontSize: "12px", color: "#64748b", marginTop: "8px", display: "flex", alignItems: "center", gap: "5px" }}>
                       👤 Auto-assign: <strong style={{ color: "#1e293b" }}>{rule.assignedTo.name || (typeof rule.assignedTo === 'string' ? users.find(u => u._id === rule.assignedTo)?.name : "")}</strong>
+                    </div>
+                  )}
+                  {rule.targetSource && (
+                    <div style={{ fontSize: "12px", color: "#64748b", marginTop: "4px", display: "flex", alignItems: "center", gap: "5px" }}>
+                      📂 Source: <strong style={{ color: "#1e293b" }}>{rule.targetSource}</strong>
                     </div>
                   )}
                 </div>

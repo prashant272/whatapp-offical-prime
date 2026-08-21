@@ -67,6 +67,7 @@ const ChatModule = () => {
   const [newStatusName, setNewStatusName] = useState("");
 
   const [sectors, setSectors] = useState([]);
+  const [sources, setSources] = useState([]);
   const [showSectorModal, setShowSectorModal] = useState(false);
   const [newSectorName, setNewSectorName] = useState("");
 
@@ -455,13 +456,14 @@ const ChatModule = () => {
     }
   }, [showContactInfo, selectedChat?._id, selectedChat?.phone]);
 
-  const handleAssign = async (userId, sector, subsector) => {
+  const handleAssign = async (userId, sector, subsector, source) => {
     if (!selectedChat) return;
     try {
       const payload = { phone: selectedChat.phone };
       if (userId !== undefined) payload.userId = userId;
       if (sector !== undefined) payload.sector = sector;
       if (subsector !== undefined) payload.subsector = subsector;
+      if (source !== undefined) payload.source = source;
 
       const res = await api.patch(`/conversations/assign`, payload, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
@@ -479,7 +481,8 @@ const ChatModule = () => {
           ...updatedContactObj,
           assignedTo: updatedConv.assignedTo,
           sector: updatedContactObj.sector || updatedConv.sector || prev.sector,
-          subsector: updatedContactObj.subsector || updatedConv.subsector || prev.subsector
+          subsector: updatedContactObj.subsector || updatedConv.subsector || prev.subsector,
+          source: updatedContactObj.source || updatedConv.source || prev.source
         }));
       }
       // refetchConvs(); // Removed to prevent disappearing from list when filters are active
@@ -707,7 +710,7 @@ const ChatModule = () => {
     }
   };
 
-  const handleStartNewChat = async (phone, accountId) => {
+  const handleStartNewChat = async (phone, accountId, sector, source) => {
     try {
       const cleanPhone = phone.replace(/\D/g, "");
       const res = await api.post(`/messages/send`, {
@@ -717,6 +720,18 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": accountId }
       });
       if (res.data.success) {
+        if (sector || source) {
+          try {
+            const payload = { phone: res.data.message.to };
+            if (sector) payload.sector = sector;
+            if (source) payload.source = source;
+            await api.patch('/conversations/assign', payload, {
+              headers: { "x-whatsapp-account-id": accountId }
+            });
+          } catch (e) {
+            console.error("Assign error", e);
+          }
+        }
         refetchConvs();
         navigate(`/chats/${res.data.message.to}`);
       }
@@ -728,14 +743,21 @@ const ChatModule = () => {
 
   const handleAddStatusSector = async (type, data) => {
     try {
-      const endpoint = type === "status" ? "/statuses" : "/sectors";
+      let endpoint = "/statuses";
+      if (type === "sector") endpoint = "/sectors";
+      if (type === "source") endpoint = "/sources";
+      
       await api.post(endpoint, data);
+      
       if (type === "status") {
         const sRes = await api.get("/statuses");
         setCustomStatuses(sRes.data);
-      } else {
+      } else if (type === "sector") {
         const secRes = await api.get("/sectors");
         setSectors(secRes.data);
+      } else if (type === "source") {
+        const srcRes = await api.get("/sources");
+        setSources(srcRes.data);
       }
     } catch (err) {
       alert("Error adding: " + (err.response?.data?.error || err.message));
@@ -744,14 +766,21 @@ const ChatModule = () => {
 
   const handleUpdateStatusSector = async (type, idOrName, data) => {
     try {
-      const endpoint = type === "status" ? `/statuses/${idOrName}` : `/sectors/${idOrName}`;
+      let endpoint = `/statuses/${idOrName}`;
+      if (type === "sector") endpoint = `/sectors/${idOrName}`;
+      if (type === "source") endpoint = `/sources/${idOrName}`;
+      
       await api.put(endpoint, data);
+      
       if (type === "status") {
         const sRes = await api.get("/statuses");
         setCustomStatuses(sRes.data);
-      } else {
+      } else if (type === "sector") {
         const secRes = await api.get("/sectors");
         setSectors(secRes.data);
+      } else if (type === "source") {
+        const srcRes = await api.get("/sources");
+        setSources(srcRes.data);
       }
     } catch (err) {
       alert("Error updating: " + (err.response?.data?.error || err.message));
@@ -761,14 +790,21 @@ const ChatModule = () => {
   const handleDeleteStatusSector = async (type, idOrName) => {
     if (!window.confirm(`Are you sure you want to delete this ${type}?`)) return;
     try {
-      const endpoint = type === "status" ? `/statuses/${idOrName}` : `/sectors/${idOrName}`;
+      let endpoint = `/statuses/${idOrName}`;
+      if (type === "sector") endpoint = `/sectors/${idOrName}`;
+      if (type === "source") endpoint = `/sources/${idOrName}`;
+
       await api.delete(endpoint);
+      
       if (type === "status") {
         const sRes = await api.get("/statuses");
         setCustomStatuses(sRes.data);
-      } else {
+      } else if (type === "sector") {
         const secRes = await api.get("/sectors");
         setSectors(secRes.data);
+      } else if (type === "source") {
+        const srcRes = await api.get("/sources");
+        setSources(srcRes.data);
       }
     } catch (err) {
       alert("Error deleting: " + (err.response?.data?.error || err.message));
@@ -1009,14 +1045,16 @@ const ChatModule = () => {
   useEffect(() => {
     const fetchGlobalData = async () => {
       try {
-        const [execs, stats, sects, cFields] = await Promise.all([
+        const [execs, stats, sects, cFields, srcRes] = await Promise.all([
           api.get(`/users`).catch(() => ({ data: [] })),
           api.get(`/statuses`).catch(() => ({ data: [] })),
           api.get(`/sectors`).catch(() => ({ data: [] })),
-          api.get(`/custom-fields`).catch(() => ({ data: [] }))
+          api.get(`/custom-fields`).catch(() => ({ data: [] })),
+          api.get(`/sources`).catch(() => ({ data: [] }))
         ]);
         setCustomStatuses(stats.data);
         setSectors(sects.data);
+        setSources(srcRes.data);
         setCustomFieldsDef(cFields.data);
         setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager" || u.role === "Admin") : []);
       } catch (err) { console.error(err); }
@@ -1354,7 +1392,7 @@ const ChatModule = () => {
         selectedChat={selectedChat} activeContact={activeContact}
         setShowTimelineModal={setShowTimelineModal} fetchTimelineEntries={fetchTimelineEntries}
         allStatusOptions={allStatusOptions} handleUpdateStatus={handleUpdateStatus}
-        sectors={sectors} handleAssign={handleAssign}
+        sectors={sectors} sources={sources} handleAssign={handleAssign}
         executives={executives} customFieldsDef={customFieldsDef}
         isUpdatingField={isUpdatingField} handleUpdateCustomField={handleUpdateCustomField}
         setActiveContact={setActiveContact}
@@ -1390,6 +1428,7 @@ const ChatModule = () => {
         onClose={() => setShowManageModal(false)}
         allStatusOptions={allStatusOptions}
         sectors={sectors}
+        sources={sources}
         onAdd={handleAddStatusSector}
         onUpdate={handleUpdateStatusSector}
         onDelete={handleDeleteStatusSector}
@@ -1399,6 +1438,8 @@ const ChatModule = () => {
         isOpen={showNewChatModal}
         onClose={() => setShowNewChatModal(false)}
         accounts={accounts}
+        sectors={sectors}
+        sources={sources}
         onStart={handleStartNewChat}
       />
 

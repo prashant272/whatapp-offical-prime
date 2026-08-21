@@ -38,6 +38,7 @@ const AutoReplyManager = () => {
   
   const [executives, setExecutives] = useState([]);
   const [customStatuses, setCustomStatuses] = useState([]);
+  const [sources, setSources] = useState([]);
   const [quickReplies, setQuickReplies] = useState([]);
   const [uploadingIndex, setUploadingIndex] = useState(null);
   const [blockConfig, setBlockConfig] = useState({ isEnabled: false, blockedStatuses: [] });
@@ -61,6 +62,7 @@ const AutoReplyManager = () => {
     fetchReplies();
     fetchExecutives();
     fetchCustomStatuses();
+    fetchSources();
     fetchQuickReplies();
     fetchBlockConfig();
   }, []);
@@ -83,6 +85,13 @@ const AutoReplyManager = () => {
     try {
       const { data } = await axios.get(`${API_BASE}/api/statuses`, config);
       setCustomStatuses(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchSources = async () => {
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/sources`, config);
+      setSources(Array.isArray(data) ? data : []);
     } catch (err) { console.error(err); }
   };
 
@@ -605,7 +614,7 @@ const AutoReplyManager = () => {
         ) : activeTab === "followups" ? (
           <FollowUpAutomation />
         ) : activeTab === "status_automation" ? (
-          <KeywordStatusAutomation users={executives} statusOptions={customStatuses} />
+          <KeywordStatusAutomation users={executives} statusOptions={customStatuses} sources={sources} />
         ) : activeTab === "stop_campaign" ? (
           <div style={{ background: "white", padding: "30px", borderRadius: "16px", boxShadow: "0 2px 10px rgba(0,0,0,0.05)" }}>
             <h2 style={{ margin: "0 0 10px 0", fontSize: "18px", fontWeight: "700", color: "#111b21", display: "flex", alignItems: "center", gap: "8px" }}>
