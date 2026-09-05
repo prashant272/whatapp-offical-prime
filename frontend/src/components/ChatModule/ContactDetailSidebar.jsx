@@ -275,7 +275,7 @@ const ContactDetailSidebar = ({
   selectedChat, activeContact,
   setShowTimelineModal, fetchTimelineEntries,
   allStatusOptions, handleUpdateStatus,
-  sectors, sources, handleAssign,
+  sectors, sources, winners, handleAssign,
   executives, customFieldsDef,
   isUpdatingField, handleUpdateCustomField,
   setActiveContact, handleToggleBlock
@@ -514,84 +514,84 @@ const ContactDetailSidebar = ({
                     </div>
                   ) : (
                     <>
-                    <div style={{ marginBottom: "12px" }}>
-                      <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Source</label>
-                      <div style={{ position: "relative" }}>
-                        <select
-                          style={{
-                            width: "100%",
-                            padding: "10px 14px",
-                            background: "#f8fafc",
-                            border: "1.5px solid #e2e8f0",
-                            borderRadius: "10px",
-                            color: "#1e293b",
-                            fontSize: "0.9rem",
-                            fontWeight: "600",
-                            outline: "none",
-                            cursor: "pointer",
-                            appearance: "none",
-                            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
-                          }}
-                          value={activeContact?.source || selectedChat.source || "Unassigned"}
-                          onChange={(e) => handleAssign(undefined, undefined, undefined, e.target.value)}
-                          onFocus={e => {
-                            e.target.style.borderColor = "#4f46e5";
-                            e.target.style.background = "#ffffff";
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = "#e2e8f0";
-                            e.target.style.background = "#f8fafc";
-                          }}
-                        >
-                          <option value="Unassigned">Unassigned</option>
-                          {[...(sources || [])]
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map(s => (
-                              <option key={s._id} value={s.name}>{s.name}</option>
-                            ))}
-                        </select>
-                        <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                      <div style={{ marginBottom: "12px" }}>
+                        <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Source</label>
+                        <div style={{ position: "relative" }}>
+                          <select
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              background: "#f8fafc",
+                              border: "1.5px solid #e2e8f0",
+                              borderRadius: "10px",
+                              color: "#1e293b",
+                              fontSize: "0.9rem",
+                              fontWeight: "600",
+                              outline: "none",
+                              cursor: "pointer",
+                              appearance: "none",
+                              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+                            }}
+                            value={activeContact?.source || selectedChat.source || "Unassigned"}
+                            onChange={(e) => handleAssign(undefined, undefined, undefined, e.target.value)}
+                            onFocus={e => {
+                              e.target.style.borderColor = "#4f46e5";
+                              e.target.style.background = "#ffffff";
+                            }}
+                            onBlur={e => {
+                              e.target.style.borderColor = "#e2e8f0";
+                              e.target.style.background = "#f8fafc";
+                            }}
+                          >
+                            <option value="Unassigned">Unassigned</option>
+                            {[...(sources || [])]
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(s => (
+                                <option key={s._id} value={s.name}>{s.name}</option>
+                              ))}
+                          </select>
+                          <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Sector</label>
-                      <div style={{ position: "relative" }}>
-                        <select
-                          style={{
-                            width: "100%",
-                            padding: "10px 14px",
-                            background: "#f8fafc",
-                            border: "1.5px solid #e2e8f0",
-                            borderRadius: "10px",
-                            color: "#1e293b",
-                            fontSize: "0.9rem",
-                            fontWeight: "600",
-                            outline: "none",
-                            cursor: "pointer",
-                            appearance: "none",
-                            transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
-                          }}
-                          value={activeContact?.sector || selectedChat.sector || "Unassigned"}
-                          onChange={(e) => handleAssign(undefined, e.target.value, "Unassigned")}
-                          onFocus={e => {
-                            e.target.style.borderColor = "#4f46e5";
-                            e.target.style.background = "#ffffff";
-                          }}
-                          onBlur={e => {
-                            e.target.style.borderColor = "#e2e8f0";
-                            e.target.style.background = "#f8fafc";
-                          }}
-                        >
-                          <option value="Unassigned">Unassigned</option>
-                          {[...sectors]
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map(s => (
-                              <option key={s._id} value={s.name}>{s.name}</option>
-                            ))}
-                        </select>
-                        <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                      <div>
+                        <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Sector</label>
+                        <div style={{ position: "relative" }}>
+                          <select
+                            style={{
+                              width: "100%",
+                              padding: "10px 14px",
+                              background: "#f8fafc",
+                              border: "1.5px solid #e2e8f0",
+                              borderRadius: "10px",
+                              color: "#1e293b",
+                              fontSize: "0.9rem",
+                              fontWeight: "600",
+                              outline: "none",
+                              cursor: "pointer",
+                              appearance: "none",
+                              transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+                            }}
+                            value={activeContact?.sector || selectedChat.sector || "Unassigned"}
+                            onChange={(e) => handleAssign(undefined, e.target.value, "Unassigned")}
+                            onFocus={e => {
+                              e.target.style.borderColor = "#4f46e5";
+                              e.target.style.background = "#ffffff";
+                            }}
+                            onBlur={e => {
+                              e.target.style.borderColor = "#e2e8f0";
+                              e.target.style.background = "#f8fafc";
+                            }}
+                          >
+                            <option value="Unassigned">Unassigned</option>
+                            {[...sectors]
+                              .sort((a, b) => a.name.localeCompare(b.name))
+                              .map(s => (
+                                <option key={s._id} value={s.name}>{s.name}</option>
+                              ))}
+                          </select>
+                          <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                        </div>
                       </div>
-                    </div>
                     </>
                   )}
                 </div>
@@ -705,10 +705,69 @@ const ContactDetailSidebar = ({
           })()}
         </div>
 
+        {/* Winners Section */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "16px", marginBottom: "16px" }}>
+          <div>
+            <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Winners</label>
+            <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                {(activeContact?.winners || selectedChat.winners || []).map(winner => (
+                  <div key={winner} style={{
+                    display: "flex", alignItems: "center", gap: "4px",
+                    background: "#e0e7ff", color: "#3730a3",
+                    padding: "4px 8px", borderRadius: "16px",
+                    fontSize: "0.75rem", fontWeight: "600"
+                  }}>
+                    {winner}
+                    <button
+                      onClick={() => {
+                        const current = activeContact?.winners || selectedChat.winners || [];
+                        handleAssign(undefined, undefined, undefined, undefined, current.filter(w => w !== winner));
+                      }}
+                      style={{ background: "transparent", border: "none", cursor: "pointer", padding: "0", color: "#4f46e5", display: "flex", alignItems: "center" }}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div style={{ position: "relative" }}>
+                <select
+                  style={{
+                    width: "100%", padding: "10px 14px", background: "#f8fafc",
+                    border: "1.5px solid #e2e8f0", borderRadius: "10px",
+                    color: "#1e293b", fontSize: "0.9rem", fontWeight: "600",
+                    outline: "none", cursor: "pointer", appearance: "none",
+                    transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+                  }}
+                  value=""
+                  onChange={(e) => {
+                    if (!e.target.value) return;
+                    const current = activeContact?.winners || selectedChat.winners || [];
+                    if (!current.includes(e.target.value)) {
+                      handleAssign(undefined, undefined, undefined, undefined, [...current, e.target.value]);
+                    }
+                  }}
+                  onFocus={e => { e.target.style.borderColor = "#4f46e5"; e.target.style.background = "#ffffff"; }}
+                  onBlur={e => { e.target.style.borderColor = "#e2e8f0"; e.target.style.background = "#f8fafc"; }}
+                >
+                  <option value="">+ Add Winner...</option>
+                  {[...(winners || [])]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(w => (
+                      <option key={w._id} value={w.name}>{w.name}</option>
+                    ))}
+                </select>
+                <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* CRM Attributes Section */}
         {(() => {
           const isJobsStatus = (selectedChat.status || "").toLowerCase() === "jobs";
-          
+
           const filteredFields = customFieldsDef.filter(field => {
             const fieldStatus = (field.applicableStatus || "All").toLowerCase();
             if (isJobsStatus) {

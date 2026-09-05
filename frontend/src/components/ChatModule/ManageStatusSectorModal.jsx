@@ -50,7 +50,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11, 27, 33, 0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, backdropFilter: "blur(8px)" }}>
       <div style={{ background: "white", borderRadius: "24px", width: "520px", maxWidth: "90%", maxHeight: "85vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 25px 60px rgba(0,0,0,0.3)" }}>
-        
+
         {/* Header */}
         <div style={{ padding: "24px", background: "linear-gradient(135deg, #1e293b, #334155)", color: "white", position: "relative" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
@@ -71,8 +71,8 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
         <div style={{ display: "flex", background: "#f8fafc", padding: "8px", gap: "8px" }}>
           <button
             onClick={() => setActiveTab("status")}
-            style={{ 
-              flex: 1, padding: "12px", borderRadius: "12px", border: "none", 
+            style={{
+              flex: 1, padding: "12px", borderRadius: "12px", border: "none",
               background: activeTab === "status" ? "white" : "transparent",
               color: activeTab === "status" ? "#1e293b" : "#64748b",
               fontWeight: "700", cursor: "pointer", transition: "all 0.2s",
@@ -83,8 +83,8 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
           </button>
           <button
             onClick={() => setActiveTab("sector")}
-            style={{ 
-              flex: 1, padding: "12px", borderRadius: "12px", border: "none", 
+            style={{
+              flex: 1, padding: "12px", borderRadius: "12px", border: "none",
               background: activeTab === "sector" ? "white" : "transparent",
               color: activeTab === "sector" ? "#1e293b" : "#64748b",
               fontWeight: "700", cursor: "pointer", transition: "all 0.2s",
@@ -95,8 +95,8 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
           </button>
           <button
             onClick={() => setActiveTab("source")}
-            style={{ 
-              flex: 1, padding: "12px", borderRadius: "12px", border: "none", 
+            style={{
+              flex: 1, padding: "12px", borderRadius: "12px", border: "none",
               background: activeTab === "source" ? "white" : "transparent",
               color: activeTab === "source" ? "#1e293b" : "#64748b",
               fontWeight: "700", cursor: "pointer", transition: "all 0.2s",
@@ -137,16 +137,16 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
               const isExpanded = expandedSectorId === itemId;
 
               return (
-                <div key={itemId} style={{ 
-                  borderRadius: "16px", border: "1px solid #f1f5f9", 
+                <div key={itemId} style={{
+                  borderRadius: "16px", border: "1px solid #f1f5f9",
                   background: "#ffffff", display: "flex", flexDirection: "column",
                   transition: "all 0.2s",
                   boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
                   overflow: "hidden"
                 }}>
                   {/* Main row */}
-                  <div style={{ 
-                    padding: "12px 16px", display: "flex", justifyContent: "space-between", 
+                  <div style={{
+                    padding: "12px 16px", display: "flex", justifyContent: "space-between",
                     alignItems: "center"
                   }}>
                     {editingId === itemId ? (
@@ -177,7 +177,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
                           {activeTab === "status" ? (
                             <div style={{ width: "14px", height: "14px", borderRadius: "50%", background: item.color || "#00a884", boxShadow: `0 0 0 3px ${item.color}15` }}></div>
                           ) : (activeTab === "sector" ? (
-                            <button 
+                            <button
                               onClick={() => toggleExpandSector(itemId)}
                               style={{ background: "#f1f5f9", border: "none", padding: "6px", borderRadius: "8px", color: "#64748b", display: "flex", alignItems: "center", cursor: "pointer" }}
                             >
@@ -186,7 +186,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
                           ) : (
                             <div style={{ width: "14px", height: "14px", borderRadius: "50%", background: "#e2e8f0" }}></div>
                           ))}
-                          <span 
+                          <span
                             style={{ fontWeight: "600", color: "#1e293b", cursor: activeTab === "sector" ? "pointer" : "default" }}
                             onClick={() => activeTab === "sector" && toggleExpandSector(itemId)}
                           >
@@ -214,7 +214,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
                   {activeTab === "sector" && isExpanded && (
                     <div style={{ padding: "16px", background: "#f8fafc", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: "10px" }}>
                       <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px" }}>Subsectors</label>
-                      
+
                       {/* Subsectors List */}
                       <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                         {(!item.subsectors || item.subsectors.length === 0) ? (

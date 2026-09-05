@@ -31,6 +31,7 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [customFields, setCustomFields] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [sources, setSources] = useState([]);
+  const [winners, setWinners] = useState([]);
   const [customStatuses, setCustomStatuses] = useState([]);
 
   // Selection
@@ -96,15 +97,17 @@ const ContactManagerMain = ({ deleted = false }) => {
 
   const fetchMetadata = async () => {
     try {
-      const [fieldsRes, sectorsRes, sourcesRes, statusRes] = await Promise.all([
+      const [fieldsRes, sectorsRes, sourcesRes, statusRes, winnersRes] = await Promise.all([
         api.get("/custom-fields"),
         api.get("/sectors"),
         api.get("/sources"),
-        api.get("/statuses")
+        api.get("/statuses"),
+        api.get("/winners").catch(() => ({ data: [] }))
       ]);
       setCustomFields(fieldsRes.data);
       setSectors(sectorsRes.data);
       setSources(Array.isArray(sourcesRes.data) ? sourcesRes.data : []);
+      setWinners(Array.isArray(winnersRes.data) ? winnersRes.data : []);
       setCustomStatuses(statusRes.data);
     } catch (err) {
       console.error("Meta fetch error:", err);
@@ -265,6 +268,7 @@ const ContactManagerMain = ({ deleted = false }) => {
         setViewMode={setViewMode}
         customStatuses={customStatuses}
         sectors={sectors}
+        winners={winners}
         total={total}
         showImportModal={showImportModal}
         setShowImportModal={setShowImportModal}
@@ -357,6 +361,7 @@ const ContactManagerMain = ({ deleted = false }) => {
         onClose={() => setShowAddModal(false)}
         sectors={sectors}
         sources={sources}
+        winners={winners}
         onSuccess={() => fetchContacts(1)}
       />
 
@@ -409,6 +414,7 @@ const ContactManagerMain = ({ deleted = false }) => {
         customFields={customFields}
         sectors={sectors}
         sources={sources}
+        winners={winners}
       />
 
       {showEditModal && (
@@ -422,6 +428,7 @@ const ContactManagerMain = ({ deleted = false }) => {
           onUpdate={handleUpdateContact}
           sectors={sectors}
           sources={sources}
+          winners={winners}
           customFields={customFields}
           customStatuses={customStatuses}
         />

@@ -38,14 +38,15 @@ export const verifyNumbers = async (req, res, next) => {
 export const getContacts = async (req, res, next) => {
   try {
     const accountId = req.headers["x-whatsapp-account-id"];
-    const { 
-      search, status, tag, sector, subsector, showAllAccounts, 
-      page = 1, limit = 50, skip: skipParam, onlyPhones, 
+    const {
+      search, status, tag, sector, subsector, showAllAccounts,
+      page = 1, limit = 50, skip: skipParam, onlyPhones,
       assignedUsers, excludeUsers,
       statuses, excludeStatuses,
       campaignStatus, excludeCampaignStatus,
       campaignName,
       source,
+      winner,
       deleted
     } = req.query;
 
@@ -81,7 +82,7 @@ export const getContacts = async (req, res, next) => {
     }
 
     if (status) query.status = status;
-    
+
     if (statuses) {
       const statusArr = Array.isArray(statuses) ? statuses : statuses.split(',');
       query.status = excludeStatuses === 'true' ? { $nin: statusArr } : { $in: statusArr };
@@ -93,17 +94,22 @@ export const getContacts = async (req, res, next) => {
     }
 
     if (tag) query.tags = { $in: [tag] };
-    
+
     if (sector) {
       const sectorArr = Array.isArray(sector) ? sector : sector.split(',');
       query.sector = { $in: sectorArr };
     }
-    
+
     if (source) {
       const sourceArr = Array.isArray(source) ? source : source.split(',');
       query.source = { $in: sourceArr };
     }
-    
+
+    if (winner) {
+      const winnerArr = Array.isArray(winner) ? winner : winner.split(',');
+      query.winners = { $in: winnerArr };
+    }
+
     if (subsector) query.subsector = subsector;
 
     if (campaignName) {
@@ -124,7 +130,7 @@ export const getContacts = async (req, res, next) => {
 
       if (orConditions.length > 0) {
         const campaignQuery = excludeCampaignStatus === 'true' ? { $and: orConditions.map(c => ({ $nor: [c] })) } : { $or: orConditions };
-        
+
         if (query.$and) {
           query.$and.push(campaignQuery);
         } else {
@@ -154,7 +160,7 @@ export const getContacts = async (req, res, next) => {
         .limit(limitInt)
         .allowDiskUse(true)
         .lean();
-      
+
       return res.json({
         contacts: rawContacts,
         total,
@@ -186,18 +192,18 @@ export const getContacts = async (req, res, next) => {
       if (clean.length === 12 && clean.startsWith("91")) phoneVariations.add(clean.substring(2));
       phoneVariations.add(c.phone); // Add original just in case
     });
-    
+
     const phones = Array.from(phoneVariations);
     const convFilter = { phone: { $in: phones } };
     if (!isAll && accountId && accountId !== "all") {
       convFilter.$or = [{ whatsappAccountId: accountId }, { whatsappAccountId: null }];
     }
-    
+
     const allConvs = await Conversation.find(convFilter)
       .select("_id phone whatsappAccountId lastMessageTime updatedAt")
       .sort({ lastMessageTime: -1, updatedAt: -1 })
       .lean();
-    
+
     // Create a lookup map: phone -> conversationId
     const convMap = new Map();
     allConvs.forEach(conv => {
@@ -280,7 +286,7 @@ export const getContactById = async (req, res, next) => {
         };
       });
     }
-    
+
     res.json(contactObj);
   } catch (err) {
     next(err);
@@ -314,7 +320,7 @@ export const updateContact = async (req, res, next) => {
       if (!activeAcc && contact.whatsappAccountId) {
         activeAcc = await WhatsAppAccount.findById(contact.whatsappAccountId);
       }
-      
+
       if (activeAcc) {
         try {
           if (updateData.isBlocked) {
@@ -346,6 +352,9 @@ export const updateContact = async (req, res, next) => {
     if (updateData.source !== undefined) {
       await Conversation.updateMany({ phone: contact.phone }, { $set: { source: updateData.source || "Unassigned" } });
     }
+    if (updateData.winners !== undefined) {
+      await Conversation.updateMany({ phone: contact.phone }, { $set: { winners: updateData.winners } });
+    }
 
     const updatedContact = await Contact.findById(id);
 
@@ -368,7 +377,7 @@ export const importContacts = async (req, res, next) => {
 
     const bulkOps = contacts.map(c => {
       const normPhone = normalizePhone(c.phone);
-      
+
       const newAccountId = validAccountId || (c.whatsappAccountId !== "all" ? c.whatsappAccountId : null);
 
       const setObj = {
@@ -377,6 +386,10 @@ export const importContacts = async (req, res, next) => {
         source: c.source,
         updatedAt: new Date() // Force bump to top
       };
+      
+      if (c.winners !== undefined) {
+        setObj.winners = Array.isArray(c.winners) ? c.winners : (typeof c.winners === "string" ? c.winners.split(',').map(w => w.trim()).filter(Boolean) : []);
+      }
 
       // Only overwrite whatsappAccountId if a specific account was chosen during import
       if (newAccountId) {
@@ -432,7 +445,7 @@ export const importContacts = async (req, res, next) => {
 
       const timelineOps = updatedContacts.map(contact => {
         let targetAccountId = whatsappAccountId || contact.whatsappAccountId;
-        
+
         // CRITICAL: Ensure we never try to save "all" as an ObjectId in Timeline
         if (!targetAccountId || targetAccountId === "all") return null;
 
@@ -481,7 +494,7 @@ export const getUniqueTags = async (req, res, next) => {
   try {
     const accountId = req.headers["x-whatsapp-account-id"];
     let query = {};
-    
+
     // If not 'all', filter tags by account (optional, but keep global for now as requested)
     if (accountId && accountId !== "all") {
       // query.whatsappAccountId = accountId; // Uncomment if we want account-specific tags
@@ -590,7 +603,7 @@ export const checkExistingConversations = async (req, res, next) => {
 
 export const bulkUpdateContacts = async (req, res, next) => {
   try {
-    const { phones, sector, subsector } = req.body;
+    const { phones, sector, subsector, source, winners } = req.body;
     if (!phones || !Array.isArray(phones)) {
       return res.status(400).json({ error: "Phones list is required" });
     }
@@ -598,9 +611,13 @@ export const bulkUpdateContacts = async (req, res, next) => {
     const updateFields = {};
     if (sector !== undefined) updateFields.sector = sector || "Unassigned";
     if (subsector !== undefined) updateFields.subsector = subsector || "Unassigned";
+    if (source !== undefined) updateFields.source = source || "Unassigned";
+    if (winners !== undefined) {
+      updateFields.winners = Array.isArray(winners) ? winners : (typeof winners === "string" ? winners.split(',').map(w => w.trim()).filter(Boolean) : []);
+    }
 
     if (Object.keys(updateFields).length === 0) {
-      return res.status(400).json({ error: "Sector or Subsector is required for update" });
+      return res.status(400).json({ error: "At least one field is required for update" });
     }
 
     // Numbers variations to be safe
@@ -642,7 +659,7 @@ export const addNote = async (req, res, next) => {
       createdBy: req.user._id
     });
     await contact.save();
-    
+
     const updated = await Contact.findById(id).populate("internalNotes.createdBy", "name");
     res.json(updated);
   } catch (err) {
@@ -696,7 +713,7 @@ export const checkCampaignHistory = async (req, res, next) => {
     phones.forEach(original => {
       const cleanOriginal = String(original).replace(/\D/g, "");
       if (!cleanOriginal) return;
-      
+
       phoneVariations.add(cleanOriginal);
       phoneLookupMap.set(cleanOriginal, original);
 
@@ -723,14 +740,14 @@ export const checkCampaignHistory = async (req, res, next) => {
       startedAt: 1,
       logs: 1
     })
-    .populate("whatsappAccountId", "name")
-    .lean();
+      .populate("whatsappAccountId", "name")
+      .lean();
 
     const history = [];
 
     campaigns.forEach(camp => {
       if (!camp.logs) return;
-      
+
       camp.logs.forEach(log => {
         const cleanLogPhone = String(log.phone).replace(/\D/g, "");
         if (queryPhonesSet.has(cleanLogPhone)) {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { X, User, Smartphone, Save } from "lucide-react";
 import api from "../../api";
 
-const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources = [], customFields, customStatuses = [] }) => {
+const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources = [], winners = [], customFields, customStatuses = [] }) => {
   const [formData, setFormData] = useState({});
   const [saving, setSaving] = useState(false);
 
@@ -13,6 +13,7 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources
         phone: contact.phone || "",
         sector: contact.sector || "",
         source: contact.source || "",
+        winners: contact.winners || [],
         priority: contact.priority || "",
         status: contact.status || "",
         customFields: contact.customFields || {}
@@ -43,48 +44,48 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources
           <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "800", color: "#1e293b" }}>Edit Lead</h2>
           <X size={20} cursor="pointer" onClick={onClose} color="#64748b" />
         </div>
-        
+
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div>
             <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Name</label>
-            <input 
-              type="text" 
-              value={formData.name} 
-              onChange={e => setFormData({...formData, name: e.target.value})}
+            <input
+              type="text"
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
               style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
-              required 
+              required
             />
           </div>
-          
+
           <div>
             <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Phone</label>
-            <input 
-              type="text" 
-              value={formData.phone} 
-              onChange={e => setFormData({...formData, phone: e.target.value})}
+            <input
+              type="text"
+              value={formData.phone}
+              onChange={e => setFormData({ ...formData, phone: e.target.value })}
               style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
-              required 
+              required
             />
           </div>
-          
+
           <div style={{ display: "flex", gap: "16px" }}>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Sector</label>
-              <select 
-                value={formData.sector} 
-                onChange={e => setFormData({...formData, sector: e.target.value})}
+              <select
+                value={formData.sector}
+                onChange={e => setFormData({ ...formData, sector: e.target.value })}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
               >
                 <option value="">Unassigned</option>
                 {sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
               </select>
             </div>
-            
+
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Source</label>
-              <select 
-                value={formData.source} 
-                onChange={e => setFormData({...formData, source: e.target.value})}
+              <select
+                value={formData.source}
+                onChange={e => setFormData({ ...formData, source: e.target.value })}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
               >
                 <option value="">No Source</option>
@@ -92,13 +93,40 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources
               </select>
             </div>
           </div>
-          
+
+          <div style={{ display: "flex", gap: "16px" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Winners</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                {(formData.winners || []).map(winner => (
+                  <span key={winner} style={{ background: "#00a884", color: "white", padding: "2px 8px", borderRadius: "10px", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "4px" }}>
+                    {winner}
+                    <X size={12} style={{ cursor: "pointer" }} onClick={() => setFormData({ ...formData, winners: formData.winners.filter(w => w !== winner) })} />
+                  </span>
+                ))}
+              </div>
+              <select
+                value=""
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val && !(formData.winners || []).includes(val)) {
+                    setFormData({ ...formData, winners: [...(formData.winners || []), val] });
+                  }
+                }}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none", cursor: "pointer", background: "white" }}
+              >
+                <option value="">+ Add Winner</option>
+                {(winners || []).map(w => <option key={w._id || w.name} value={w.name}>{w.name}</option>)}
+              </select>
+            </div>
+          </div>
+
           <div style={{ display: "flex", gap: "16px" }}>
             <div style={{ flex: 1 }}>
               <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Priority</label>
-              <select 
-                value={formData.priority} 
-                onChange={e => setFormData({...formData, priority: e.target.value})}
+              <select
+                value={formData.priority}
+                onChange={e => setFormData({ ...formData, priority: e.target.value })}
                 style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
               >
                 <option value="">None</option>
@@ -111,9 +139,9 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources
 
           <div>
             <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Status</label>
-            <select 
-              value={formData.status} 
-              onChange={e => setFormData({...formData, status: e.target.value})}
+            <select
+              value={formData.status}
+              onChange={e => setFormData({ ...formData, status: e.target.value })}
               style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
             >
               <option value="">Unassigned</option>
@@ -128,11 +156,11 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources
                 {customFields.map(field => (
                   <div key={field._id}>
                     <label style={{ fontSize: "0.8rem", fontWeight: "600", color: "#475569", display: "block", marginBottom: "4px" }}>{field.label}</label>
-                    <input 
-                      type="text" 
-                      value={formData.customFields?.[field.name] || ""} 
+                    <input
+                      type="text"
+                      value={formData.customFields?.[field.name] || ""}
                       onChange={e => setFormData({
-                        ...formData, 
+                        ...formData,
                         customFields: { ...formData.customFields, [field.name]: e.target.value }
                       })}
                       style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}

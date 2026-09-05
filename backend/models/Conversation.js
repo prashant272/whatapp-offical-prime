@@ -13,6 +13,7 @@ const conversationSchema = new mongoose.Schema({
   sector: { type: String, default: "Unassigned" },
   subsector: { type: String, default: "Unassigned" },
   source: { type: String, default: "Unassigned" },
+  winners: [{ type: String }],
   followUpTime: { type: Date },
   followUpActivity: { type: String },
   followUpNotified: { type: Boolean, default: false },

@@ -3,15 +3,17 @@ import { X, Check, AlertCircle, FileText, ChevronRight, Layers, Smartphone, User
 import api from "../../api";
 
 
-const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [] }) => {
+const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [], winners = [] }) => {
   const [headers, setHeaders] = useState([]);
   const [mappings, setMappings] = useState({
     name: "",
     phone: "",
     sector: "",
     source: "",
+    winners: "",
     tags: ""
   });
+  const [defaultWinners, setDefaultWinners] = useState([]);
   const [customMappings, setCustomMappings] = useState({});
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [duplicateResult, setDuplicateResult] = useState(null);
@@ -38,6 +40,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         if (lowerH.includes("phone") || lowerH.includes("mobile") || lowerH.includes("contact")) newMappings.phone = h;
         if (lowerH.includes("sector") || lowerH.includes("department")) newMappings.sector = h;
         if (lowerH.includes("source") || lowerH.includes("lead source") || lowerH.includes("origin")) newMappings.source = h;
+        if (lowerH.includes("winner")) newMappings.winners = h;
       });
       setMappings(newMappings);
     }
@@ -61,6 +64,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         // If user picked a default sector/source, use it. Else use Excel column. Else default string
         sector: defaultSector || row[mappings.sector] || "Unassigned",
         source: defaultSource || row[mappings.source] || "",
+        winners: defaultWinners.length ? defaultWinners : (row[mappings.winners] ? String(row[mappings.winners]).split(',').map(w => w.trim()).filter(Boolean) : []),
         tags: allTags,
         customFields: {}
       };
@@ -78,7 +82,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
     try {
       const phones = processed.map(c => c.phone);
       const res = await api.post("/contacts/check-import-duplicates", { phones });
-      
+
       if (res.data.existingCount > 0) {
         setDuplicateResult(res.data);
         setFinalProcessedContacts(processed);
@@ -88,7 +92,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       }
     } catch (err) {
       console.error("Duplicate check error:", err);
-      onComplete(processed); 
+      onComplete(processed);
     } finally {
       setCheckingDuplicates(false);
     }
@@ -112,7 +116,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(11, 27, 33, 0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 8000, backdropFilter: "blur(8px)" }}>
       <div style={{ width: showDuplicateReviewer ? "1000px" : "800px", maxWidth: "95%", maxHeight: "90vh", background: "white", borderRadius: "24px", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)", transition: "0.3s" }}>
-        
+
         {/* Header */}
         <div style={{ padding: "24px 30px", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f8fafc" }}>
           <div>
@@ -128,7 +132,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
 
         {/* Content */}
         <div style={{ flex: 1, overflowY: "auto", padding: "30px", position: "relative" }} className="chat-scroll">
-          
+
           {showDuplicateReviewer ? (
             /* STEP 3: DETAILED REVIEW VIEW */
             <div style={{ animation: "slideIn 0.3s ease" }}>
@@ -220,6 +224,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                     <MappingRow label="Phone / Mobile *" icon={<Smartphone size={14} />} value={mappings.phone} onChange={(v) => setMappings({ ...mappings, phone: v })} headers={headers} required />
                     <MappingRow label="Sector" icon={<Layers size={14} />} value={mappings.sector} onChange={(v) => setMappings({ ...mappings, sector: v })} headers={headers} />
                     <MappingRow label="Lead Source" icon={<Layers size={14} />} value={mappings.source} onChange={(v) => setMappings({ ...mappings, source: v })} headers={headers} />
+                    <MappingRow label="Winners" icon={<Layers size={14} />} value={mappings.winners} onChange={(v) => setMappings({ ...mappings, winners: v })} headers={headers} />
                   </div>
 
                   <div style={{ marginTop: "16px", padding: "14px", background: "linear-gradient(135deg, #eff6ff, #e0f2fe)", borderRadius: "14px", border: "1.5px solid #93c5fd" }}>
@@ -251,8 +256,33 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                       ))}
                     </select>
 
+                    <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                      🏆 Bulk Assign Winners (Override)
+                    </label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: "8px" }}>
+                      {defaultWinners.map(winner => (
+                        <span key={winner} style={{ background: "#1d4ed8", color: "white", padding: "2px 8px", borderRadius: "10px", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "4px" }}>
+                          {winner}
+                          <X size={12} style={{ cursor: "pointer" }} onClick={() => setDefaultWinners(defaultWinners.filter(w => w !== winner))} />
+                        </span>
+                      ))}
+                    </div>
+                    <select
+                      value=""
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val && !defaultWinners.includes(val)) {
+                          setDefaultWinners([...defaultWinners, val]);
+                        }
+                      }}
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #93c5fd", fontSize: "0.85rem", fontWeight: "700", color: "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer" }}
+                    >
+                      <option value="">+ Add Winner Override</option>
+                      {winners.map(w => <option key={w._id || w.name} value={w.name}>{w.name}</option>)}
+                    </select>
+
                     <p style={{ margin: "10px 0 0", fontSize: "0.72rem", color: "#60a5fa", fontWeight: "600" }}>
-                      {defaultSector || defaultSource ? `✅ Bulk overrides active.` : "ℹ️ Leave blank to use Excel columns"}
+                      {defaultSector || defaultSource || defaultWinners.length > 0 ? `✅ Bulk overrides active.` : "ℹ️ Leave blank to use Excel columns"}
                     </p>
                   </div>
 
@@ -319,7 +349,7 @@ const MappingRow = ({ label, icon, value, onChange, headers, required }) => (
     <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#64748b", textTransform: "uppercase", display: "flex", alignItems: "center", gap: "6px" }}>
       {icon} {label}
     </label>
-    <select 
+    <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1.5px solid #e2e8f0", fontSize: "0.85rem", fontWeight: "600", color: value ? "#1e293b" : "#94a3b8", outline: "none", background: value ? "#f0fdf4" : "white", transition: "0.2s" }}

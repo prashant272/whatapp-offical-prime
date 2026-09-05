@@ -68,6 +68,7 @@ const ChatModule = () => {
 
   const [sectors, setSectors] = useState([]);
   const [sources, setSources] = useState([]);
+  const [winners, setWinners] = useState([]);
   const [showSectorModal, setShowSectorModal] = useState(false);
   const [newSectorName, setNewSectorName] = useState("");
 
@@ -456,7 +457,7 @@ const ChatModule = () => {
     }
   }, [showContactInfo, selectedChat?._id, selectedChat?.phone]);
 
-  const handleAssign = async (userId, sector, subsector, source) => {
+  const handleAssign = async (userId, sector, subsector, source, winners) => {
     if (!selectedChat) return;
     try {
       const payload = { phone: selectedChat.phone };
@@ -464,6 +465,7 @@ const ChatModule = () => {
       if (sector !== undefined) payload.sector = sector;
       if (subsector !== undefined) payload.subsector = subsector;
       if (source !== undefined) payload.source = source;
+      if (winners !== undefined) payload.winners = winners;
 
       const res = await api.patch(`/conversations/assign`, payload, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
@@ -482,7 +484,8 @@ const ChatModule = () => {
           assignedTo: updatedConv.assignedTo,
           sector: updatedContactObj.sector || updatedConv.sector || prev.sector,
           subsector: updatedContactObj.subsector || updatedConv.subsector || prev.subsector,
-          source: updatedContactObj.source || updatedConv.source || prev.source
+          source: updatedContactObj.source || updatedConv.source || prev.source,
+          winners: updatedContactObj.winners || updatedConv.winners || prev.winners
         }));
       }
       // refetchConvs(); // Removed to prevent disappearing from list when filters are active
@@ -746,9 +749,9 @@ const ChatModule = () => {
       let endpoint = "/statuses";
       if (type === "sector") endpoint = "/sectors";
       if (type === "source") endpoint = "/sources";
-      
+
       await api.post(endpoint, data);
-      
+
       if (type === "status") {
         const sRes = await api.get("/statuses");
         setCustomStatuses(sRes.data);
@@ -769,9 +772,9 @@ const ChatModule = () => {
       let endpoint = `/statuses/${idOrName}`;
       if (type === "sector") endpoint = `/sectors/${idOrName}`;
       if (type === "source") endpoint = `/sources/${idOrName}`;
-      
+
       await api.put(endpoint, data);
-      
+
       if (type === "status") {
         const sRes = await api.get("/statuses");
         setCustomStatuses(sRes.data);
@@ -795,7 +798,7 @@ const ChatModule = () => {
       if (type === "source") endpoint = `/sources/${idOrName}`;
 
       await api.delete(endpoint);
-      
+
       if (type === "status") {
         const sRes = await api.get("/statuses");
         setCustomStatuses(sRes.data);
@@ -1045,16 +1048,18 @@ const ChatModule = () => {
   useEffect(() => {
     const fetchGlobalData = async () => {
       try {
-        const [execs, stats, sects, cFields, srcRes] = await Promise.all([
+        const [execs, stats, sects, cFields, srcRes, winRes] = await Promise.all([
           api.get(`/users`).catch(() => ({ data: [] })),
           api.get(`/statuses`).catch(() => ({ data: [] })),
           api.get(`/sectors`).catch(() => ({ data: [] })),
           api.get(`/custom-fields`).catch(() => ({ data: [] })),
-          api.get(`/sources`).catch(() => ({ data: [] }))
+          api.get(`/sources`).catch(() => ({ data: [] })),
+          api.get(`/winners`).catch(() => ({ data: [] }))
         ]);
         setCustomStatuses(stats.data);
         setSectors(sects.data);
         setSources(srcRes.data);
+        setWinners(winRes.data);
         setCustomFieldsDef(cFields.data);
         setExecutives(Array.isArray(execs.data) ? execs.data.filter(u => u.role === "Executive" || u.role === "Manager" || u.role === "Admin") : []);
       } catch (err) { console.error(err); }
@@ -1392,7 +1397,7 @@ const ChatModule = () => {
         selectedChat={selectedChat} activeContact={activeContact}
         setShowTimelineModal={setShowTimelineModal} fetchTimelineEntries={fetchTimelineEntries}
         allStatusOptions={allStatusOptions} handleUpdateStatus={handleUpdateStatus}
-        sectors={sectors} sources={sources} handleAssign={handleAssign}
+        sectors={sectors} sources={sources} winners={winners} handleAssign={handleAssign}
         executives={executives} customFieldsDef={customFieldsDef}
         isUpdatingField={isUpdatingField} handleUpdateCustomField={handleUpdateCustomField}
         setActiveContact={setActiveContact}
