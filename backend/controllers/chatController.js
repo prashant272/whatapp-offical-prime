@@ -23,7 +23,7 @@ const getPhoneCandidates = (phone) => {
 
 export const getConversations = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, assignedTo, sector, subsector, cursor, search, filter: typeFilter } = req.query;
+    const { page = 1, limit = 20, status, assignedTo, sector, source, winner, subsector, cursor, search, filter: typeFilter } = req.query;
     const account = req.whatsappAccount;
     const accountIds = req.whatsappAccountIds;
 
@@ -87,6 +87,8 @@ export const getConversations = async (req, res) => {
       }
     }
     if (subsector && subsector !== "all") conditions.push({ subsector });
+    if (source && source !== "all") conditions.push({ source });
+    if (winner && winner !== "all") conditions.push({ winners: winner });
 
     // 3b. Unread/Window Quick Filters
     if (typeFilter === "unread") {

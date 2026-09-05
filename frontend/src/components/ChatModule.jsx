@@ -20,7 +20,9 @@ import {
   fetchConversations as fetchReduxConversations,
   sendMessage as sendReduxMessage,
   sendImage as sendReduxImage,
-  updateConversationStatus as updateReduxStatus
+  updateConversationStatus as updateReduxStatus,
+  setSourceFilter as setReduxSourceFilter,
+  setWinnerFilter as setReduxWinnerFilter
 } from "../redux/slices/chatSlice";
 
 import api, { API_BASE } from "../api";
@@ -81,6 +83,8 @@ const ChatModule = () => {
     filter,
     statusFilter,
     sectorFilter,
+    sourceFilter,
+    winnerFilter,
     userFilter,
     searchQuery,
     selectedAccountIds,
@@ -93,6 +97,8 @@ const ChatModule = () => {
   const setFilter = (val) => dispatch(setReduxFilter(val));
   const setStatusFilter = (val) => dispatch(setReduxStatusFilter(val));
   const setSectorFilter = (val) => dispatch(setReduxSectorFilter(val));
+  const setSourceFilter = (val) => dispatch(setReduxSourceFilter(val));
+  const setWinnerFilter = (val) => dispatch(setReduxWinnerFilter(val));
   const setUserFilter = (val) => dispatch(setReduxUserFilter(val));
   const setSearchQuery = (val) => dispatch(setReduxSearchQuery(val));
   const setSelectedAccountIds = (val) => dispatch(setReduxSelectedAccountIds(val));
@@ -196,6 +202,8 @@ const ChatModule = () => {
       statusFilter,
       userFilter,
       sectorFilter,
+      sourceFilter,
+      winnerFilter,
       debouncedSearch,
       filter
     };
@@ -215,6 +223,8 @@ const ChatModule = () => {
       status: statusFilter,
       assignedTo: userFilter,
       sector: sectorFilter,
+      source: sourceFilter,
+      winner: winnerFilter,
       search: debouncedSearch,
       accountIds: accIds,
       filter: filter
@@ -281,19 +291,19 @@ const ChatModule = () => {
       setHasNextPage(hasMore);
     }
     setIsFetchingNextPage(false);
-  }, [dispatch, selectedAccountIds, activeAccount, statusFilter, userFilter, sectorFilter, debouncedSearch, filter]);
+  }, [dispatch, selectedAccountIds, activeAccount, statusFilter, userFilter, sectorFilter, sourceFilter, winnerFilter, debouncedSearch, filter]);
+
+  const fetchNextPage = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage && nextCursor) {
+      loadConversations(nextCursor);
+    }
+  }, [loadConversations, hasNextPage, isFetchingNextPage, nextCursor]);
 
   useEffect(() => {
     if (activeAccount?._id || selectedAccountIds.length > 0) {
       loadConversations();
     }
-  }, [loadConversations, activeAccount?._id, selectedAccountIds, statusFilter, userFilter, sectorFilter, debouncedSearch, filter]);
-
-  const fetchNextPage = () => {
-    if (hasNextPage && !isFetchingNextPage) {
-      loadConversations(nextCursor);
-    }
-  };
+  }, [loadConversations, activeAccount?._id, selectedAccountIds, statusFilter, userFilter, sectorFilter, sourceFilter, winnerFilter, debouncedSearch, filter]);
 
   const refetchConvs = () => {
     lastFetchParamsRef.current = null;
@@ -1024,7 +1034,7 @@ const ChatModule = () => {
       if (c._id === chatId) return true;
       return true;
     });
-  }, [conversations, filter, statusFilter, sectorFilter, userFilter, searchQuery, chatId]);
+  }, [conversations, filter, statusFilter, sectorFilter, sourceFilter, winnerFilter, userFilter, searchQuery, chatId]);
 
   const listData = useMemo(() => {
     const filtered = filteredConversations || [];
@@ -1360,7 +1370,9 @@ const ChatModule = () => {
         statusFilter={statusFilter} setStatusFilter={setStatusFilter}
         userFilter={userFilter} setUserFilter={setUserFilter}
         sectorFilter={sectorFilter} setSectorFilter={setSectorFilter}
-        allStatusOptions={allStatusOptions} executives={executives} sectors={sectors}
+        sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
+        winnerFilter={winnerFilter} setWinnerFilter={setWinnerFilter}
+        allStatusOptions={allStatusOptions} executives={executives} sectors={sectors} sources={sources} winners={winners}
         setShowManageModal={setShowManageModal} setShowNewChatModal={setShowNewChatModal}
         listData={listData} selectedChat={selectedChat} navigate={navigate}
         accountNameMap={accountNameMap} hasNextPage={hasNextPage}

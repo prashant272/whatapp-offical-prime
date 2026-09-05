@@ -163,7 +163,9 @@ const ChatSidebar = ({
   statusFilter, setStatusFilter,
   userFilter, setUserFilter,
   sectorFilter, setSectorFilter,
-  allStatusOptions, executives, sectors,
+  sourceFilter, setSourceFilter,
+  winnerFilter, setWinnerFilter,
+  allStatusOptions, executives, sectors, sources, winners,
   setShowManageModal, setShowNewChatModal,
   listData, selectedChat, navigate,
   accountNameMap, hasNextPage, isFetchingNextPage, fetchNextPage,
@@ -470,6 +472,28 @@ const ChatSidebar = ({
                   <option value="unassigned">Unassigned</option>
                   {sectors?.filter(s => s.name?.toLowerCase() !== "unassigned")?.map(s => (
                     <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={sourceFilter}
+                  onChange={(e) => setSourceFilter(e.target.value)}
+                  style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
+                >
+                  <option value="all">Source: All</option>
+                  {sources?.map(s => (
+                    <option key={s.name} value={s.name}>{s.name}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={winnerFilter}
+                  onChange={(e) => setWinnerFilter(e.target.value)}
+                  style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
+                >
+                  <option value="all">Winner: All</option>
+                  {winners?.map(w => (
+                    <option key={w.name} value={w.name}>{w.name}</option>
                   ))}
                 </select>
               </>
