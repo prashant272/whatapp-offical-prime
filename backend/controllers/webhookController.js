@@ -94,8 +94,8 @@ export const handleWebhook = async (req, res) => {
         if (updatedMsg && SUCCESS_STATUSES.includes(status.status) && (updatedMsg.type === "template" || updatedMsg.campaignId)) {
           const recipientPhone = normalizePhone(status.recipient_id);
           if (recipientPhone) {
-            await Contact.updateOne({ phone: recipientPhone }, { $set: { isCampaignSent: true } });
-            console.log(`🎯 Marked contact ${recipientPhone} as isCampaignSent: true because template/campaign message was sent.`);
+            await Contact.updateOne({ phone: recipientPhone }, { $set: { isCampaignSent: true, consumedAutoReplies: [] } });
+            console.log(`🎯 Marked contact ${recipientPhone} as isCampaignSent: true and reset consumedAutoReplies because template/campaign message was sent.`);
           }
         }
 

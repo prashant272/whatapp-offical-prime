@@ -58,6 +58,7 @@ const contactSchema = new mongoose.Schema({
     lastSentAt: { type: Date, default: Date.now }
   }],
   isCampaignSent: { type: Boolean, default: false },
+  consumedAutoReplies: [{ type: mongoose.Schema.Types.ObjectId, ref: "AutoReply" }],
   isCampaignFailed: { type: Boolean, default: false },
   isDeleted: { type: Boolean, default: false },
 

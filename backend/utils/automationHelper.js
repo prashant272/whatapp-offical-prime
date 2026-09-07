@@ -218,6 +218,21 @@ export const processAutoReply = async (account, phone, incomingText, contact, or
 
     console.log(`🤖 Automation: Keyword Match! [${bestMatch.keyword}]`);
 
+    // --- CONSUME AUTO REPLY CHECK ---
+    if (contact) {
+      if (!contact.consumedAutoReplies) {
+        contact.consumedAutoReplies = [];
+      }
+      // If we already sent this specific auto reply since the last campaign, skip it!
+      if (contact.consumedAutoReplies.includes(bestMatch._id.toString())) {
+        console.log(`⏳ AutoReply for keyword [${bestMatch.keyword}] already triggered for this contact's current campaign cycle. Skipping.`);
+        return false;
+      }
+      // Add to consumed list so it doesn't fire again until a new campaign is sent
+      contact.consumedAutoReplies.push(bestMatch._id.toString());
+      await contact.save();
+    }
+
     // --- TRIGGER STAGE FLOW VIA KEYWORD ---
     // If the keyword matched is "register" or "start", we trigger the stage-based flow.
     if (bestMatch.keyword.toLowerCase() === "register" || bestMatch.keyword.toLowerCase() === "start") {
