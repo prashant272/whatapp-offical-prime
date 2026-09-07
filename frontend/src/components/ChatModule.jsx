@@ -759,6 +759,7 @@ const ChatModule = () => {
       let endpoint = "/statuses";
       if (type === "sector") endpoint = "/sectors";
       if (type === "source") endpoint = "/sources";
+      if (type === "winner") endpoint = "/winners";
 
       await api.post(endpoint, data);
 
@@ -771,6 +772,9 @@ const ChatModule = () => {
       } else if (type === "source") {
         const srcRes = await api.get("/sources");
         setSources(srcRes.data);
+      } else if (type === "winner") {
+        const winRes = await api.get("/winners");
+        setWinners(winRes.data);
       }
     } catch (err) {
       alert("Error adding: " + (err.response?.data?.error || err.message));
@@ -782,6 +786,7 @@ const ChatModule = () => {
       let endpoint = `/statuses/${idOrName}`;
       if (type === "sector") endpoint = `/sectors/${idOrName}`;
       if (type === "source") endpoint = `/sources/${idOrName}`;
+      if (type === "winner") endpoint = `/winners/${idOrName}`;
 
       await api.put(endpoint, data);
 
@@ -794,6 +799,9 @@ const ChatModule = () => {
       } else if (type === "source") {
         const srcRes = await api.get("/sources");
         setSources(srcRes.data);
+      } else if (type === "winner") {
+        const winRes = await api.get("/winners");
+        setWinners(winRes.data);
       }
     } catch (err) {
       alert("Error updating: " + (err.response?.data?.error || err.message));
@@ -806,6 +814,7 @@ const ChatModule = () => {
       let endpoint = `/statuses/${idOrName}`;
       if (type === "sector") endpoint = `/sectors/${idOrName}`;
       if (type === "source") endpoint = `/sources/${idOrName}`;
+      if (type === "winner") endpoint = `/winners/${idOrName}`;
 
       await api.delete(endpoint);
 
@@ -818,6 +827,9 @@ const ChatModule = () => {
       } else if (type === "source") {
         const srcRes = await api.get("/sources");
         setSources(srcRes.data);
+      } else if (type === "winner") {
+        const winRes = await api.get("/winners");
+        setWinners(winRes.data);
       }
     } catch (err) {
       alert("Error deleting: " + (err.response?.data?.error || err.message));
@@ -1446,6 +1458,7 @@ const ChatModule = () => {
         allStatusOptions={allStatusOptions}
         sectors={sectors}
         sources={sources}
+        winners={winners}
         onAdd={handleAddStatusSector}
         onUpdate={handleUpdateStatusSector}
         onDelete={handleDeleteStatusSector}

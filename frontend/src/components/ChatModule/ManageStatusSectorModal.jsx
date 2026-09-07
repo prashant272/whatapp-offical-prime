@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { X, Trash2, Plus, Pencil, Check, Settings2, ShieldCheck, ChevronDown, ChevronUp } from "lucide-react";
 
-const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allStatusOptions, sectors, sources, onAdd, onDelete, onUpdate }) => {
+const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allStatusOptions, sectors, sources, winners, onAdd, onDelete, onUpdate }) => {
   const [activeTab, setActiveTab] = useState(initialType || "status");
   const [name, setName] = useState("");
   const [color, setColor] = useState("#00a884");
@@ -15,7 +15,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
 
   if (!isOpen) return null;
 
-  const list = activeTab === "status" ? allStatusOptions : (activeTab === "sector" ? sectors : sources);
+  const list = activeTab === "status" ? allStatusOptions : (activeTab === "sector" ? sectors : (activeTab === "source" ? sources : winners));
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -59,7 +59,7 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "800" }}>System Configuration</h3>
-              <p style={{ margin: 0, opacity: 0.7, fontSize: "0.8rem" }}>Manage lead statuses, business sectors, and sources</p>
+              <p style={{ margin: 0, opacity: 0.7, fontSize: "0.8rem" }}>Manage lead statuses, business sectors, sources, and winners</p>
             </div>
           </div>
           <button onClick={onClose} style={{ position: "absolute", top: "20px", right: "20px", background: "none", border: "none", color: "white", cursor: "pointer", opacity: 0.7 }}>
@@ -104,6 +104,18 @@ const ManageStatusSectorModal = ({ isOpen, onClose, initialType = "status", allS
             }}
           >
             Lead Sources
+          </button>
+          <button
+            onClick={() => setActiveTab("winner")}
+            style={{
+              flex: 1, padding: "12px", borderRadius: "12px", border: "none",
+              background: activeTab === "winner" ? "white" : "transparent",
+              color: activeTab === "winner" ? "#1e293b" : "#64748b",
+              fontWeight: "700", cursor: "pointer", transition: "all 0.2s",
+              boxShadow: activeTab === "winner" ? "0 4px 12px rgba(0,0,0,0.05)" : "none"
+            }}
+          >
+            Winners
           </button>
         </div>
 
