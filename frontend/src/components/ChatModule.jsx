@@ -1529,3 +1529,4 @@ const ChatModule = () => {
 };
 
 export default memo(ChatModule);
+

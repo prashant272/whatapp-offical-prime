@@ -386,7 +386,7 @@ export const importContacts = async (req, res, next) => {
         source: c.source,
         updatedAt: new Date() // Force bump to top
       };
-      
+
       if (c.winners !== undefined) {
         setObj.winners = Array.isArray(c.winners) ? c.winners : (typeof c.winners === "string" ? c.winners.split(',').map(w => w.trim()).filter(Boolean) : []);
       }

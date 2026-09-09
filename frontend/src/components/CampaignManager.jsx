@@ -40,7 +40,8 @@ const CampaignManager = () => {
   const [tags, setTags] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [sources, setSources] = useState([]);
-  const [selectedSourceType, setSelectedSourceType] = useState(""); // "tag" or "sector"
+  const [winners, setWinners] = useState([]);
+  const [selectedSourceType, setSelectedSourceType] = useState(""); // "tag" or "sector" or "winner"
   const [selectedSourceValues, setSelectedSourceValues] = useState([]);
   const [selectedSubsectorValue, setSelectedSubsectorValue] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -160,11 +161,12 @@ const CampaignManager = () => {
         api.get("/contacts/tags").catch(e => ({ data: [] }))
       ]);
 
-      const [sectorRes, statusRes, userRes, srcRes] = await Promise.all([
+      const [sectorRes, statusRes, userRes, srcRes, winnerRes] = await Promise.all([
         api.get("/sectors").catch(e => ({ data: [] })),
         api.get("/statuses").catch(e => ({ data: [] })),
         api.get("/users").catch(e => ({ data: [] })),
-        api.get("/sources").catch(e => ({ data: [] }))
+        api.get("/sources").catch(e => ({ data: [] })),
+        api.get("/winners").catch(e => ({ data: [] }))
       ]);
 
       setCampaigns(Array.isArray(campRes.data) ? campRes.data : []);
@@ -174,6 +176,7 @@ const CampaignManager = () => {
       setTags(Array.isArray(tagRes.data) ? tagRes.data : []);
       setSectors(Array.isArray(sectorRes.data) ? sectorRes.data : []);
       setSources(Array.isArray(srcRes.data) ? srcRes.data : []);
+      setWinners(Array.isArray(winnerRes.data) ? winnerRes.data : []);
       setCustomStatuses(Array.isArray(statusRes.data) ? statusRes.data : []);
       setUsers(Array.isArray(userRes.data) ? userRes.data : []);
     } catch (err) {
@@ -967,7 +970,7 @@ const CampaignManager = () => {
                 <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: "0.7rem", color: "#667781", fontWeight: "600" }}>Active Filters:</span>
                   {selectedSourceType && selectedSourceValues.length > 0
-                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "campaign" ? "Campaigns" : selectedSourceType === "sector" ? "Sectors" : "Sources"}: {selectedSourceValues.join(", ")} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
+                    ? <span style={{ background: "#e0f2fe", color: "#0369a1", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem", fontWeight: "700" }}>📂 {selectedSourceType === "campaign" ? "Campaigns" : selectedSourceType === "sector" ? "Sectors" : selectedSourceType === "winner" ? "Winners" : "Sources"}: {selectedSourceValues.join(", ")} {selectedSubsectorValue ? `(Sub: ${selectedSubsectorValue})` : ""}</span>
                     : <span style={{ background: "#f0f2f5", color: "#667781", padding: "2px 8px", borderRadius: "10px", fontSize: "0.72rem" }}>All Categories</span>
                   }
                   {selectedStatuses.length > 0
@@ -1001,6 +1004,7 @@ const CampaignManager = () => {
                     <option value="campaign">By Campaign</option>
                     <option value="sector">By Sector</option>
                     <option value="source">By Source</option>
+                    <option value="winner">By Winner</option>
                   </select>
                 </div>
 
@@ -1080,6 +1084,25 @@ const CampaignManager = () => {
                                   {isSelected ? "✓" : ""}
                                 </span>
                                 {s.name}
+                              </div>
+                            );
+                          })
+                        ) : selectedSourceType === "winner" ? (
+                          winners.map(w => {
+                            const isSelected = selectedSourceValues.includes(w.name);
+                            return (
+                              <div
+                                key={w._id}
+                                onClick={() => {
+                                  setSelectedSourceValues(prev => prev.includes(w.name) ? prev.filter(x => x !== w.name) : [...prev, w.name]);
+                                  setSelectedSubsectorValue("");
+                                }}
+                                style={{ padding: "8px 14px", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px", background: isSelected ? "#f0fdf4" : "transparent", color: isSelected ? "#00a884" : "#111b21" }}
+                              >
+                                <span style={{ width: "16px", height: "16px", borderRadius: "4px", border: `2px solid ${isSelected ? "#00a884" : "#ccc"}`, background: isSelected ? "#00a884" : "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.6rem", color: "white", flexShrink: 0 }}>
+                                  {isSelected ? "✓" : ""}
+                                </span>
+                                {w.name}
                               </div>
                             );
                           })
