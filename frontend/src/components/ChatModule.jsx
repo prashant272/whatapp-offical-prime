@@ -884,14 +884,40 @@ const ChatModule = () => {
   };
 
   const handleUpdateCustomField = async (contactId, fieldName, value) => {
-    if (!contactId) return;
     try {
       setIsUpdatingField(fieldName);
+      let targetContactId = contactId;
+
+      if (!targetContactId && selectedChat?.phone) {
+        // Auto-create a contact if it doesn't exist so we can attach custom fields
+        await api.post("/contacts/import", {
+          contacts: [{ 
+            name: `Lead ${selectedChat.phone.slice(-4)}`, 
+            phone: selectedChat.phone.replace(/[^0-9]/g, ""),
+            customFields: { [fieldName]: value }
+          }],
+          whatsappAccountId: "all"
+        });
+        
+        // Fetch the newly created contact
+        const fetchRes = await api.get(`/contacts?search=${selectedChat.phone.slice(-10)}`);
+        const newContact = fetchRes.data.contacts.find(c => c.phone.endsWith(selectedChat.phone.slice(-10)));
+        if (newContact) {
+          targetContactId = newContact._id;
+          setActiveContact(newContact);
+          
+          if (selectedChat._id) {
+            await api.put(`/conversations/${selectedChat._id}`, { contact: targetContactId });
+          }
+        }
+        return; // we already saved the custom field during import
+      }
+
+      if (!targetContactId) return;
+
       const currentFields = activeContact?.customFields || {};
       const updatedFields = { ...currentFields, [fieldName]: value };
-      const res = await api.put(`/contacts/${contactId}`, { customFields: updatedFields });
-      // Only update local contact state — do NOT refetchConvs() here as it causes
-      // the chat to scroll to the last message unnecessarily.
+      const res = await api.put(`/contacts/${targetContactId}`, { customFields: updatedFields });
       setActiveContact(res.data);
     } catch (err) {
       console.error("Error updating field:", err);

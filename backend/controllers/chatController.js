@@ -263,10 +263,35 @@ export const resolveConversationByPhone = async (req, res) => {
       filter.assignedTo = req.user._id;
     }
 
-    const conversation = await Conversation.findOne(filter)
+    let conversation = await Conversation.findOne(filter)
       .populate("contact")
       .populate("assignedTo", "name")
       .sort({ lastMessageTime: -1, updatedAt: -1 });
+
+    if (!conversation) {
+      // Look for a Contact if Conversation doesn't exist
+      const contactCondition = [{ phone: { $in: candidates } }];
+      if (last10) contactCondition.push({ phone: { $regex: `${escapeRegex(last10)}$` } });
+      const contact = await Contact.findOne({ $or: contactCondition }).sort({ createdAt: -1 });
+
+      if (contact) {
+        // Create an empty conversation so custom fields become active
+        conversation = new Conversation({
+          phone: contact.phone,
+          contact: contact._id,
+          whatsappAccountId: accountId || undefined,
+          assignedTo: req.user.role === "Executive" ? req.user._id : undefined,
+          status: "New",
+          messages: [],
+          lastMessageTime: new Date()
+        });
+        await conversation.save();
+        conversation = await conversation.populate("contact");
+        if (conversation.assignedTo) {
+          conversation = await conversation.populate("assignedTo", "name");
+        }
+      }
+    }
 
     res.json({ conversation: conversation || null });
   } catch (error) {

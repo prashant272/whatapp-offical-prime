@@ -212,7 +212,7 @@ const CustomFieldItem = ({ field, activeContact, isUpdatingField, handleUpdateCu
             onFocus={() => setIsFocusedField(true)}
             onBlur={() => setIsFocusedField(false)}
             onChange={(e) => handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
-            disabled={isUpdatingField === field.name || !activeContact}
+            disabled={isUpdatingField === field.name}
           >
             <option value="">Select Option</option>
             {field.options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -226,11 +226,11 @@ const CustomFieldItem = ({ field, activeContact, isUpdatingField, handleUpdateCu
           onChange={(val) => {
             setActiveContact(prev => ({
               ...prev,
-              customFields: { ...prev.customFields, [field.name]: val }
+              customFields: { ...(prev?.customFields || {}), [field.name]: val }
             }));
             handleUpdateCustomField(activeContact?._id, field.name, val);
           }}
-          disabled={isUpdatingField === field.name || !activeContact}
+          disabled={isUpdatingField === field.name}
         />
       ) : (
         <input
@@ -258,11 +258,11 @@ const CustomFieldItem = ({ field, activeContact, isUpdatingField, handleUpdateCu
             const val = e.target.value;
             setActiveContact(prev => ({
               ...prev,
-              customFields: { ...prev.customFields, [field.name]: val }
+              customFields: { ...(prev?.customFields || {}), [field.name]: val }
             }));
           }}
           onKeyDown={(e) => e.key === "Enter" && handleUpdateCustomField(activeContact?._id, field.name, e.target.value)}
-          disabled={isUpdatingField === field.name || !activeContact}
+          disabled={isUpdatingField === field.name}
         />
       )}
     </div>

@@ -335,7 +335,7 @@ export const handleWebhook = async (req, res) => {
         } else if (!contact.whatsappAccountId) {
           // Associate legacy contact with this account
           contact.whatsappAccountId = account?._id;
-        } else if (profileName && contact.name.startsWith("User ")) {
+        } else if (profileName && (contact.name.startsWith("User ") || contact.name.startsWith("Lead ") || !contact.name)) {
           // Update generic name with real profile name if found
           contact.name = profileName;
         }

@@ -15,6 +15,15 @@ router.post("/conversations/status", protect, updateConversationStatus);
 router.put("/conversations/:id/status", protect, updateConversationStatus);
 router.post("/messages/send-template", protect, sendChatTemplateMessage);
 router.patch("/conversations/assign", protect, restrictTo("Admin", "Manager", "Executive"), assignConversation);
+router.put("/conversations/:id", protect, async (req, res) => {
+    try {
+        const Conversation = (await import("../models/Conversation.js")).default;
+        const conv = await Conversation.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(conv);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 router.get("/conversations/:id", protect, getConversationById);
 router.post("/conversations/mark-read", protect, markAsRead);
 router.post("/messages/notify-admin-reply", protect, (req, res) => {
