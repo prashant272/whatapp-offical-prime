@@ -17,6 +17,7 @@ import FlowManager from "./components/FlowManager";
 import ContactManager from "./components/ContactManager/ContactManagerMain";
 import CustomFieldManager from "./components/CustomFieldManager";
 import EmailManager from "./components/EmailManager";
+import MetaAdsManager from "./components/MetaAdsManager";
 import { WhatsAppAccountProvider, useWhatsAppAccount } from "./WhatsAppAccountContext";
 
 function AppContent() {
@@ -96,6 +97,7 @@ function AppContent() {
     { id: "automation", label: "Auto Replies", icon: Bot, path: "/automation", roles: ["Admin", "Manager"] },
     { id: "flows", label: "Smart Flows", icon: GitBranch, path: "/flows", roles: ["Admin", "Manager"] },
     { id: "settings", label: "WhatsApp Setup", icon: Settings, path: "/settings", roles: ["Admin"] },
+    { id: "meta-ads", label: "Meta Ads", icon: Zap, path: "/meta-ads", roles: ["Admin", "Manager"] },
     { id: "contacts", label: "Contacts", icon: UserPlus, path: "/contacts", roles: ["Admin", "Manager", "Executive"] },
     { id: "deleted-contacts", label: "Deleted Leads", icon: Trash2, path: "/deleted-contacts", roles: ["Admin", "Manager", "Executive"] },
     { id: "custom-fields", label: "Custom Fields", icon: Layers, path: "/custom-fields", roles: ["Admin", "Manager"] },
@@ -250,6 +252,7 @@ function AppContent() {
                 <Route path="/deleted-contacts" element={<ContactManager deleted={true} />} />
                 <Route path="/custom-fields" element={<CustomFieldManager />} />
                 <Route path="/settings" element={<WhatsAppAccountSettings />} />
+                <Route path="/meta-ads" element={<MetaAdsManager />} />
                 <Route path="/email" element={<EmailManager />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>
