@@ -71,6 +71,7 @@ app.use("/api/smart-flows", flowRoutes);
 app.use("/api/campaigns", campaignRoutes);
 app.use("/webhook", webhookRoutes);
 app.use("/api/meta-webhook", metaWebhookRoutes);
+app.use("/meta-webhook", metaWebhookRoutes); // Added for convenience without 'api'
 app.use("/api/meta-auth", metaAuthRoutes);
 app.use("/api", chatRoutes);
 app.use("/api/contacts", contactRoutes);
