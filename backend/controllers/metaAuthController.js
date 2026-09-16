@@ -88,3 +88,72 @@ export const disconnectMetaPage = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error disconnecting page." });
   }
 };
+
+import Contact from "../models/Contact.js";
+import Conversation from "../models/Conversation.js";
+import { getIO, smartEmit } from "../utils/socket.js";
+
+export const sendTestLead = async (req, res) => {
+  try {
+    const { pageId } = req.body;
+    
+    if (!pageId) {
+      return res.status(400).json({ success: false, message: "Page ID is required" });
+    }
+
+    const metaPage = await MetaPage.findOne({ pageId });
+    if (!metaPage) {
+      return res.status(404).json({ success: false, message: "Meta Page not found in DB" });
+    }
+
+    const accountId = metaPage.whatsappAccountId;
+    const testPhone = "919999999999";
+    const testName = `Test Lead ${Math.floor(Math.random() * 1000)}`;
+
+    let contact = await Contact.findOne({ phone: testPhone, whatsappAccountId: accountId });
+    
+    if (!contact) {
+      contact = new Contact({
+        name: testName,
+        phone: testPhone,
+        source: "Meta Ads (Test)",
+        whatsappAccountId: accountId
+      });
+    } else {
+      contact.name = testName;
+      contact.source = "Meta Ads (Test)";
+    }
+    
+    await contact.save();
+    
+    let conversation = await Conversation.findOne({ phone: testPhone, whatsappAccountId: accountId });
+    if (!conversation) {
+      conversation = await Conversation.findOne({ phone: testPhone, whatsappAccountId: null });
+    }
+    
+    if (!conversation) {
+      conversation = new Conversation({
+        contact: contact._id,
+        phone: testPhone,
+        whatsappAccountId: accountId,
+        status: contact.status || "New",
+        assignedTo: contact.assignedTo,
+        source: contact.source
+      });
+    } else {
+      conversation.source = contact.source;
+    }
+    
+    await conversation.save();
+    
+    const populatedConv = await Conversation.findById(conversation._id).populate("contact");
+    
+    smartEmit("new_contact", { contact });
+    getIO().emit("conversation_updated", populatedConv);
+
+    res.status(200).json({ success: true, message: "Test lead created successfully!" });
+  } catch (error) {
+    console.error("Error sending test lead:", error);
+    res.status(500).json({ success: false, message: "Server error sending test lead." });
+  }
+};

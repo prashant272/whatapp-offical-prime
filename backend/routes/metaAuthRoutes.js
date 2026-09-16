@@ -1,5 +1,5 @@
 import express from "express";
-import { connectMetaPages, getConnectedPages, disconnectMetaPage } from "../controllers/metaAuthController.js";
+import { connectMetaPages, getConnectedPages, disconnectMetaPage, sendTestLead } from "../controllers/metaAuthController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -8,5 +8,6 @@ const router = express.Router();
 router.post("/connect", protect, connectMetaPages);
 router.get("/pages", protect, getConnectedPages);
 router.delete("/pages/:id", protect, disconnectMetaPage);
+router.post("/test-lead", protect, sendTestLead);
 
 export default router;

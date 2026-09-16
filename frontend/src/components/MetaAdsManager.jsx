@@ -128,6 +128,21 @@ const MetaAdsManager = () => {
     }
   };
 
+  const testLead = async (pageId) => {
+    try {
+      console.log("Sending test lead for pageId:", pageId);
+      const toastId = toast.loading("Sending test lead...");
+      const res = await api.post("/meta-auth/test-lead", { pageId });
+      console.log("Test lead response:", res.data);
+      toast.success("Test Lead sent successfully!", { id: toastId });
+      alert("✅ Test Lead sent! Check your Contacts page to see the new lead.");
+    } catch (err) {
+      console.error("Test Lead Error:", err);
+      toast.error("Failed to send test lead. Please check the console.");
+      alert("❌ Failed to send Test Lead. Is the backend running?");
+    }
+  };
+
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ marginBottom: '10px' }}>
@@ -295,21 +310,31 @@ const MetaAdsManager = () => {
                     <td style={{ padding: '12px 15px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                       {acc.whatsappAccountId ? `${acc.whatsappAccountId.name} (${acc.whatsappAccountId.phone})` : 'Unassigned'}
                     </td>
-                    <td style={{ padding: '12px 15px', textAlign: 'right' }}>
+                    <td style={{ padding: '12px 15px', textAlign: 'right', display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+                      <button 
+                        onClick={() => window.open('https://developers.facebook.com/tools/lead-ads-testing', '_blank')}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--primary-color)',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: '500',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        Open Meta Testing Tool
+                      </button>
                       <button 
                         onClick={() => disconnectPage(acc._id)}
                         style={{
-                          background: 'transparent',
-                          color: '#d93025',
+                          background: 'none',
                           border: 'none',
-                          fontWeight: '600',
-                          fontSize: '13px',
+                          color: '#d93025',
                           cursor: 'pointer',
-                          padding: '6px 12px',
-                          borderRadius: '6px'
+                          fontSize: '13px',
+                          fontWeight: '500'
                         }}
-                        onMouseOver={(e) => e.target.style.background = '#fce8e6'}
-                        onMouseOut={(e) => e.target.style.background = 'transparent'}
                       >
                         Disconnect
                       </button>
