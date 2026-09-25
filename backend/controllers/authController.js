@@ -15,14 +15,19 @@ export const login = async (req, res) => {
       if (user.isActive === false) {
         return res.status(403).json({ error: "Your account is disabled. Please contact the administrator." });
       }
-      await logActivity(user._id, "LOGIN", "User logged into dashboard");
+      
+      const token = generateToken(user._id);
+      user.activeToken = token;
+      await user.save();
+
+      await logActivity(user._id, "LOGIN", "User logged into dashboard", "", req);
       res.json({
         _id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
         isActive: user.isActive !== false,
-        token: generateToken(user._id)
+        token: token
       });
     } else {
       res.status(401).json({ error: "Invalid email or password" });
@@ -34,7 +39,11 @@ export const login = async (req, res) => {
 
 export const logout = async (req, res) => {
   try {
-    await logActivity(req.user._id, "LOGOUT", "User logged out of dashboard");
+    await logActivity(req.user._id, "LOGOUT", "User logged out of dashboard", "", req);
+    
+    // Clear activeToken to invalidate session
+    await User.findByIdAndUpdate(req.user._id, { activeToken: null });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  activeToken: { type: String }, // To enforce single device login
   createdAt: { type: Date, default: Date.now }
 });
 

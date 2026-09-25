@@ -38,7 +38,7 @@ const buildTemplateComponents = (configMap) => {
 
 export const initAutomationCron = () => {
   // We use node-cron to run this function every 5 minutes automatically in the background
-  cron.schedule("*/5 * * * *", async () => {
+  cron.schedule("* * * * *", async () => {
     try {
       // --- Business Hours Check (8 AM - 7 PM IST) ---
       const istHour = parseInt(new Date().toLocaleString("en-US", { hour: 'numeric', hour12: false, timeZone: "Asia/Kolkata" }));

@@ -12,6 +12,12 @@ export const protect = async (req, res, next) => {
       if (!req.user || req.user.isActive === false) {
         return res.status(401).json({ error: "Not authorized, user is disabled or does not exist." });
       }
+      
+      // Enforce single active session
+      if (req.user.activeToken && req.user.activeToken !== token) {
+        return res.status(401).json({ error: "Session expired because you logged in from another device." });
+      }
+
       next();
     } catch (error) {
       res.status(401).json({ error: "Not authorized, token failed" });

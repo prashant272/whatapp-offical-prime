@@ -23,16 +23,34 @@ import { WhatsAppAccountProvider, useWhatsAppAccount } from "./WhatsAppAccountCo
 function AppContent() {
   const [user, setUser] = useState(() => {
     const userInfo = localStorage.getItem("userInfo");
-    return userInfo ? JSON.parse(userInfo) : null;
+    if (userInfo) {
+      const lastActivity = localStorage.getItem("lastActivity");
+      if (lastActivity && Date.now() - parseInt(lastActivity) > 20 * 60 * 1000) {
+        // More than 20 mins of inactivity since last load (laptop off, tab closed, etc)
+        localStorage.removeItem("userInfo");
+        localStorage.removeItem("adminUserInfo");
+        return null;
+      }
+      return JSON.parse(userInfo);
+    }
+    return null;
   });
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [forceLogoutCountdown, setForceLogoutCountdown] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      if (user) {
+        await api.post("/auth/logout");
+      }
+    } catch (err) {
+      console.error("Logout error", err);
+    }
     localStorage.removeItem("userInfo");
     localStorage.removeItem("adminUserInfo");
+    localStorage.removeItem("lastActivity");
     setUser(null);
     navigate("/login");
   };
@@ -82,6 +100,30 @@ function AppContent() {
     }, 1000);
     return () => clearTimeout(timer);
   }, [forceLogoutCountdown]);
+
+  // Inactivity auto-logout (20 minutes)
+  useEffect(() => {
+    if (!user) return;
+    let inactivityTimer;
+
+    const resetTimer = () => {
+      localStorage.setItem("lastActivity", Date.now().toString());
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(() => {
+        handleLogout();
+        alert("You have been logged out due to 20 minutes of inactivity.");
+      }, 20 * 60 * 1000); // 20 minutes
+    };
+
+    const events = ["mousemove", "keydown", "click", "scroll"];
+    events.forEach(event => window.addEventListener(event, resetTimer));
+    resetTimer(); // Initialize timer
+
+    return () => {
+      clearTimeout(inactivityTimer);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [user]);
 
 
   if (!user && location.pathname !== "/login") {

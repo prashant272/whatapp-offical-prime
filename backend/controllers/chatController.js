@@ -402,6 +402,24 @@ export const updateConversationStatus = async (req, res) => {
       ? { _id: id }
       : { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] };
 
+    const existingConv = await Conversation.findOne(query);
+    const targetUserId = existingConv?.assignedTo || req.user._id;
+
+    if (followUpTime) {
+      const followUpDate = new Date(followUpTime);
+      const overlap = await Conversation.findOne({
+        assignedTo: targetUserId,
+        followUpTime: followUpDate,
+        ...(isValidId && !isVirtualId ? { _id: { $ne: id } } : { phone: { $ne: phone } })
+      });
+
+      if (overlap) {
+        return res.status(400).json({ 
+          error: `The assigned specialist already has a follow-up scheduled for exactly this time with contact ${overlap.phone || 'another contact'}. Please choose a different time.` 
+        });
+      }
+    }
+
     const conversation = await Conversation.findOneAndUpdate(
       query,
       {

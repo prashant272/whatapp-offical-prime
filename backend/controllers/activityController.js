@@ -89,7 +89,26 @@ export const getUserReport = async (req, res) => {
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, 50);
 
-    res.json({ stats, followUpStats, contactTimeline });
+    const loginTimeline = activities
+      .filter(a => a.action === "LOGIN" || a.action === "LOGOUT")
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    const messagesTimeline = activities
+      .filter(a => a.action === "SEND_MESSAGE" || a.action === "SEND_TEMPLATE")
+      .sort((a, b) => b.timestamp - a.timestamp);
+
+    const pendingFollowupsList = conversations.filter(c => c.followUpTime && c.followUpTime > now);
+    const missedFollowupsList = conversations.filter(c => c.followUpTime && c.followUpTime <= now && c.status !== "Closed");
+
+    res.json({ 
+      stats, 
+      followUpStats, 
+      contactTimeline, 
+      loginTimeline,
+      messagesTimeline,
+      pendingFollowupsList,
+      missedFollowupsList
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

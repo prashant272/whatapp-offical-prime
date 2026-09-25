@@ -142,7 +142,21 @@ const ChatModule = () => {
   const [activeReminders, setActiveReminders] = useState([]);
   const [showReminderModal, setShowReminderModal] = useState(false);
   const [currentReminder, setCurrentReminder] = useState(null);
-  const [uiNotifications, setUiNotifications] = useState([]);
+  const [uiNotifications, setUiNotifications] = useState(() => {
+    const saved = localStorage.getItem("uiNotifications");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem("uiNotifications", JSON.stringify(uiNotifications));
+  }, [uiNotifications]);
 
   const markNotificationsAsRead = () => {
     setUiNotifications([]);
@@ -153,12 +167,14 @@ const ChatModule = () => {
       handleNotificationClick(reminder);
       setShowReminderModal(false);
     } else {
-      // Later - keep it in uiNotifications but close modal
       setShowReminderModal(false);
     }
   };
 
   const handleNotificationClick = (notif) => {
+    // Remove this specific notification
+    setUiNotifications(prev => prev.filter(n => n.id !== notif.id));
+
     if (notif.conversation) {
       const target = notif.conversation;
 
@@ -174,7 +190,9 @@ const ChatModule = () => {
       dispatch(setReduxSearchQuery(""));
 
       // 3. Select and Navigate
-      if (target._id) {
+      if (target.phone) {
+        navigate(`/chats/${target.phone}`);
+      } else if (target._id) {
         navigate(`/chats/${target._id}`);
       }
     }
@@ -876,7 +894,9 @@ const ChatModule = () => {
         setConversations(prev => prev.map(c => c._id === updatedConversation._id ? { ...c, ...updatedConversation } : c));
 
         setShowFollowUpModal(false);
-        // refetchConvs(); // Removed to prevent contact from disappearing if filters match
+      } else if (updateReduxStatus.rejected.match(resultAction)) {
+        const errorMsg = resultAction.payload?.error || resultAction.payload || resultAction.error?.message || "Failed to update status";
+        alert(errorMsg);
       }
     } catch (err) {
       alert("Error updating status: " + err.message);
@@ -891,21 +911,21 @@ const ChatModule = () => {
       if (!targetContactId && selectedChat?.phone) {
         // Auto-create a contact if it doesn't exist so we can attach custom fields
         await api.post("/contacts/import", {
-          contacts: [{ 
-            name: `Lead ${selectedChat.phone.slice(-4)}`, 
+          contacts: [{
+            name: `Lead ${selectedChat.phone.slice(-4)}`,
             phone: selectedChat.phone.replace(/[^0-9]/g, ""),
             customFields: { [fieldName]: value }
           }],
           whatsappAccountId: "all"
         });
-        
+
         // Fetch the newly created contact
         const fetchRes = await api.get(`/contacts?search=${selectedChat.phone.slice(-10)}`);
         const newContact = fetchRes.data.contacts.find(c => c.phone.endsWith(selectedChat.phone.slice(-10)));
         if (newContact) {
           targetContactId = newContact._id;
           setActiveContact(newContact);
-          
+
           if (selectedChat._id) {
             await api.put(`/conversations/${selectedChat._id}`, { contact: targetContactId });
           }

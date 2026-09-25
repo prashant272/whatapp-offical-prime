@@ -5,6 +5,8 @@ const activityLogSchema = new mongoose.Schema({
   action: { type: String, required: true },
   details: { type: String },
   target: { type: String }, // Phone number, template name, etc.
+  ipAddress: { type: String },
+  location: { type: String },
   timestamp: { type: Date, default: Date.now }
 });
 
