@@ -308,7 +308,7 @@ export const sendMessage = async (req, res) => {
 
     if (!account) throw new Error("No active WhatsApp account found");
 
-    const contact = await Contact.findOne({ phone: to });
+    let contact = await Contact.findOne({ phone: to });
     if (contact && contact.isBlocked) {
       return res.status(400).json({ error: "Cannot send messages to a blocked contact." });
     }
@@ -338,21 +338,32 @@ export const sendMessage = async (req, res) => {
     });
     await newMessage.save();
 
-    // Step 4: Update the Conversation in the Database
-    // We look for an existing conversation for this phone.
-    const existingConv = await Conversation.findOne({
-      phone: to,
-      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }]
-    }).sort({ lastMessageTime: -1 });
+    contact = await Contact.findOne({ phone: to });
+    if (!contact) {
+      contact = new Contact({
+        phone: to,
+        name: "Unknown",
+        whatsappAccountId: account._id,
+        assignedTo: req.user._id,
+        source: "Manual Chat",
+        sector: "Unassigned"
+      });
+      await contact.save();
+    }
 
     const updateFields = {
       lastMessage: body,
       lastMessageTime: new Date(),
       whatsappAccountId: account._id,
-      unreadCount: 0 // Auto-mark as read when replying
+      unreadCount: 0,
+      contact: contact._id
     };
 
-    // AUTO-ASSIGN: If unassigned, assign it to the sender
+    const existingConv = await Conversation.findOne({
+      phone: to,
+      $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }]
+    }).sort({ lastMessageTime: -1 });
+
     if (!existingConv || !existingConv.assignedTo) {
       updateFields.assignedTo = req.user._id;
     }
@@ -363,19 +374,14 @@ export const sendMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Step 5: Claim the Customer/Contact!
-    if (updatedConv && updatedConv.contact) {
-      const contactUpdate = {
-        whatsappAccountId: account._id,
-        activeFlowId: null,
-        currentStepIndex: 0
-      };
-      // Also sync assignment to contact record
-      if (updateFields.assignedTo) {
-        contactUpdate.assignedTo = updateFields.assignedTo;
-      }
-      await Contact.findByIdAndUpdate(updatedConv.contact, contactUpdate);
-    }
+    // Sync assigning to Contact
+    const contactUpdate = {
+      whatsappAccountId: account._id,
+      activeFlowId: null,
+      currentStepIndex: 0
+    };
+    if (updateFields.assignedTo) contactUpdate.assignedTo = updateFields.assignedTo;
+    await Contact.findByIdAndUpdate(contact._id, contactUpdate);
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
@@ -458,7 +464,7 @@ export const sendChatTemplateMessage = async (req, res) => {
 
     if (!account) throw new Error("No active WhatsApp account found");
 
-    const contact = await Contact.findOne({ phone: to });
+    let contact = await Contact.findOne({ phone: to });
     if (contact && contact.isBlocked) {
       return res.status(400).json({ error: "Cannot send messages to a blocked contact." });
     }
@@ -501,11 +507,25 @@ export const sendChatTemplateMessage = async (req, res) => {
       $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }]
     });
 
+
+    if (!contact) {
+      contact = new Contact({
+        phone: to,
+        name: "Unknown",
+        whatsappAccountId: account._id,
+        assignedTo: req.user._id,
+        source: "Manual Chat",
+        sector: "Unassigned"
+      });
+      await contact.save();
+    }
+
     const updateFields = {
       lastMessage: newMessage.body,
       lastMessageTime: new Date(),
       whatsappAccountId: account._id,
-      unreadCount: 0 // Auto-mark read on template reply
+      unreadCount: 0,
+      contact: contact._id
     };
 
     if (!existingConv || !existingConv.assignedTo) {
@@ -518,12 +538,10 @@ export const sendChatTemplateMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    if (updatedConv && updatedConv.contact) {
-      await Contact.findByIdAndUpdate(updatedConv.contact, {
-        isCampaignSent: true,
-        whatsappAccountId: account._id
-      });
-    }
+    await Contact.findByIdAndUpdate(contact._id, {
+      isCampaignSent: true,
+      whatsappAccountId: account._id
+    });
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
@@ -544,7 +562,7 @@ export const sendChatImageMessage = async (req, res) => {
 
     if (!account) throw new Error("No active WhatsApp account found");
 
-    const contact = await Contact.findOne({ phone: to });
+    let contact = await Contact.findOne({ phone: to });
     if (contact && contact.isBlocked) {
       return res.status(400).json({ error: "Cannot send messages to a blocked contact." });
     }
@@ -600,11 +618,25 @@ export const sendChatImageMessage = async (req, res) => {
       $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }]
     });
 
+
+    if (!contact) {
+      contact = new Contact({
+        phone: to,
+        name: "Unknown",
+        whatsappAccountId: account._id,
+        assignedTo: req.user._id,
+        source: "Manual Chat",
+        sector: "Unassigned"
+      });
+      await contact.save();
+    }
+
     const updateFields = {
       lastMessage: caption || lastMsgIcon,
       lastMessageTime: new Date(),
       whatsappAccountId: account._id,
-      unreadCount: 0 // Auto-mark read on media reply
+      unreadCount: 0,
+      contact: contact._id
     };
 
     if (!existingConv || !existingConv.assignedTo) {
@@ -617,17 +649,15 @@ export const sendChatImageMessage = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    if (updatedConv && updatedConv.contact) {
-      const contactUpdate = {
-        whatsappAccountId: account._id,
-        activeFlowId: null,
-        currentStepIndex: 0
-      };
-      if (updateFields.assignedTo) {
-        contactUpdate.assignedTo = updateFields.assignedTo;
-      }
-      await Contact.findByIdAndUpdate(updatedConv.contact, contactUpdate);
+    const contactUpdate = {
+      whatsappAccountId: account._id,
+      activeFlowId: null,
+      currentStepIndex: 0
+    };
+    if (updateFields.assignedTo) {
+      contactUpdate.assignedTo = updateFields.assignedTo;
     }
+    await Contact.findByIdAndUpdate(contact._id, contactUpdate);
 
     const populatedConv = await Conversation.findById(updatedConv._id).populate("contact");
     smartEmit("new_message", { message: newMessage, conversation: populatedConv });
