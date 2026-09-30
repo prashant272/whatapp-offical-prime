@@ -21,9 +21,12 @@ export const syncGoogleSheets = async () => {
 
     for (const integration of integrations) {
       try {
+        const queryRange = (integration.sheetName && integration.sheetName !== 'Sheet1') 
+                             ? `${integration.sheetName}!A:Z` 
+                             : 'A:Z';
         const response = await sheets.spreadsheets.values.get({
           spreadsheetId: integration.spreadsheetId,
-          range: `${integration.sheetName}!A:Z`,
+          range: queryRange,
           valueRenderOption: 'UNFORMATTED_VALUE'
         });
 
@@ -34,7 +37,6 @@ export const syncGoogleSheets = async () => {
         const headers = rows[0];
         const fieldMapping = integration.fieldMapping || {};
         
-        // Find indices based on mapping or fallback
         const findIdx = (mappedKey, fallbackKeys) => {
           if (fieldMapping[mappedKey]) {
             return headers.findIndex(h => h === fieldMapping[mappedKey]);
@@ -48,91 +50,128 @@ export const syncGoogleSheets = async () => {
         const emailIdx = findIdx('email', ['email']);
         const sectorIdx = findIdx('sector', ['sector', 'industry']);
 
-        console.log("Sheet Headers:", headers);
-        console.log("Field Mapping:", fieldMapping);
-        console.log("PhoneIdx:", phoneIdx, "NameIdx:", nameIdx);
-
         if (phoneIdx === -1) {
-           console.log("Skipping sheet because phoneIdx is -1");
+           console.log('Skipping sheet because phoneIdx is -1');
            continue;
         }
 
         let addedCount = 0;
         let updatedCount = 0;
 
+        const validRows = [];
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
           const rawPhone = row[phoneIdx];
-          console.log(`Row ${i} Raw Phone:`, rawPhone);
           if (!rawPhone) continue;
           
-          const phone = String(rawPhone).replace(/[^0-9]/g, '');
-          console.log(`Row ${i} Parsed Phone:`, phone);
+          let phone = String(rawPhone).replace(/[^0-9]/g, '');
+          if (phone.length === 10) phone = '91' + phone;
           if (phone.length < 10) continue;
 
-          const name = nameIdx !== -1 ? row[nameIdx] : 'Unknown';
-          const email = emailIdx !== -1 ? row[emailIdx] : null;
-          const sector = sectorIdx !== -1 ? row[sectorIdx] : null;
+          validRows.push({ row, phone });
+        }
 
-          let customFields = {};
-          // Custom field mappings
-          for (const [key, value] of Object.entries(fieldMapping)) {
-            if (key.startsWith('customFields.')) {
-              const cfName = key.replace('customFields.', '');
-              const cfIdx = headers.findIndex(h => h === value);
-              if (cfIdx !== -1 && row[cfIdx]) {
-                customFields[cfName] = row[cfIdx];
+        const BATCH_SIZE = 5000;
+        const chunkPromises = [];
+
+        for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+          const batch = validRows.slice(i, i + BATCH_SIZE);
+          
+          chunkPromises.push((async () => {
+            let localAdded = 0;
+            let localUpdated = 0;
+            
+            const batchPhones = batch.map(b => b.phone);
+            const existingContacts = await Contact.find({ phone: { $in: batchPhones } });
+            const contactMap = new Map();
+            for (const c of existingContacts) contactMap.set(c.phone, c);
+
+            const bulkOps = [];
+            
+            for (const item of batch) {
+              const { row, phone } = item;
+              const name = nameIdx !== -1 && row[nameIdx] ? row[nameIdx] : 'Unknown';
+              const email = emailIdx !== -1 ? row[emailIdx] : null;
+              const sector = sectorIdx !== -1 ? row[sectorIdx] : null;
+
+              let customFields = {};
+              for (const [key, value] of Object.entries(fieldMapping)) {
+                if (key.startsWith('customFields.')) {
+                  const cfName = key.replace('customFields.', '');
+                  const cfIdx = headers.findIndex(h => h === value);
+                  if (cfIdx !== -1 && row[cfIdx]) customFields[cfName] = row[cfIdx];
+                }
+              }
+              
+              headers.forEach((header, index) => {
+                 if (index !== phoneIdx && index !== nameIdx && index !== emailIdx && index !== sectorIdx) {
+                    if (row[index] && !Object.values(fieldMapping).includes(header)) {
+                       customFields[header] = row[index];
+                    }
+                 }
+              });
+
+              const contact = contactMap.get(phone);
+              if (contact) {
+                let updateFields = {};
+                if (name && name !== 'Unknown' && contact.name === 'Unknown') updateFields.name = name;
+                if (sector && (!contact.sector || contact.sector === 'Unassigned')) updateFields.sector = sector;
+                
+                const cfObj = {};
+                if (contact.customFields) {
+                  for (const [k, v] of contact.customFields.entries()) cfObj[k] = v;
+                }
+                
+                let hasCfUpdate = false;
+                for (const [k, v] of Object.entries(customFields)) {
+                   if (cfObj[k] !== String(v)) {
+                     updateFields[`customFields.${k}`] = String(v);
+                     hasCfUpdate = true;
+                   }
+                }
+                if (email && cfObj.email !== String(email)) {
+                   updateFields['customFields.email'] = String(email);
+                   hasCfUpdate = true;
+                }
+
+                if (Object.keys(updateFields).length > 0) {
+                  bulkOps.push({
+                    updateOne: {
+                      filter: { phone },
+                      update: { $set: updateFields }
+                    }
+                  });
+                  localUpdated++;
+                }
+              } else {
+                bulkOps.push({
+                  insertOne: {
+                    document: {
+                      name,
+                      phone,
+                      sector: sector || 'Unassigned',
+                      source: 'Google Sheets Auto-Sync',
+                      tags: [integration.importTag],
+                      customFields: { ...customFields, ...(email ? { email } : {}) },
+                      whatsappAccountId: integration.whatsappAccountId
+                    }
+                  }
+                });
+                localAdded++;
               }
             }
-          }
-          
-          // Unmapped headers become custom fields
-          headers.forEach((header, index) => {
-             if (index !== phoneIdx && index !== nameIdx && index !== emailIdx && index !== sectorIdx) {
-                if (row[index] && !Object.values(fieldMapping).includes(header)) {
-                   customFields[header] = row[index];
-                }
-             }
-          });
-
-          let contact = await Contact.findOne({ phone });
-          if (contact) {
-            let updated = false;
-            if (name && name !== 'Unknown' && contact.name === 'Unknown') {
-              contact.name = name; updated = true;
+            
+            if (bulkOps.length > 0) {
+               await Contact.bulkWrite(bulkOps, { ordered: false });
             }
-            if (sector && !contact.sector) {
-              contact.sector = sector; updated = true;
-            }
-            if (Object.keys(customFields).length > 0 || email) {
-               if (!contact.customFields) contact.customFields = new Map();
-               for (const [k, v] of Object.entries(customFields)) {
-                 if (contact.customFields.get(k) !== String(v)) {
-                   contact.customFields.set(k, String(v));
-                   updated = true;
-                 }
-               }
-               if (email && contact.customFields.get('email') !== String(email)) {
-                 contact.customFields.set('email', String(email));
-                 updated = true;
-               }
-            }
-            if (updated) {
-              await contact.save();
-              updatedCount++;
-            }
-          } else {
-            await Contact.create({
-              name: name || 'Unknown',
-              phone,
-              sector,
-              source: 'Google Sheets Auto-Sync',
-              tags: [integration.importTag],
-              customFields: { ...customFields, email },
-              whatsappAccountId: integration.whatsappAccountId
-            });
-            addedCount++;
-          }
+            return { added: localAdded, updated: localUpdated };
+          })());
+        }
+        
+        const results = await Promise.all(chunkPromises);
+        for (const res of results) {
+           addedCount += res.added;
+           updatedCount += res.updated;
         }
         
         integration.lastSyncedAt = new Date();

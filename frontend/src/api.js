@@ -16,13 +16,13 @@ api.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${parsed.token}`;
     }
   }
-  
+
   const accountId = localStorage.getItem("whatsappAccountId");
   // Only set if not already present to allow overrides in specific components
   if (accountId && !config.headers["x-whatsapp-account-id"]) {
     config.headers["x-whatsapp-account-id"] = accountId;
   }
-  
+
   return config;
 });
 
