@@ -35,7 +35,7 @@ export default function ChatListScreen({ navigation }) {
   const [statuses, setStatuses] = useState([]);
   const [sectors, setSectors] = useState([]);
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all'); // 'all', 'unread', or 'window'
+  const [filter, setFilterState] = useState('all'); const filterRef = useRef('all'); const setFilter = (v) => { setFilterState(v); filterRef.current = v; }; // 'all', 'unread', or 'window'
   const [statusFilter, setStatusFilter] = useState('all');
   const [sectorFilter, setSectorFilter] = useState('all');
   const [showStatusPicker, setShowStatusPicker] = useState(false);
@@ -194,22 +194,31 @@ export default function ChatListScreen({ navigation }) {
         const targetPhone = clean(data.conversation.phone);
         const exists = prev.some(c => clean(c.phone) === targetPhone);
         if (exists) {
-          return prev.map(c => {
-            if (clean(c.phone) === targetPhone) {
-              return {
-                ...c,
-                lastMessage: msg.body || (msg.type === 'image' ? '📷 Photo' : msg.type === 'document' ? '📄 Document' : 'Message'),
-                lastMessageTime: msg.timestamp,
-                unreadCount: c.unreadCount + (msg.direction === 'inbound' ? 1 : 0),
-                lastCustomerMessageAt: msg.direction === 'inbound' ? msg.timestamp : c.lastCustomerMessageAt
-              };
+            let updatedList = prev.map(c => {
+              if (clean(c.phone) === targetPhone) {
+                return {
+                  ...c,
+                  lastMessage: msg.body || (msg.type === 'image' ? '📸 Photo' : msg.type === 'document' ? '📄 Document' : 'Message'),
+                  lastMessageTime: msg.timestamp,
+                  unreadCount: c.unreadCount + (msg.direction === 'inbound' ? 1 : 0),
+                  lastCustomerMessageAt: msg.direction === 'inbound' ? msg.timestamp : c.lastCustomerMessageAt
+                };
+              }
+              return c;
+            });
+            
+            if (typeof filterRef !== 'undefined' && filterRef.current === 'unread') {
+                updatedList = updatedList.filter(c => c.unreadCount > 0);
             }
-            return c;
-          }).sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
-        } else {
-          fetchConversations(1, true);
-          return prev;
-        }
+            
+            return updatedList.sort((a, b) => new Date(b.lastMessageTime) - new Date(a.lastMessageTime));
+          } else {
+            if (typeof filterRef !== 'undefined' && filterRef.current === 'unread' && msg.direction !== 'inbound') {
+                return prev;
+            }
+            fetchConversations(1, true);
+            return prev;
+          }
       });
 
       if (msg.direction === 'inbound') {
@@ -271,10 +280,7 @@ export default function ChatListScreen({ navigation }) {
       fetchConversations(1, true);
     });
 
-    const unsubscribe = navigation.addListener('focus', () => {
-      setPage(1);
-      fetchConversations(1);
-    });
+    const unsubscribe = navigation.addListener('focus', () => { /* setPage(1); fetchConversations(1); removed to preserve scroll */ });
 
     return () => {
       socket.disconnect();
