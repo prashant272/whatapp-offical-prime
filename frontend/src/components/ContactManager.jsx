@@ -4,6 +4,7 @@ import api from "../api";
 import { Search, UserPlus, Filter, Download, Trash2, ChevronLeft, ChevronRight, Loader2, Layers, ExternalLink, Upload, FileSpreadsheet, User, Smartphone, History, Clock, Calendar, Pencil, Send } from "lucide-react";
 import { useWhatsAppAccount } from "../WhatsAppAccountContext";
 import { Link, useNavigate } from "react-router-dom";
+import { useGoogleLogin } from "@react-oauth/google";
 import ImportMapperModal from "./ContactManager/ImportMapperModal";
 
 
@@ -59,6 +60,7 @@ const ContactManager = () => {
   const [showAllAccounts, setShowAllAccounts] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showMapper, setShowMapper] = useState(false);
+  const [sheetUrl, setSheetUrl] = useState("");
   const [tempImportData, setTempImportData] = useState([]);
   const [importData, setImportData] = useState([]);
   const [importing, setImporting] = useState(false);
@@ -75,6 +77,26 @@ const ContactManager = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   const [filters, setFilters] = useState({ search: "", status: "", tag: "", sector: "" });
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+
+  useEffect(() => {
+    // Check google auth status
+    api.get("/google-auth/status").then(res => setIsGoogleConnected(res.data.isAuthenticated)).catch(() => {});
+  }, []);
+
+  const loginGoogle = useGoogleLogin({
+    flow: 'auth-code',
+    scope: 'https://www.googleapis.com/auth/spreadsheets.readonly https://www.googleapis.com/auth/drive.readonly',
+    onSuccess: async (codeResponse) => {
+      try {
+        await api.post("/google-auth/callback", { code: codeResponse.code });
+        setIsGoogleConnected(true);
+        alert("Google Account Connected! Background auto-sync is now active for your Live Sheets.");
+      } catch (err) {
+        alert("Failed to connect Google Account.");
+      }
+    },
+  });
 
   const fetchContacts = useCallback(async (pageNum) => {
     if (!activeAccount && !showAllAccounts) return;
@@ -224,6 +246,42 @@ const ContactManager = () => {
       setShowMapper(true);
     };
     reader.readAsBinaryString(file);
+  };
+
+  const handleGoogleSheetSync = async () => {
+    if (!sheetUrl) return;
+    try {
+      setImporting(true);
+      const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+      if (!match) {
+        alert("Invalid Google Sheet URL. Please copy the full link.");
+        return;
+      }
+      const sheetId = match[1];
+      
+      const res = await fetch(`https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`);
+      if (!res.ok) {
+        throw new Error("Cannot access sheet. Make sure it is set to 'Anyone with the link can view' under Share settings.");
+      }
+      
+      const csvText = await res.text();
+      const wb = XLSX.read(csvText, { type: 'string' });
+      const data = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+      
+      if (data.length === 0) {
+        alert("Sheet is empty or invalid format.");
+        return;
+      }
+      
+      setTempImportData(data);
+      setShowImportModal(false);
+      setShowMapper(true);
+      setSheetUrl("");
+    } catch(err) {
+      alert(err.message);
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleMappingComplete = async (processedContacts) => {
@@ -502,6 +560,53 @@ const ContactManager = () => {
               <p style={{ fontSize: "0.8rem", color: "#999", marginTop: "5px" }}>Supports .xlsx, .xls, .csv</p>
               <input id="import-file" type="file" accept=".xlsx, .xls, .csv" hidden onChange={handleFileUpload} />
             </div>
+
+            <div style={{ margin: "2rem 0", display: "flex", alignItems: "center", gap: "15px" }}>
+              <div style={{ flex: 1, height: "1px", background: "#eee" }}></div>
+              <span style={{ fontSize: "0.85rem", color: "#999", fontWeight: "700", textTransform: "uppercase" }}>OR IMPORT FROM</span>
+              <div style={{ flex: 1, height: "1px", background: "#eee" }}></div>
+            </div>
+
+            <div style={{ background: "#f8fafc", padding: "20px", borderRadius: "15px", border: "1px solid #eef2f6" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "15px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <FileSpreadsheet size={20} color="#0f9d58" />
+                  <h4 style={{ margin: 0, color: "#1a1a1a", fontSize: "1rem", fontWeight: "800" }}>Live Google Sheet</h4>
+                </div>
+                {!isGoogleConnected ? (
+                  <button onClick={() => loginGoogle()} style={{ background: "white", border: "1px solid #ddd", padding: "6px 12px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.8rem", fontWeight: "700" }}>
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="G" style={{ width: "14px" }} />
+                    Connect Account
+                  </button>
+                ) : (
+                  <span style={{ fontSize: "0.75rem", background: "#e7fce3", color: "#008069", padding: "4px 8px", borderRadius: "12px", fontWeight: "800" }}>✓ Google Connected</span>
+                )}
+              </div>
+              
+              <p style={{ fontSize: "0.8rem", color: "#666", marginBottom: "15px" }}>
+                {isGoogleConnected 
+                  ? "Your sheets will automatically sync every 5 minutes in the background." 
+                  : "Make sure your Google Sheet is set to \"Anyone with the link can view\" OR connect your Google account for private auto-sync."}
+              </p>
+              
+              <div style={{ display: "flex", gap: "10px" }}>
+                <input 
+                  type="text" 
+                  value={sheetUrl}
+                  onChange={e => setSheetUrl(e.target.value)}
+                  placeholder="Paste Google Sheet URL here..."
+                  style={{ flex: 1, padding: "10px 15px", borderRadius: "8px", border: "1px solid #ddd", fontSize: "0.9rem", outline: "none" }}
+                />
+                <button 
+                  onClick={handleGoogleSheetSync}
+                  disabled={importing || !sheetUrl}
+                  style={{ padding: "10px 20px", borderRadius: "8px", background: "#0f9d58", color: "white", border: "none", fontWeight: "800", cursor: importing || !sheetUrl ? "not-allowed" : "pointer", opacity: importing || !sheetUrl ? 0.7 : 1 }}
+                >
+                  {importing ? "Syncing..." : "Sync Now"}
+                </button>
+              </div>
+            </div>
+
             <div style={{ display: "flex", gap: "15px", marginTop: "2.5rem" }}>
               <button onClick={() => setShowImportModal(false)} style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "2px solid #eee", background: "white", fontWeight: "800", cursor: "pointer" }}>Cancel</button>
             </div>

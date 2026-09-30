@@ -12,6 +12,11 @@ router.post("/bulk-update", bulkUpdateContacts);
 router.post("/bulk-details", getBulkDetails);
 router.get("/", getContacts);
 router.get("/tags", getUniqueTags);
+router.get("/sheets", (req, res, next) => import("../controllers/contactController.js").then(m => m.getRegisteredSheets(req, res, next)).catch(next));
+router.get("/sheets/headers", (req, res, next) => import("../controllers/contactController.js").then(m => m.getSheetHeaders(req, res, next)).catch(next));
+router.post("/sheets", (req, res, next) => import("../controllers/contactController.js").then(m => m.registerSheet(req, res, next)).catch(next));
+router.delete("/sheets/:id", (req, res, next) => import("../controllers/contactController.js").then(m => m.deleteSheet(req, res, next)).catch(next));
+
 router.get("/:id", getContactById);
 router.post("/import", importContacts);
 router.post("/check-import-duplicates", checkImportDuplicates);

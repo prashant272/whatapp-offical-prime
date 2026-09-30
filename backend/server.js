@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import connectDB from "./config/db.js";
+import cron from "node-cron";
+import { syncGoogleSheets } from "./services/googleSheetsSyncService.js";
 
 // Route Imports
 import templateRoutes from "./routes/templateRoutes.js";
@@ -33,6 +35,7 @@ import callRoutes from "./routes/callRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import emailRoutes from "./routes/emailRoutes.js";
 import windowReminderRoutes from "./routes/windowReminderRoutes.js";
+import googleAuthRoutes from "./routes/googleAuthRoutes.js";
 import { protect, restrictTo } from "./middleware/authMiddleware.js";
 import { attachWhatsAppAccount } from "./middleware/accountMiddleware.js";
 import { errorHandler } from "./utils/errorHandler.js";
@@ -96,6 +99,7 @@ app.use("/api/calls", callRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/window-reminders", windowReminderRoutes);
+app.use("/api/google-auth", googleAuthRoutes);
 
 app.get("/", (req, res) => {
   res.status(200).json({
@@ -108,4 +112,12 @@ app.get("/", (req, res) => {
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-httpServer.listen(PORT, () => console.log(`Backend running on port ${PORT} 🚀`));
+httpServer.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT} 🚀`);
+  
+  // Start Background Sync Jobs
+  cron.schedule("*/5 * * * *", () => {
+    console.log("Running Google Sheets Auto-Sync (Every 5 Mins)...");
+    syncGoogleSheets();
+  });
+});

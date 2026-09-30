@@ -88,11 +88,11 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         setFinalProcessedContacts(processed);
         setShowDuplicateResolver(true);
       } else {
-        onComplete(processed);
+        onComplete(processed, mappings, customMappings);
       }
     } catch (err) {
       console.error("Duplicate check error:", err);
-      onComplete(processed);
+      onComplete(processed, mappings, customMappings);
     } finally {
       setCheckingDuplicates(false);
     }
@@ -106,7 +106,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       finalContacts = finalContacts.filter(c => !duplicatePhones.has(c.phone));
     }
 
-    onComplete(finalContacts);
+    onComplete(finalContacts, mappings, customMappings);
     setShowDuplicateResolver(false);
     setShowDuplicateReviewer(false);
   };

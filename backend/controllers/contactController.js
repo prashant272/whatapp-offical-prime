@@ -6,6 +6,8 @@ import Campaign from "../models/Campaign.js";
 import Message from "../models/Message.js";
 import WhatsAppAccount from "../models/WhatsAppAccount.js";
 import { normalizePhone } from "../utils/phoneUtils.js";
+import User from '../models/User.js';
+import { google } from 'googleapis';
 
 export const verifyNumbers = async (req, res, next) => {
   try {
@@ -766,5 +768,80 @@ export const checkCampaignHistory = async (req, res, next) => {
     res.json({ history });
   } catch (err) {
     next(err);
+  }
+};
+export const registerSheet = async (req, res) => {
+  try {
+    const { sheetUrl, whatsappAccountId, importTag, fieldMapping } = req.body;
+    if (!sheetUrl) return res.status(400).json({ error: "Sheet URL is required" });
+    const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) return res.status(400).json({ error: "Invalid Google Sheet URL" });
+    const spreadsheetId = match[1];
+    const SheetIntegration = (await import("../models/SheetIntegration.js")).default;
+    let integration = await SheetIntegration.findOne({ spreadsheetId });
+    if (!integration) {
+      integration = new SheetIntegration({
+        spreadsheetId, spreadsheetUrl: sheetUrl, createdBy: req.user._id,
+        whatsappAccountId, importTag: importTag || "Google_Sheet_Import", fieldMapping: fieldMapping || {}
+      });
+      await integration.save();
+    } else {
+      integration.fieldMapping = fieldMapping || integration.fieldMapping;
+      await integration.save();
+    }
+    import("../services/googleSheetsSyncService.js").then(({ syncGoogleSheets }) => { syncGoogleSheets(); });
+    res.status(200).json({ success: true, message: "Sheet registered for auto-sync" });
+  } catch (error) {
+    console.error("Error registering sheet:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getSheetHeaders = async (req, res) => {
+  try {
+    const { sheetUrl, sheetName = 'Sheet1' } = req.query;
+    if (!sheetUrl) return res.status(400).json({ error: 'Sheet URL is required' });
+
+    const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) return res.status(400).json({ error: 'Invalid Google Sheet URL' });
+    const spreadsheetId = match[1];
+
+    const adminUser = await User.findOne({ googleRefreshToken: { $exists: true } });
+    if (!adminUser) return res.status(401).json({ error: 'Google Account not connected' });
+
+    const oauth2Client = new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
+    oauth2Client.setCredentials({ refresh_token: adminUser.googleRefreshToken });
+    const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: '1:1'
+    });
+
+    const headers = response.data.values ? response.data.values[0] : [];
+    res.json({ headers, spreadsheetId });
+  } catch (err) {
+    console.error('Error fetching sheet headers:', err.message);
+    res.status(500).json({ error: 'Failed to fetch sheet headers. Ensure it is accessible.' });
+  }
+};
+
+export const getRegisteredSheets = async (req, res) => {
+  try {
+    const SheetIntegration = (await import('../models/SheetIntegration.js')).default;
+    const sheets = await SheetIntegration.find().sort('-createdAt');
+    res.json({ sheets });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch sheets' });
+  }
+};
+
+export const deleteSheet = async (req, res) => {
+  try {
+    const SheetIntegration = (await import('../models/SheetIntegration.js')).default;
+    await SheetIntegration.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Sheet removed successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete sheet' });
   }
 };

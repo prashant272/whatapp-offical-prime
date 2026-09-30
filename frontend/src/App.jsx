@@ -19,6 +19,7 @@ import CustomFieldManager from "./components/CustomFieldManager";
 import EmailManager from "./components/EmailManager";
 import MetaAdsManager from "./components/MetaAdsManager";
 import { WhatsAppAccountProvider, useWhatsAppAccount } from "./WhatsAppAccountContext";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 
 function AppContent() {
   const [user, setUser] = useState(() => {
@@ -313,9 +314,11 @@ function FlowManagerWrapper() {
 
 function App() {
   return (
-    <WhatsAppAccountProvider>
-      <AppContent />
-    </WhatsAppAccountProvider>
+    <GoogleOAuthProvider clientId="942455686048-ibpbq3f7u5v71a2bimc5q6upuip8mijm.apps.googleusercontent.com">
+      <WhatsAppAccountProvider>
+        <AppContent />
+      </WhatsAppAccountProvider>
+    </GoogleOAuthProvider>
   );
 }
 

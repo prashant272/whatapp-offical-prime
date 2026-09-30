@@ -475,3 +475,44 @@ export const handleWebhook = async (req, res) => {
     res.sendStatus(404);
   }
 };
+export const handleGoogleSheetsWebhook = async (req, res) => {
+  try {
+    const { secret, name, phone, email, ...customFields } = req.body;
+    
+    // Simple authentication
+    if (secret !== process.env.WEBHOOK_VERIFY_TOKEN) {
+       return res.status(403).json({ error: "Invalid secret token" });
+    }
+    
+    if (!phone) return res.status(400).json({ error: "Phone is required" });
+    
+    const formattedPhone = normalizePhone(phone.toString());
+    if (!formattedPhone) return res.status(400).json({ error: "Invalid phone format" });
+
+    let contact = await Contact.findOne({ phone: formattedPhone });
+    
+    if (contact) {
+       contact.name = name || contact.name;
+       if (email) {
+          contact.customFields = { ...contact.customFields, email };
+       }
+       contact.customFields = { ...contact.customFields, ...customFields };
+    } else {
+       contact = new Contact({
+         name: name || "Unknown",
+         phone: formattedPhone,
+         source: "Google Sheets",
+         customFields: { ...customFields, email }
+       });
+    }
+    await contact.save();
+    
+    // Notify UI via WebSockets if any client is listening
+    getIO().emit("contact_imported", contact);
+
+    res.status(200).json({ success: true, contact });
+  } catch(err) {
+    console.error("Google Sheets Webhook Error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};

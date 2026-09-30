@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema({
     default: true
   },
   activeToken: { type: String }, // To enforce single device login
+  googleRefreshToken: { type: String },
   createdAt: { type: Date, default: Date.now }
 });
 
