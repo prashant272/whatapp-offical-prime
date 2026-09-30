@@ -2,14 +2,98 @@ import { google } from 'googleapis';
 import User from '../models/User.js';
 import SheetIntegration from '../models/SheetIntegration.js';
 import Contact from '../models/Contact.js';
+import Message from '../models/Message.js';
+import Conversation from '../models/Conversation.js';
+import { sendTemplateMessage } from './whatsappService.js';
 
 const getOauth2Client = () => {
   return new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
 };
 
+const buildTemplateComponents = (template, configObj, contactName, contactPhone) => {
+  const components = [];
+  if (!template || !template.components) return components;
+
+  template.components.forEach(comp => {
+    if (comp.type === "HEADER" && ["IMAGE", "VIDEO", "DOCUMENT"].includes(comp.format)) {
+      const url = configObj.get ? configObj.get(`HEADER_${comp.format}`) : configObj[`HEADER_${comp.format}`];
+      if (url) {
+        components.push({
+          type: "header",
+          parameters: [{ type: comp.format.toLowerCase(), [comp.format.toLowerCase()]: { link: url } }]
+        });
+      }
+    }
+    const matches = comp.text?.match(/{{(\d+)}}/g);
+    if (matches) {
+      const parameters = [];
+      matches.forEach(m => {
+        const num = m.replace(/{{|}}/g, "");
+        let val = configObj.get ? configObj.get(`${comp.type}_${num}`) : configObj[`${comp.type}_${num}`];
+        val = val || "";
+        if (val === "[Name]" || val.toLowerCase() === "[name]") val = contactName || "Friend";
+        if (val === "[Phone]" || val.toLowerCase() === "[phone]") val = contactPhone || "";
+        parameters.push({ type: "text", text: val });
+      });
+      if (parameters.length > 0) {
+        components.push({ type: comp.type.toLowerCase(), parameters });
+      }
+    }
+  });
+  return components;
+};
+
+const sendAutoMessage = async (account, toPhone, toName, preset) => {
+  try {
+    const template = preset.template;
+    if (!template) return;
+    const components = buildTemplateComponents(template, preset.config, toName, toPhone);
+    const lang = template.language || "en_US";
+
+    const metaRes = await sendTemplateMessage(account, toPhone, template.name, lang, components);
+    const messageId = metaRes.messages?.[0]?.id;
+
+    let messageBody = `[Template: ${template.name}]`;
+    const bodyComp = template.components.find(c => c.type === "BODY");
+    if (bodyComp && bodyComp.text) {
+      let text = bodyComp.text;
+      const bodyParams = components.find(c => c.type === "body")?.parameters || [];
+      bodyParams.forEach((p, idx) => { text = text.replace(`{{${idx + 1}}}`, p.text || ""); });
+      messageBody = text;
+    }
+
+    const newMessage = new Message({
+      messageId,
+      from: "me",
+      to: toPhone,
+      body: messageBody,
+      type: "template",
+      templateData: { name: template.name, components },
+      direction: "outbound",
+      whatsappAccountId: account._id,
+      status: messageId ? "sent" : "failed"
+    });
+    await newMessage.save();
+
+    await Conversation.findOneAndUpdate(
+      { phone: toPhone.toString().replace(/\D/g, ""), $or: [{ whatsappAccountId: account._id }, { whatsappAccountId: null }] },
+      {
+        lastMessage: newMessage.body,
+        lastMessageTime: new Date(),
+        whatsappAccountId: account._id
+      },
+      { upsert: true, new: true }
+    );
+  } catch (error) {
+    console.error(`Failed to auto-send message to ${toPhone}:`, error.message);
+  }
+};
+
 export const syncGoogleSheets = async () => {
   try {
-    const integrations = await SheetIntegration.find({ active: true });
+    const integrations = await SheetIntegration.find({ active: true })
+      .populate('whatsappAccountId')
+      .populate({ path: 'templatePreset', populate: { path: 'template' } });
     if (integrations.length === 0) return;
 
     const adminUser = await User.findOne({ googleRefreshToken: { $exists: true } });
@@ -59,6 +143,7 @@ export const syncGoogleSheets = async () => {
         let updatedCount = 0;
 
         const validRows = [];
+        const seenPhones = new Set();
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
           const rawPhone = row[phoneIdx];
@@ -67,6 +152,9 @@ export const syncGoogleSheets = async () => {
           let phone = String(rawPhone).replace(/[^0-9]/g, '');
           if (phone.length === 10) phone = '91' + phone;
           if (phone.length < 10) continue;
+          
+          if (seenPhones.has(phone)) continue;
+          seenPhones.add(phone);
 
           validRows.push({ row, phone });
         }
@@ -80,6 +168,7 @@ export const syncGoogleSheets = async () => {
           chunkPromises.push((async () => {
             let localAdded = 0;
             let localUpdated = 0;
+            const newContactsToMessage = [];
             
             const batchPhones = batch.map(b => b.phone);
             const existingContacts = await Contact.find({ phone: { $in: batchPhones } });
@@ -116,6 +205,7 @@ export const syncGoogleSheets = async () => {
                 let updateFields = {};
                 if (name && name !== 'Unknown' && contact.name === 'Unknown') updateFields.name = name;
                 if (sector && (!contact.sector || contact.sector === 'Unassigned')) updateFields.sector = sector;
+                if (integration.assignedTo) updateFields.assignedTo = integration.assignedTo;
                 
                 const cfObj = {};
                 if (contact.customFields) {
@@ -134,11 +224,24 @@ export const syncGoogleSheets = async () => {
                    hasCfUpdate = true;
                 }
 
-                if (Object.keys(updateFields).length > 0) {
+                const msgTag = `sheet_msg_${integration._id}`;
+                const hasBeenMessaged = contact.tags && contact.tags.includes(msgTag);
+                
+                let addToSetFields = null;
+                if (!hasBeenMessaged && integration.whatsappAccountId && integration.templatePreset) {
+                   newContactsToMessage.push({ phone, name });
+                   addToSetFields = { tags: msgTag };
+                }
+
+                if (Object.keys(updateFields).length > 0 || addToSetFields) {
+                  const updateDoc = {};
+                  if (Object.keys(updateFields).length > 0) updateDoc.$set = updateFields;
+                  if (addToSetFields) updateDoc.$addToSet = addToSetFields;
+
                   bulkOps.push({
                     updateOne: {
                       filter: { phone },
-                      update: { $set: updateFields }
+                      update: updateDoc
                     }
                   });
                   localUpdated++;
@@ -151,19 +254,32 @@ export const syncGoogleSheets = async () => {
                       phone,
                       sector: sector || 'Unassigned',
                       source: 'Google Sheets Auto-Sync',
-                      tags: [integration.importTag],
+                      tags: [integration.importTag, `sheet_msg_${integration._id}`],
                       customFields: { ...customFields, ...(email ? { email } : {}) },
-                      whatsappAccountId: integration.whatsappAccountId
+                      whatsappAccountId: integration.whatsappAccountId,
+                      assignedTo: integration.assignedTo || null
                     }
                   }
                 });
                 localAdded++;
+                if (integration.whatsappAccountId && integration.templatePreset) {
+                   newContactsToMessage.push({ phone, name });
+                }
               }
             }
             
             if (bulkOps.length > 0) {
                await Contact.bulkWrite(bulkOps, { ordered: false });
             }
+            
+            if (newContactsToMessage.length > 0 && integration.whatsappAccountId && integration.templatePreset) {
+              const account = integration.whatsappAccountId;
+              const preset = integration.templatePreset;
+              for (const contact of newContactsToMessage) {
+                await sendAutoMessage(account, contact.phone, contact.name, preset);
+              }
+            }
+            
             return { added: localAdded, updated: localUpdated };
           })());
         }

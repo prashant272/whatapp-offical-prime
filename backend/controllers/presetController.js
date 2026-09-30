@@ -28,7 +28,7 @@ export const getPresets = async (req, res) => {
     if (!account) return res.status(400).json({ error: "No active account selected" });
 
     let query = {};
-    if (!account.isAll) {
+    if (!account.isAll && req.query.all !== "true") {
       query = { 
         $or: [
           { whatsappAccountId: account._id },

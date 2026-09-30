@@ -17,7 +17,7 @@ import AddContactModal from "./AddContactModal";
 
 const ContactManagerMain = ({ deleted = false }) => {
   const navigate = useNavigate();
-  const { activeAccount } = useWhatsAppAccount();
+  const { activeAccount, accounts } = useWhatsAppAccount();
 
   // States
   const [viewMode, setViewMode] = useState("list"); // list or kanban
@@ -34,6 +34,8 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [sources, setSources] = useState([]);
   const [winners, setWinners] = useState([]);
   const [customStatuses, setCustomStatuses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [presets, setPresets] = useState([]);
 
   // Selection
   const [selectedContactIds, setSelectedContactIds] = useState(new Set());
@@ -178,18 +180,22 @@ const ContactManagerMain = ({ deleted = false }) => {
 
   const fetchMetadata = async () => {
     try {
-      const [fieldsRes, sectorsRes, sourcesRes, statusRes, winnersRes] = await Promise.all([
+      const [fieldsRes, sectorsRes, sourcesRes, statusRes, winnersRes, usersRes, presetsRes] = await Promise.all([
         api.get("/custom-fields"),
         api.get("/sectors"),
         api.get("/sources"),
         api.get("/statuses"),
-        api.get("/winners").catch(() => ({ data: [] }))
+        api.get("/winners").catch(() => ({ data: [] })),
+        api.get("/users").catch(() => ({ data: { users: [] } })),
+        api.get("/presets?all=true").catch(() => ({ data: { presets: [] } }))
       ]);
       setCustomFields(fieldsRes.data);
       setSectors(sectorsRes.data);
       setSources(Array.isArray(sourcesRes.data) ? sourcesRes.data : []);
       setWinners(Array.isArray(winnersRes.data) ? winnersRes.data : []);
       setCustomStatuses(statusRes.data);
+      setUsers(Array.isArray(usersRes.data) ? usersRes.data : []);
+      setPresets(Array.isArray(presetsRes.data) ? presetsRes.data : []);
     } catch (err) {
       console.error("Meta fetch error:", err);
     }
@@ -300,7 +306,7 @@ const ContactManagerMain = ({ deleted = false }) => {
     reader.readAsBinaryString(file);
   };
 
-  const handleMappingComplete = async (processedContacts, standardMappings, customMappings) => {
+  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount) => {
     setImporting(true);
     try {
       if (isGoogleConnected && sheetUrl) {
@@ -319,8 +325,10 @@ const ContactManagerMain = ({ deleted = false }) => {
 
         await api.post("/contacts/sheets", { 
           sheetUrl, 
-          whatsappAccountId: activeAccount?._id,
-          fieldMapping
+          whatsappAccountId: defaultWhatsAppAccount || activeAccount?._id,
+          fieldMapping,
+          assignedTo: defaultAssignedTo || null,
+          templatePreset: templatePreset || null
         });
         alert("Google Sheet successfully mapped and registered for Auto-Sync!");
         setSheetUrl("");
@@ -615,6 +623,10 @@ const ContactManagerMain = ({ deleted = false }) => {
         sectors={sectors}
         sources={sources}
         winners={winners}
+        users={users}
+        presets={presets}
+        accounts={accounts}
+        activeAccount={activeAccount}
       />
 
       {showEditModal && (

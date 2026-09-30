@@ -9,6 +9,8 @@ const SheetIntegrationSchema = new mongoose.Schema({
   lastSyncedAt: { type: Date },
   active: { type: Boolean, default: true },
   importTag: { type: String, default: "Google_Sheet_Import" },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+  templatePreset: { type: mongoose.Schema.Types.ObjectId, ref: "TemplatePreset", default: null },
   fieldMapping: { type: Object, default: {} },
   syncStats: {
     totalAdded: { type: Number, default: 0 },

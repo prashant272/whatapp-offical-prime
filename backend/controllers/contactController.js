@@ -157,7 +157,7 @@ export const getContacts = async (req, res, next) => {
     if (onlyPhones === 'true') {
       const rawContacts = await Contact.find(query)
         .select("phone")
-        .sort({ createdAt: sortOrderParam })
+        .sort({ updatedAt: sortOrderParam })
         .skip(skip)
         .limit(limitInt)
         .allowDiskUse(true)
@@ -177,7 +177,7 @@ export const getContacts = async (req, res, next) => {
       .populate("whatsappAccountId", "name")
       .populate("accountsData.whatsappAccountId", "name phoneNumber")
       .populate("accountsData.assignedTo", "name")
-      .sort({ createdAt: sortOrderParam })
+      .sort({ updatedAt: sortOrderParam })
       .skip(skip)
       .limit(limitInt)
       .allowDiskUse(true)
@@ -772,7 +772,7 @@ export const checkCampaignHistory = async (req, res, next) => {
 };
 export const registerSheet = async (req, res) => {
   try {
-    const { sheetUrl, whatsappAccountId, importTag, fieldMapping } = req.body;
+    const { sheetUrl, whatsappAccountId, importTag, fieldMapping, assignedTo, templatePreset } = req.body;
     if (!sheetUrl) return res.status(400).json({ error: "Sheet URL is required" });
     const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
     if (!match) return res.status(400).json({ error: "Invalid Google Sheet URL" });
@@ -782,11 +782,15 @@ export const registerSheet = async (req, res) => {
     if (!integration) {
       integration = new SheetIntegration({
         spreadsheetId, spreadsheetUrl: sheetUrl, createdBy: req.user._id,
-        whatsappAccountId, importTag: importTag || "Google_Sheet_Import", fieldMapping: fieldMapping || {}
+        whatsappAccountId, importTag: importTag || "Google_Sheet_Import", fieldMapping: fieldMapping || {},
+        assignedTo: assignedTo || null,
+        templatePreset: templatePreset || null
       });
       await integration.save();
     } else {
       integration.fieldMapping = fieldMapping || integration.fieldMapping;
+      if (assignedTo !== undefined) integration.assignedTo = assignedTo;
+      if (templatePreset !== undefined) integration.templatePreset = templatePreset;
       await integration.save();
     }
     import("../services/googleSheetsSyncService.js").then(({ syncGoogleSheets }) => { syncGoogleSheets(); });

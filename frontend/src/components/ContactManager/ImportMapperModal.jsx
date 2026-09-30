@@ -3,7 +3,7 @@ import { X, Check, AlertCircle, FileText, ChevronRight, Layers, Smartphone, User
 import api from "../../api";
 
 
-const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [], winners = [] }) => {
+const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [], winners = [], users = [], presets = [], accounts = [], activeAccount = null }) => {
   const [headers, setHeaders] = useState([]);
   const [mappings, setMappings] = useState({
     name: "",
@@ -27,6 +27,9 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
   const [batchTag, setBatchTag] = useState(defaultBatchTag);
   const [defaultSector, setDefaultSector] = useState(""); // Override sector for all leads
   const [defaultSource, setDefaultSource] = useState(""); // Override source for all leads
+  const [defaultAssignedTo, setDefaultAssignedTo] = useState(""); // Override assigned user
+  const [defaultPresetTemplate, setDefaultPresetTemplate] = useState(""); // Override template preset
+  const [defaultWhatsAppAccount, setDefaultWhatsAppAccount] = useState(activeAccount && !activeAccount.isAll ? activeAccount._id : ""); // Override WhatsApp account
 
   useEffect(() => {
     if (rawData && rawData.length > 0) {
@@ -65,6 +68,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         sector: defaultSector || row[mappings.sector] || "Unassigned",
         source: defaultSource || row[mappings.source] || "",
         winners: defaultWinners.length ? defaultWinners : (row[mappings.winners] ? String(row[mappings.winners]).split(',').map(w => w.trim()).filter(Boolean) : []),
+        assignedTo: defaultAssignedTo || null,
         tags: allTags,
         customFields: {}
       };
@@ -88,11 +92,11 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         setFinalProcessedContacts(processed);
         setShowDuplicateResolver(true);
       } else {
-        onComplete(processed, mappings, customMappings);
+        onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount);
       }
     } catch (err) {
       console.error("Duplicate check error:", err);
-      onComplete(processed, mappings, customMappings);
+      onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount);
     } finally {
       setCheckingDuplicates(false);
     }
@@ -106,7 +110,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       finalContacts = finalContacts.filter(c => !duplicatePhones.has(c.phone));
     }
 
-    onComplete(finalContacts, mappings, customMappings);
+    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount);
     setShowDuplicateResolver(false);
     setShowDuplicateReviewer(false);
   };
@@ -255,6 +259,69 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                         <option key={s._id || s.name} value={s.name}>{s.name}</option>
                       ))}
                     </select>
+
+                    {users && users.length > 0 && (
+                      <>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                          👤 Bulk Assign Team Member
+                        </label>
+                        <select
+                          value={defaultAssignedTo}
+                          onChange={e => setDefaultAssignedTo(e.target.value)}
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #93c5fd", fontSize: "0.85rem", fontWeight: "700", color: defaultAssignedTo ? "#1d4ed8" : "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer" }}
+                        >
+                          <option value="">-- Unassigned --</option>
+                          {users.map(u => (
+                            <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
+                          ))}
+                        </select>
+                      </>
+                    )}
+
+                    {accounts && accounts.length > 0 && (
+                      <>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#00a884", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                          📱 Sender WhatsApp Account
+                        </label>
+                        <select
+                          value={defaultWhatsAppAccount}
+                          onChange={e => {
+                            setDefaultWhatsAppAccount(e.target.value);
+                            setDefaultPresetTemplate(""); // Reset preset when account changes
+                          }}
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #00a884", fontSize: "0.85rem", fontWeight: "700", color: defaultWhatsAppAccount ? "#00a884" : "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer", marginBottom: "6px" }}
+                        >
+                          <option value="">-- Select Sender Account --</option>
+                          {accounts.filter(a => !a.isAll).map(a => (
+                            <option key={a._id} value={a._id}>{a.name} (+{a.phoneNumberId})</option>
+                          ))}
+                        </select>
+                      </>
+                    )}
+
+                    {presets && presets.length > 0 && defaultWhatsAppAccount && (
+                      <>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#00a884", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                          💬 Auto-Send Preset Template Message
+                        </label>
+                        <select
+                          value={defaultPresetTemplate}
+                          onChange={e => setDefaultPresetTemplate(e.target.value)}
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #00a884", fontSize: "0.85rem", fontWeight: "700", color: defaultPresetTemplate ? "#00a884" : "#64748b", outline: "none", background: "white", boxSizing: "border-box", cursor: "pointer", marginBottom: "6px" }}
+                        >
+                          <option value="">-- No Auto-Message --</option>
+                          {presets.map(p => {
+                            const accountMatches = !p.whatsappAccountId || p.whatsappAccountId === defaultWhatsAppAccount || (p.whatsappAccountId?._id === defaultWhatsAppAccount);
+                            if (!accountMatches) return null;
+                            return (
+                              <option key={p._id} value={p._id}>
+                                {p.name} (Uses: {p.template?.name})
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </>
+                    )}
 
                     <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
                       🏆 Bulk Assign Winners (Override)
