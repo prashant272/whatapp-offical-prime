@@ -772,7 +772,7 @@ export const checkCampaignHistory = async (req, res, next) => {
 };
 export const registerSheet = async (req, res) => {
   try {
-    const { sheetUrl, whatsappAccountId, importTag, fieldMapping, assignedTo, templatePreset } = req.body;
+    const { sheetUrl, whatsappAccountId, importTag, fieldMapping, assignedTo, templatePreset, defaultSource, defaultSector } = req.body;
     if (!sheetUrl) return res.status(400).json({ error: "Sheet URL is required" });
     const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
     if (!match) return res.status(400).json({ error: "Invalid Google Sheet URL" });
@@ -784,13 +784,17 @@ export const registerSheet = async (req, res) => {
         spreadsheetId, spreadsheetUrl: sheetUrl, createdBy: req.user._id,
         whatsappAccountId, importTag: importTag || "Google_Sheet_Import", fieldMapping: fieldMapping || {},
         assignedTo: assignedTo || null,
-        templatePreset: templatePreset || null
+        templatePreset: templatePreset || null,
+        defaultSource: defaultSource || null,
+        defaultSector: defaultSector || null
       });
       await integration.save();
     } else {
       integration.fieldMapping = fieldMapping || integration.fieldMapping;
       if (assignedTo !== undefined) integration.assignedTo = assignedTo;
       if (templatePreset !== undefined) integration.templatePreset = templatePreset;
+      if (defaultSource !== undefined) integration.defaultSource = defaultSource;
+      if (defaultSector !== undefined) integration.defaultSector = defaultSector;
       await integration.save();
     }
     import("../services/googleSheetsSyncService.js").then(({ syncGoogleSheets }) => { syncGoogleSheets(); });

@@ -92,11 +92,11 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         setFinalProcessedContacts(processed);
         setShowDuplicateResolver(true);
       } else {
-        onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount);
+        onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector);
       }
     } catch (err) {
       console.error("Duplicate check error:", err);
-      onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount);
+      onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector);
     } finally {
       setCheckingDuplicates(false);
     }
@@ -110,7 +110,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       finalContacts = finalContacts.filter(c => !duplicatePhones.has(c.phone));
     }
 
-    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount);
+    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector);
     setShowDuplicateResolver(false);
     setShowDuplicateReviewer(false);
   };

@@ -306,7 +306,8 @@ const ContactManagerMain = ({ deleted = false }) => {
     reader.readAsBinaryString(file);
   };
 
-  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount) => {
+  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount, defaultSource, defaultSector) => {
+    console.log("handleMappingComplete called with:", { defaultSource, defaultSector, defaultAssignedTo });
     setImporting(true);
     try {
       if (isGoogleConnected && sheetUrl) {
@@ -328,7 +329,9 @@ const ContactManagerMain = ({ deleted = false }) => {
           whatsappAccountId: defaultWhatsAppAccount || activeAccount?._id,
           fieldMapping,
           assignedTo: defaultAssignedTo || null,
-          templatePreset: templatePreset || null
+          templatePreset: templatePreset || null,
+          defaultSource: defaultSource || null,
+          defaultSector: defaultSector || null
         });
         alert("Google Sheet successfully mapped and registered for Auto-Sync!");
         setSheetUrl("");

@@ -133,6 +133,7 @@ export const syncGoogleSheets = async () => {
         const nameIdx = findIdx('name', ['name']);
         const emailIdx = findIdx('email', ['email']);
         const sectorIdx = findIdx('sector', ['sector', 'industry']);
+        const sourceIdx = findIdx('source', ['source', 'lead source']);
 
         if (phoneIdx === -1) {
            console.log('Skipping sheet because phoneIdx is -1');
@@ -176,12 +177,14 @@ export const syncGoogleSheets = async () => {
             for (const c of existingContacts) contactMap.set(c.phone, c);
 
             const bulkOps = [];
+            const convBulkOps = [];
             
             for (const item of batch) {
               const { row, phone } = item;
               const name = nameIdx !== -1 && row[nameIdx] ? row[nameIdx] : 'Unknown';
               const email = emailIdx !== -1 ? row[emailIdx] : null;
               const sector = sectorIdx !== -1 ? row[sectorIdx] : null;
+              const source = sourceIdx !== -1 ? row[sourceIdx] : null;
 
               let customFields = {};
               for (const [key, value] of Object.entries(fieldMapping)) {
@@ -193,7 +196,7 @@ export const syncGoogleSheets = async () => {
               }
               
               headers.forEach((header, index) => {
-                 if (index !== phoneIdx && index !== nameIdx && index !== emailIdx && index !== sectorIdx) {
+                 if (index !== phoneIdx && index !== nameIdx && index !== emailIdx && index !== sectorIdx && index !== sourceIdx) {
                     if (row[index] && !Object.values(fieldMapping).includes(header)) {
                        customFields[header] = row[index];
                     }
@@ -204,7 +207,12 @@ export const syncGoogleSheets = async () => {
               if (contact) {
                 let updateFields = {};
                 if (name && name !== 'Unknown' && contact.name === 'Unknown') updateFields.name = name;
-                if (sector && (!contact.sector || contact.sector === 'Unassigned')) updateFields.sector = sector;
+                if (sector) updateFields.sector = sector;
+                else if (integration.defaultSector) updateFields.sector = integration.defaultSector;
+                
+                if (source) updateFields.source = source;
+                else if (integration.defaultSource) updateFields.source = integration.defaultSource;
+
                 if (integration.assignedTo) updateFields.assignedTo = integration.assignedTo;
                 
                 const cfObj = {};
@@ -252,8 +260,8 @@ export const syncGoogleSheets = async () => {
                     document: {
                       name,
                       phone,
-                      sector: sector || 'Unassigned',
-                      source: 'Google Sheets Auto-Sync',
+                      sector: integration.defaultSector || sector || 'Unassigned',
+                      source: integration.defaultSource || source || 'Google Sheets Auto-Sync',
                       tags: [integration.importTag, `sheet_msg_${integration._id}`],
                       customFields: { ...customFields, ...(email ? { email } : {}) },
                       whatsappAccountId: integration.whatsappAccountId,
@@ -266,10 +274,32 @@ export const syncGoogleSheets = async () => {
                    newContactsToMessage.push({ phone, name });
                 }
               }
+              
+              // Add to Conversation bulk operations for this specific row's assignedTo/sector/source
+              const rowConvUpdates = {};
+              if (integration.assignedTo) rowConvUpdates.assignedTo = integration.assignedTo;
+              
+              const finalSector = integration.defaultSector || sector;
+              if (finalSector && finalSector !== 'Unassigned') rowConvUpdates.sector = finalSector;
+              
+              const finalSource = integration.defaultSource || source;
+              if (finalSource && finalSource !== 'Unassigned' && finalSource !== 'Google Sheets Auto-Sync') rowConvUpdates.source = finalSource;
+              
+              if (Object.keys(rowConvUpdates).length > 0) {
+                convBulkOps.push({
+                  updateOne: {
+                    filter: { phone },
+                    update: { $set: rowConvUpdates }
+                  }
+                });
+              }
             }
             
             if (bulkOps.length > 0) {
                await Contact.bulkWrite(bulkOps, { ordered: false });
+            }
+            if (convBulkOps.length > 0) {
+               await Conversation.bulkWrite(convBulkOps, { ordered: false });
             }
             
             if (newContactsToMessage.length > 0 && integration.whatsappAccountId && integration.templatePreset) {

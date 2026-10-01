@@ -11,6 +11,8 @@ const SheetIntegrationSchema = new mongoose.Schema({
   importTag: { type: String, default: "Google_Sheet_Import" },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   templatePreset: { type: mongoose.Schema.Types.ObjectId, ref: "TemplatePreset", default: null },
+  defaultSource: { type: String, default: null },
+  defaultSector: { type: String, default: null },
   fieldMapping: { type: Object, default: {} },
   syncStats: {
     totalAdded: { type: Number, default: 0 },
