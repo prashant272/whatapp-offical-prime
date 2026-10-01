@@ -1087,7 +1087,7 @@ const ChatModule = () => {
         }
       }
       if (query) {
-        if (!((c.contact?.name || "").toLowerCase().includes(query) || c.phone.includes(query) || (c.lastMessage || "").toLowerCase().includes(query))) return false;
+        if (!((c.contact?.name || "").toLowerCase().includes(query) || String(c.phone || "").includes(query) || (c.lastMessage || "").toLowerCase().includes(query))) return false;
       }
       if (c._id === chatId) return true;
       return true;
