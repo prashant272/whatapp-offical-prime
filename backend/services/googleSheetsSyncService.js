@@ -208,11 +208,11 @@ export const syncGoogleSheets = async () => {
               if (contact) {
                 let updateFields = {};
                 if (name && name !== 'Unknown' && contact.name === 'Unknown') updateFields.name = name;
-                if (sector) updateFields.sector = sector;
-                else if (integration.defaultSector) updateFields.sector = integration.defaultSector;
+                if (integration.defaultSector) updateFields.sector = integration.defaultSector;
+                else if (sector) updateFields.sector = sector;
                 
-                if (source) updateFields.source = source;
-                else if (integration.defaultSource) updateFields.source = integration.defaultSource;
+                if (integration.defaultSource) updateFields.source = integration.defaultSource;
+                else if (source) updateFields.source = source;
 
                 if (integration.assignedTo) updateFields.assignedTo = integration.assignedTo;
                 
@@ -276,7 +276,25 @@ export const syncGoogleSheets = async () => {
                 }
               }
               
-              // Add to Conversation bulk operations for this specific row's assignedTo/sector/source
+            }
+            
+            if (bulkOps.length > 0) {
+               await Contact.bulkWrite(bulkOps, { ordered: false });
+            }
+            
+            // After contacts are created/updated, fetch their IDs to link Conversations
+            const syncedContacts = await Contact.find({ phone: { $in: batchPhones } }).select('_id phone');
+            const syncedContactMap = new Map();
+            for (const c of syncedContacts) syncedContactMap.set(c.phone, c._id);
+            
+            for (const item of batch) {
+              const { phone, row } = item;
+              const contactId = syncedContactMap.get(phone);
+              if (!contactId) continue;
+              
+              const sector = sectorIdx !== -1 ? row[sectorIdx] : null;
+              const source = sourceIdx !== -1 ? row[sourceIdx] : null;
+              
               const rowConvUpdates = {};
               if (integration.assignedTo) rowConvUpdates.assignedTo = integration.assignedTo;
               
@@ -286,19 +304,17 @@ export const syncGoogleSheets = async () => {
               const finalSource = integration.defaultSource || source;
               if (finalSource && finalSource !== 'Unassigned' && finalSource !== 'Google Sheets Auto-Sync') rowConvUpdates.source = finalSource;
               
-              if (Object.keys(rowConvUpdates).length > 0) {
-                convBulkOps.push({
-                  updateOne: {
-                    filter: { phone },
-                    update: { $set: rowConvUpdates }
-                  }
-                });
-              }
+              rowConvUpdates.contact = contactId; // Ensure linked to contact
+
+              convBulkOps.push({
+                updateOne: {
+                  filter: { phone },
+                  update: { $set: rowConvUpdates },
+                  upsert: true
+                }
+              });
             }
-            
-            if (bulkOps.length > 0) {
-               await Contact.bulkWrite(bulkOps, { ordered: false });
-            }
+
             if (convBulkOps.length > 0) {
                await Conversation.bulkWrite(convBulkOps, { ordered: false });
             }
