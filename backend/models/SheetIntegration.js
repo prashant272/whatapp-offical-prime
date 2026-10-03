@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 const SheetIntegrationSchema = new mongoose.Schema({
+  name: { type: String, default: "Google Sheet Sync" },
   spreadsheetId: { type: String, required: true },
   spreadsheetUrl: { type: String, required: true },
   sheetName: { type: String, default: "Sheet1" },

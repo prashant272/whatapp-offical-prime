@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { X, Check, AlertCircle, FileText, ChevronRight, Layers, Smartphone, User, Loader2, Info } from "lucide-react";
+import { X, Check, AlertCircle, FileText, ChevronRight, Layers, Smartphone, User, Loader2, Info, Edit3 } from "lucide-react";
 import api from "../../api";
 
 
-const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [], winners = [], users = [], presets = [], accounts = [], activeAccount = null, availableSheetTabs = [], selectedSheetTab = "", onSheetTabChange }) => {
+const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [], winners = [], users = [], presets = [], accounts = [], activeAccount = null, availableSheetTabs = [], selectedSheetTab = "", onSheetTabChange, initialConfig = null }) => {
   const [headers, setHeaders] = useState([]);
   const [mappings, setMappings] = useState({
     name: "",
@@ -16,6 +16,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
   const [defaultWinners, setDefaultWinners] = useState([]);
   const [customMappings, setCustomMappings] = useState({});
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [syncName, setSyncName] = useState(initialConfig?.name || "");
   const [duplicateResult, setDuplicateResult] = useState(null);
   const [showDuplicateResolver, setShowDuplicateResolver] = useState(false);
   const [showDuplicateReviewer, setShowDuplicateReviewer] = useState(false);
@@ -25,12 +26,24 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
   const today = new Date();
   const defaultBatchTag = `import-${today.getDate()}-${today.toLocaleString('en', { month: 'short' }).toLowerCase()}-${today.getFullYear()}`;
   const [batchTag, setBatchTag] = useState(defaultBatchTag);
-  const [defaultSector, setDefaultSector] = useState(""); // Override sector for all leads
-  const [defaultSource, setDefaultSource] = useState(""); // Override source for all leads
-  const [defaultAssignedTo, setDefaultAssignedTo] = useState(""); // Override assigned user
-  const [defaultPresetTemplate, setDefaultPresetTemplate] = useState(""); // Override template preset
-  const [messageInterval, setMessageInterval] = useState(0); // Message interval in seconds
-  const [defaultWhatsAppAccount, setDefaultWhatsAppAccount] = useState(activeAccount && !activeAccount.isAll ? activeAccount._id : ""); // Override WhatsApp account
+  const [defaultSector, setDefaultSector] = useState(initialConfig?.defaultSector || ""); 
+  const [defaultSource, setDefaultSource] = useState(initialConfig?.defaultSource || ""); 
+  const [defaultAssignedTo, setDefaultAssignedTo] = useState(initialConfig?.assignedTo || ""); 
+  const [defaultPresetTemplate, setDefaultPresetTemplate] = useState(initialConfig?.templatePreset || ""); 
+  const [messageInterval, setMessageInterval] = useState(initialConfig?.messageInterval || 0); 
+  const [defaultWhatsAppAccount, setDefaultWhatsAppAccount] = useState(initialConfig?.whatsappAccountId || (activeAccount && !activeAccount.isAll ? activeAccount._id : ""));
+
+  useEffect(() => {
+    if (isOpen) {
+      setSyncName(initialConfig?.name || "");
+      setDefaultSector(initialConfig?.defaultSector || "");
+      setDefaultSource(initialConfig?.defaultSource || "");
+      setDefaultAssignedTo(initialConfig?.assignedTo || "");
+      setDefaultPresetTemplate(initialConfig?.templatePreset || "");
+      setMessageInterval(initialConfig?.messageInterval || 0);
+      setDefaultWhatsAppAccount(initialConfig?.whatsappAccountId || (activeAccount && !activeAccount.isAll ? activeAccount._id : ""));
+    }
+  }, [isOpen, initialConfig, activeAccount]);
 
   useEffect(() => {
     if (rawData && rawData.length > 0) {
@@ -46,9 +59,20 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         if (lowerH.includes("source") || lowerH.includes("lead source") || lowerH.includes("origin")) newMappings.source = h;
         if (lowerH.includes("winner")) newMappings.winners = h;
       });
+      
+      if (initialConfig?.fieldMapping) {
+        Object.entries(initialConfig.fieldMapping).forEach(([k, v]) => {
+          if (k.startsWith("customFields.")) {
+            setCustomMappings(prev => ({ ...prev, [k.replace("customFields.", "")]: v }));
+          } else {
+            newMappings[k] = v;
+          }
+        });
+      }
+
       setMappings(newMappings);
     }
-  }, [rawData]);
+  }, [rawData, initialConfig]);
 
   const handleImport = async () => {
     if (!mappings.name || !mappings.phone) {
@@ -93,11 +117,11 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         setFinalProcessedContacts(processed);
         setShowDuplicateResolver(true);
       } else {
-        onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab);
+        onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab, syncName);
       }
     } catch (err) {
       console.error("Duplicate check error:", err);
-      onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab);
+      onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab, syncName);
     } finally {
       setCheckingDuplicates(false);
     }
@@ -111,7 +135,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       finalContacts = finalContacts.filter(c => !duplicatePhones.has(c.phone));
     }
 
-    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab);
+    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab, syncName);
     setShowDuplicateResolver(false);
     setShowDuplicateReviewer(false);
   };
@@ -235,6 +259,19 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                   </select>
                 </div>
               )}
+
+              <div style={{ marginBottom: "20px", padding: "15px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #eef2f6" }}>
+                <label style={{ fontSize: "0.75rem", fontWeight: "800", color: "#1e293b", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                  <Edit3 size={14} color="#10b981" /> Auto-Sync Configuration Name
+                </label>
+                <input
+                  type="text"
+                  value={syncName}
+                  onChange={e => setSyncName(e.target.value)}
+                  placeholder="e.g., Main Leads Auto-Sync"
+                  style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", outline: "none", fontSize: "0.85rem", fontWeight: "700", color: "#334155" }}
+                />
+              </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px" }}>
                 <div>

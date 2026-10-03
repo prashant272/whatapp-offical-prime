@@ -772,16 +772,17 @@ export const checkCampaignHistory = async (req, res, next) => {
 };
 export const registerSheet = async (req, res) => {
   try {
-    const { sheetUrl, sheetName, whatsappAccountId, importTag, fieldMapping, assignedTo, templatePreset, defaultSource, defaultSector, messageInterval } = req.body;
+    const { sheetUrl, sheetName, syncName, whatsappAccountId, importTag, fieldMapping, assignedTo, templatePreset, defaultSource, defaultSector, messageInterval } = req.body;
     if (!sheetUrl) return res.status(400).json({ error: "Sheet URL is required" });
     const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
     if (!match) return res.status(400).json({ error: "Invalid Google Sheet URL" });
     const spreadsheetId = match[1];
     const SheetIntegration = (await import("../models/SheetIntegration.js")).default;
-    let integration = await SheetIntegration.findOne({ spreadsheetId });
+    const finalSheetName = sheetName || "Sheet1";
+    let integration = await SheetIntegration.findOne({ spreadsheetId, sheetName: finalSheetName });
     if (!integration) {
       integration = new SheetIntegration({
-        spreadsheetId, spreadsheetUrl: sheetUrl, sheetName: sheetName || "Sheet1", createdBy: req.user._id,
+        name: syncName || "Google Sheet Sync", spreadsheetId, spreadsheetUrl: sheetUrl, sheetName: finalSheetName, createdBy: req.user._id,
         whatsappAccountId, importTag: importTag || "Google_Sheet_Import", fieldMapping: fieldMapping || {},
         assignedTo: assignedTo || null,
         templatePreset: templatePreset || null,
@@ -792,6 +793,7 @@ export const registerSheet = async (req, res) => {
       await integration.save();
     } else {
       integration.fieldMapping = fieldMapping || integration.fieldMapping;
+      if (syncName) integration.name = syncName;
       if (sheetName !== undefined) integration.sheetName = sheetName;
       if (assignedTo !== undefined) integration.assignedTo = assignedTo;
       if (templatePreset !== undefined) integration.templatePreset = templatePreset;
@@ -799,6 +801,28 @@ export const registerSheet = async (req, res) => {
       if (defaultSector !== undefined) integration.defaultSector = defaultSector;
       if (messageInterval !== undefined) integration.messageInterval = messageInterval;
       await integration.save();
+      
+      // Instantly apply bulk overrides to existing contacts from this sheet
+      const Contact = (await import("../models/Contact.js")).default;
+      const updatePayload = {};
+      if (assignedTo !== undefined) updatePayload.assignedTo = assignedTo || null;
+      if (defaultSource !== undefined) updatePayload.source = defaultSource;
+      if (defaultSector !== undefined) updatePayload.sector = defaultSector;
+      
+      if (Object.keys(updatePayload).length > 0) {
+        await Contact.updateMany({ tags: `sheet_msg_${integration._id}` }, { $set: updatePayload });
+        
+        // Also update Conversations to immediately reflect in the Chat UI
+        const Conversation = (await import("../models/Conversation.js")).default;
+        
+        // Find all contacts updated to get their phones
+        const affectedContacts = await Contact.find({ tags: `sheet_msg_${integration._id}` }).select("phone");
+        const phones = affectedContacts.map(c => c.phone);
+        
+        if (phones.length > 0) {
+           await Conversation.updateMany({ phone: { $in: phones } }, { $set: updatePayload });
+        }
+      }
     }
     import("../services/googleSheetsSyncService.js").then(({ syncGoogleSheets }) => { syncGoogleSheets(); });
     res.status(200).json({ success: true, message: "Sheet registered for auto-sync" });

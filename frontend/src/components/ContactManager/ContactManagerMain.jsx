@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as XLSX from 'xlsx';
 import api from "../../api";
-import { ChevronLeft, ChevronRight, Loader2, Send, X, AlertTriangle, FileSpreadsheet, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Send, X, AlertTriangle, FileSpreadsheet, Trash2, Edit3 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useWhatsAppAccount } from "../../WhatsAppAccountContext";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -61,6 +61,7 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [registeredSheets, setRegisteredSheets] = useState([]);
   const [availableSheetTabs, setAvailableSheetTabs] = useState([]);
   const [selectedSheetTab, setSelectedSheetTab] = useState("");
+  const [editingSyncConfig, setEditingSyncConfig] = useState(null);
 
   useEffect(() => {
     // Check google auth status
@@ -110,6 +111,7 @@ const ContactManagerMain = ({ deleted = false }) => {
           setTempImportData([mockData]); // Pass single mock row for mapper
           setAvailableSheetTabs(res.data.sheetNames || []);
           setSelectedSheetTab(res.data.selectedSheet || "");
+          setEditingSyncConfig(null);
           setShowImportModal(false);
           setShowMapper(true);
         }
@@ -310,7 +312,7 @@ const ContactManagerMain = ({ deleted = false }) => {
     reader.readAsBinaryString(file);
   };
 
-  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab) => {
+  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab, syncName) => {
     console.log("handleMappingComplete called with:", { defaultSource, defaultSector, defaultAssignedTo, messageInterval, selectedSheetTab });
     setImporting(true);
     try {
@@ -331,6 +333,7 @@ const ContactManagerMain = ({ deleted = false }) => {
         await api.post("/contacts/sheets", { 
           sheetUrl, 
           sheetName: selectedSheetTab,
+          syncName: syncName,
           whatsappAccountId: defaultWhatsAppAccount || activeAccount?._id,
           fieldMapping,
           assignedTo: defaultAssignedTo || null,
@@ -594,13 +597,41 @@ const ContactManagerMain = ({ deleted = false }) => {
                         }}
                       >
                         <div style={{ display: "flex", flexDirection: "column" }}>
-                          <a href={s.spreadsheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", fontWeight: "700", color: "#00a884", textDecoration: "none" }}>Google Sheet (ID: {s.spreadsheetId?.substring(0,6)}...)</a>
+                          <span style={{ fontSize: "0.8rem", fontWeight: "800", color: "#1e293b" }}>{s.name || `Google Sheet (ID: ${s.spreadsheetId?.substring(0,6)}...)`}</span>
+                          <a href={s.spreadsheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem", fontWeight: "600", color: "#00a884", textDecoration: "none" }}>{s.sheetName}</a>
                           <span style={{ fontSize: "0.65rem", color: "#64748b" }}>Added: {s.syncStats?.totalAdded || 0} | Updated: {s.syncStats?.totalUpdated || 0}</span>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span style={{ fontSize: "0.65rem", fontWeight: "700", color: s.active ? "#0f9d58" : "#ef4444" }}>
                             {s.lastSyncedAt ? `Last Sync: ${new Date(s.lastSyncedAt).toLocaleTimeString()}` : "Pending Sync"}
                           </span>
+                          <Edit3
+                            size={16}
+                            color="#1d4ed8"
+                            style={{ cursor: "pointer" }}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setImporting(true);
+                              try {
+                                const res = await api.get(`/contacts/sheets/headers?sheetUrl=${encodeURIComponent(s.spreadsheetUrl)}&sheetName=${encodeURIComponent(s.sheetName)}`);
+                                if (res.data.headers) {
+                                  const mockData = {};
+                                  res.data.headers.forEach(h => { mockData[h] = "9999999999 Test Contact Data"; });
+                                  setTempImportData([mockData]);
+                                  setAvailableSheetTabs(res.data.sheetNames || [s.sheetName]);
+                                  setSelectedSheetTab(res.data.selectedSheet || s.sheetName);
+                                  setEditingSyncConfig(s);
+                                  setSheetUrl(s.spreadsheetUrl);
+                                  setShowImportModal(false);
+                                  setShowMapper(true);
+                                }
+                              } catch(err) {
+                                alert("Failed to fetch sheet configuration.");
+                              } finally {
+                                setImporting(false);
+                              }
+                            }}
+                          />
                           <Trash2 
                             size={16} 
                             color="#ef4444" 
@@ -647,6 +678,7 @@ const ContactManagerMain = ({ deleted = false }) => {
         activeAccount={activeAccount}
         availableSheetTabs={availableSheetTabs}
         selectedSheetTab={selectedSheetTab}
+        initialConfig={editingSyncConfig}
         onSheetTabChange={async (newTab) => {
           setImporting(true);
           try {
