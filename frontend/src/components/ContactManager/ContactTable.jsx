@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { User, Smartphone, Layers, ExternalLink, Pencil, Trash2, Send, Star, StickyNote, Bell, RotateCcw } from "lucide-react";
+import { User, Smartphone, Layers, ExternalLink, Pencil, Trash2, Send, Star, StickyNote, Bell, RotateCcw, CheckCircle, XCircle } from "lucide-react";
 
 const ContactRow = memo(({ 
   contact, isSelected, toggleSelect, handleContactClick, 
@@ -84,11 +84,15 @@ const ContactRow = memo(({
           {contact.internalNotes?.length > 0 && <StickyNote size={12} color="#6366f1" title="Has Notes" />}
           {contact.reminders?.some(r => !r.isCompleted) && <Bell size={12} color="#f59e0b" title="Pending Reminder" />}
           {contact.priority && <Star size={12} color={priorityColors[contact.priority].text} fill={priorityColors[contact.priority].text} />}
+          {contact.isCampaignSent && !contact.isCampaignFailed && <CheckCircle size={12} color="#10b981" title="Message Sent Successfully" />}
+          {contact.isCampaignFailed && <XCircle size={12} color="#ef4444" title="Message Failed" />}
         </div>
       </td>
       {customFields.map(field => (
         <td key={field._id} style={{ padding: "10px 20px", color: "#334155", fontSize: "0.8rem", fontWeight: "600" }}>
-          {contact.customFields?.[field.name] || "-"}
+          <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "200px" }} title={contact.customFields?.[field.name]}>
+            {contact.customFields?.[field.name] || "-"}
+          </div>
         </td>
       ))}
       <td style={{ padding: "10px 24px", textAlign: "right" }}>

@@ -306,8 +306,8 @@ const ContactManagerMain = ({ deleted = false }) => {
     reader.readAsBinaryString(file);
   };
 
-  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount, defaultSource, defaultSector) => {
-    console.log("handleMappingComplete called with:", { defaultSource, defaultSector, defaultAssignedTo });
+  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval) => {
+    console.log("handleMappingComplete called with:", { defaultSource, defaultSector, defaultAssignedTo, messageInterval });
     setImporting(true);
     try {
       if (isGoogleConnected && sheetUrl) {
@@ -331,7 +331,8 @@ const ContactManagerMain = ({ deleted = false }) => {
           assignedTo: defaultAssignedTo || null,
           templatePreset: templatePreset || null,
           defaultSource: defaultSource || null,
-          defaultSector: defaultSector || null
+          defaultSector: defaultSector || null,
+          messageInterval: messageInterval || 0
         });
         alert("Google Sheet successfully mapped and registered for Auto-Sync!");
         setSheetUrl("");
@@ -577,7 +578,16 @@ const ContactManagerMain = ({ deleted = false }) => {
                   <h5 style={{ fontSize: "0.85rem", fontWeight: "800", color: "#1e293b", marginBottom: "10px" }}>Currently Auto-Syncing ({registeredSheets.length})</h5>
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "150px", overflowY: "auto" }}>
                     {registeredSheets.map(s => (
-                      <div key={s._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", background: "white", borderRadius: "8px", border: "1px solid #eee" }}>
+                      <div key={s._id} 
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", background: "white", borderRadius: "8px", border: "1px solid #eee", cursor: "pointer", transition: "all 0.2s" }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = "#f1f5f9"}
+                        onMouseLeave={(e) => e.currentTarget.style.background = "white"}
+                        onClick={(e) => {
+                          if (e.target.closest('a') || e.target.closest('svg')) return;
+                          setFilters(prev => ({ ...prev, tag: `sheet_msg_${s._id}` }));
+                          setShowImportModal(false);
+                        }}
+                      >
                         <div style={{ display: "flex", flexDirection: "column" }}>
                           <a href={s.spreadsheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.75rem", fontWeight: "700", color: "#00a884", textDecoration: "none" }}>Google Sheet (ID: {s.spreadsheetId?.substring(0,6)}...)</a>
                           <span style={{ fontSize: "0.65rem", color: "#64748b" }}>Added: {s.syncStats?.totalAdded || 0} | Updated: {s.syncStats?.totalUpdated || 0}</span>

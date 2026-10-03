@@ -29,6 +29,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
   const [defaultSource, setDefaultSource] = useState(""); // Override source for all leads
   const [defaultAssignedTo, setDefaultAssignedTo] = useState(""); // Override assigned user
   const [defaultPresetTemplate, setDefaultPresetTemplate] = useState(""); // Override template preset
+  const [messageInterval, setMessageInterval] = useState(0); // Message interval in seconds
   const [defaultWhatsAppAccount, setDefaultWhatsAppAccount] = useState(activeAccount && !activeAccount.isAll ? activeAccount._id : ""); // Override WhatsApp account
 
   useEffect(() => {
@@ -110,7 +111,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       finalContacts = finalContacts.filter(c => !duplicatePhones.has(c.phone));
     }
 
-    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector);
+    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval);
     setShowDuplicateResolver(false);
     setShowDuplicateReviewer(false);
   };

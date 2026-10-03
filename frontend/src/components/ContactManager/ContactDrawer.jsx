@@ -6,7 +6,7 @@ const ContactDrawer = ({
   contact, onClose, loadingTimeline, timelineEntries,
   navigate, currentUser, onUpdateContact, onOpenChat
 }) => {
-  const [activeTab, setActiveTab] = useState("timeline"); // timeline, notes, alarms
+  const [activeTab, setActiveTab] = useState("info"); // info, timeline, notes, alarms
   const [noteContent, setNoteContent] = useState("");
   const [addingNote, setAddingNote] = useState(false);
   const [alarmTitle, setAlarmTitle] = useState("");
@@ -73,6 +73,7 @@ const ContactDrawer = ({
           </div>
 
           <div style={{ display: "flex", gap: "8px", marginTop: "1.5rem" }}>
+            <button onClick={() => setActiveTab("info")} style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", background: activeTab === "info" ? "#0ea5e9" : "rgba(255,255,255,0.1)", color: "white", fontWeight: "800", cursor: "pointer", fontSize: "0.8rem", transition: "background 0.2s" }}>Info</button>
             <button onClick={() => setActiveTab("timeline")} style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", background: activeTab === "timeline" ? "#2ecc71" : "rgba(255,255,255,0.1)", color: "white", fontWeight: "800", cursor: "pointer", fontSize: "0.8rem", transition: "background 0.2s" }}>Timeline</button>
             <button onClick={() => setActiveTab("notes")} style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", background: activeTab === "notes" ? "#6366f1" : "rgba(255,255,255,0.1)", color: "white", fontWeight: "800", cursor: "pointer", fontSize: "0.8rem", transition: "background 0.2s" }}>Notes</button>
             <button onClick={() => setActiveTab("alarms")} style={{ flex: 1, padding: "8px", borderRadius: "8px", border: "none", background: activeTab === "alarms" ? "#f59e0b" : "rgba(255,255,255,0.1)", color: "white", fontWeight: "800", cursor: "pointer", fontSize: "0.8rem", transition: "background 0.2s" }}>Alarms</button>
@@ -171,6 +172,42 @@ const ContactDrawer = ({
 
           {/* Tab Content (Flowing naturally inside the scroll wrapper) */}
           <div style={{ padding: "1.5rem" }}>
+            {activeTab === "info" && (
+              <>
+                <h4 style={{ fontSize: "0.85rem", fontWeight: "900", textTransform: "uppercase", color: "#1a1a1a", letterSpacing: "1px", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "10px" }}>
+                  <User size={18} color="#0ea5e9" /> Contact Information
+                </h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                  <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "1px solid #eef2f6" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase" }}>Sector</div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>{contact.sector || "Unassigned"}</div>
+                  </div>
+                  <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "1px solid #eef2f6" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase" }}>Source</div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>{contact.source || "Unassigned"}</div>
+                  </div>
+                  <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "1px solid #eef2f6" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase" }}>Status</div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>{contact.status || "Unassigned"}</div>
+                  </div>
+                  
+                  {contact.customFields && Object.keys(contact.customFields).length > 0 && (
+                    <>
+                      <h4 style={{ fontSize: "0.85rem", fontWeight: "900", textTransform: "uppercase", color: "#1a1a1a", letterSpacing: "1px", marginTop: "1rem", marginBottom: "0.5rem" }}>
+                        Custom Fields
+                      </h4>
+                      {Object.entries(contact.customFields).map(([key, value]) => (
+                        <div key={key} style={{ background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "1px solid #eef2f6" }}>
+                          <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase" }}>{key}</div>
+                          <div style={{ fontSize: "0.95rem", fontWeight: "700", color: "#1e293b", marginTop: "4px", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{value || "-"}</div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+
             {activeTab === "timeline" && (
               <>
                 <h4 style={{ fontSize: "0.85rem", fontWeight: "900", textTransform: "uppercase", color: "#1a1a1a", letterSpacing: "1px", marginBottom: "1.5rem", display: "flex", alignItems: "center", gap: "10px" }}>

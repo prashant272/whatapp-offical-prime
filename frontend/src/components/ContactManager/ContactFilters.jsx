@@ -1,5 +1,5 @@
 import React from "react";
-import { Search, Filter, Layers, List, LayoutGrid, Download, Upload, Plus, Send } from "lucide-react";
+import { Search, Filter, Layers, List, LayoutGrid, Download, Upload, Plus, Send, X } from "lucide-react";
 
 const ContactFilters = ({
   filters, setFilters, handleSearch, viewMode, setViewMode,
@@ -61,6 +61,14 @@ const ContactFilters = ({
           <option value="">Winner</option>
           {winners.map(w => <option key={w._id} value={w.name}>{w.name}</option>)}
         </select>
+
+        
+        {filters.tag && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#e0e7ff", padding: "6px 12px", borderRadius: "10px", fontSize: "0.75rem", fontWeight: "800", color: "#3730a3" }}>
+            <span>Tag: {filters.tag.replace('sheet_msg_', 'Sheet ')}</span>
+            <X size={14} style={{ cursor: "pointer" }} onClick={() => setFilters({ ...filters, tag: "" })} />
+          </div>
+        )}
 
         {/* Actions */}
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>

@@ -13,6 +13,7 @@ const SheetIntegrationSchema = new mongoose.Schema({
   templatePreset: { type: mongoose.Schema.Types.ObjectId, ref: "TemplatePreset", default: null },
   defaultSource: { type: String, default: null },
   defaultSector: { type: String, default: null },
+  messageInterval: { type: Number, default: 0 },
   fieldMapping: { type: Object, default: {} },
   syncStats: {
     totalAdded: { type: Number, default: 0 },

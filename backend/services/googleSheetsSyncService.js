@@ -305,8 +305,13 @@ export const syncGoogleSheets = async () => {
             if (newContactsToMessage.length > 0 && integration.whatsappAccountId && integration.templatePreset) {
               const account = integration.whatsappAccountId;
               const preset = integration.templatePreset;
-              for (const contact of newContactsToMessage) {
+              const intervalMs = (integration.messageInterval || 0) * 1000;
+              for (let i = 0; i < newContactsToMessage.length; i++) {
+                const contact = newContactsToMessage[i];
                 await sendAutoMessage(account, contact.phone, contact.name, preset);
+                if (intervalMs > 0 && i < newContactsToMessage.length - 1) {
+                  await new Promise(r => setTimeout(r, intervalMs));
+                }
               }
             }
             
