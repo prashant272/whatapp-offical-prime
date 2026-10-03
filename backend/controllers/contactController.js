@@ -172,7 +172,7 @@ export const getContacts = async (req, res, next) => {
     }
 
     const rawContacts = await Contact.find(query)
-      .select("name phone status sector subsector tags isCampaignSent whatsappAccountId createdAt updatedAt customFields accountsData")
+      .select("name phone status sector subsector source tags isCampaignSent whatsappAccountId createdAt updatedAt customFields assignedTo accountsData")
       .populate("assignedTo", "name")
       .populate("whatsappAccountId", "name")
       .populate("accountsData.whatsappAccountId", "name phoneNumber")
@@ -772,7 +772,7 @@ export const checkCampaignHistory = async (req, res, next) => {
 };
 export const registerSheet = async (req, res) => {
   try {
-    const { sheetUrl, whatsappAccountId, importTag, fieldMapping, assignedTo, templatePreset, defaultSource, defaultSector, messageInterval } = req.body;
+    const { sheetUrl, sheetName, whatsappAccountId, importTag, fieldMapping, assignedTo, templatePreset, defaultSource, defaultSector, messageInterval } = req.body;
     if (!sheetUrl) return res.status(400).json({ error: "Sheet URL is required" });
     const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
     if (!match) return res.status(400).json({ error: "Invalid Google Sheet URL" });
@@ -781,7 +781,7 @@ export const registerSheet = async (req, res) => {
     let integration = await SheetIntegration.findOne({ spreadsheetId });
     if (!integration) {
       integration = new SheetIntegration({
-        spreadsheetId, spreadsheetUrl: sheetUrl, createdBy: req.user._id,
+        spreadsheetId, spreadsheetUrl: sheetUrl, sheetName: sheetName || "Sheet1", createdBy: req.user._id,
         whatsappAccountId, importTag: importTag || "Google_Sheet_Import", fieldMapping: fieldMapping || {},
         assignedTo: assignedTo || null,
         templatePreset: templatePreset || null,
@@ -792,6 +792,7 @@ export const registerSheet = async (req, res) => {
       await integration.save();
     } else {
       integration.fieldMapping = fieldMapping || integration.fieldMapping;
+      if (sheetName !== undefined) integration.sheetName = sheetName;
       if (assignedTo !== undefined) integration.assignedTo = assignedTo;
       if (templatePreset !== undefined) integration.templatePreset = templatePreset;
       if (defaultSource !== undefined) integration.defaultSource = defaultSource;
@@ -823,13 +824,23 @@ export const getSheetHeaders = async (req, res) => {
     oauth2Client.setCredentials({ refresh_token: adminUser.googleRefreshToken });
     const sheets = google.sheets({ version: 'v4', auth: oauth2Client });
 
+    const metadataResponse = await sheets.spreadsheets.get({
+      spreadsheetId
+    });
+    
+    const sheetNames = metadataResponse.data.sheets.map(s => s.properties.title);
+    
+    // If the requested sheetName doesn't exist, fallback to the first sheet
+    const targetSheet = sheetNames.includes(sheetName) ? sheetName : sheetNames[0];
+
+    const safeTargetSheet = targetSheet ? targetSheet.replace(/'/g, "''") : "";
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: '1:1'
+      range: `'${safeTargetSheet}'!1:1`
     });
 
     const headers = response.data.values ? response.data.values[0] : [];
-    res.json({ headers, spreadsheetId });
+    res.json({ headers, spreadsheetId, sheetNames, selectedSheet: targetSheet });
   } catch (err) {
     console.error('Error fetching sheet headers:', err.message);
     res.status(500).json({ error: 'Failed to fetch sheet headers. Ensure it is accessible.' });

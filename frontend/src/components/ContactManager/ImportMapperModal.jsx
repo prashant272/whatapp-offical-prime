@@ -3,7 +3,7 @@ import { X, Check, AlertCircle, FileText, ChevronRight, Layers, Smartphone, User
 import api from "../../api";
 
 
-const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [], winners = [], users = [], presets = [], accounts = [], activeAccount = null }) => {
+const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields, sectors, sources = [], winners = [], users = [], presets = [], accounts = [], activeAccount = null, availableSheetTabs = [], selectedSheetTab = "", onSheetTabChange }) => {
   const [headers, setHeaders] = useState([]);
   const [mappings, setMappings] = useState({
     name: "",
@@ -93,11 +93,11 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         setFinalProcessedContacts(processed);
         setShowDuplicateResolver(true);
       } else {
-        onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector);
+        onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab);
       }
     } catch (err) {
       console.error("Duplicate check error:", err);
-      onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector);
+      onComplete(processed, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab);
     } finally {
       setCheckingDuplicates(false);
     }
@@ -111,7 +111,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
       finalContacts = finalContacts.filter(c => !duplicatePhones.has(c.phone));
     }
 
-    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval);
+    onComplete(finalContacts, mappings, customMappings, defaultAssignedTo, defaultPresetTemplate, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab);
     setShowDuplicateResolver(false);
     setShowDuplicateReviewer(false);
   };
@@ -219,6 +219,23 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
           ) : (
             /* STEP 1: MAPPING VIEW */
             <>
+              {availableSheetTabs.length > 0 && (
+                <div style={{ marginBottom: "20px", padding: "15px", background: "#f8fafc", borderRadius: "12px", border: "1px solid #eef2f6" }}>
+                  <label style={{ fontSize: "0.75rem", fontWeight: "800", color: "#1e293b", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                    <Layers size={14} color="#10b981" /> Select Sheet Tab to Sync
+                  </label>
+                  <select
+                    value={selectedSheetTab}
+                    onChange={(e) => onSheetTabChange && onSheetTabChange(e.target.value)}
+                    style={{ width: "100%", padding: "10px", borderRadius: "10px", border: "1px solid #cbd5e1", outline: "none", fontSize: "0.85rem", fontWeight: "700", color: "#334155" }}
+                  >
+                    {availableSheetTabs.map(tab => (
+                      <option key={tab} value={tab}>{tab}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px" }}>
                 <div>
                   <h4 style={{ fontSize: "0.9rem", fontWeight: "800", color: "#1e293b", marginBottom: "20px", display: "flex", alignItems: "center", gap: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
@@ -321,6 +338,25 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                             );
                           })}
                         </select>
+                      </>
+                    )}
+
+                    {presets && presets.length > 0 && defaultWhatsAppAccount && defaultPresetTemplate && (
+                      <>
+                        <label style={{ fontSize: "0.7rem", fontWeight: "800", color: "#d97706", textTransform: "uppercase", letterSpacing: "1px", display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px", marginTop: "12px" }}>
+                          ⏱️ Message Interval (Seconds)
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={messageInterval}
+                          onChange={e => setMessageInterval(Number(e.target.value))}
+                          style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: "1.5px solid #fcd34d", fontSize: "0.85rem", fontWeight: "700", color: "#b45309", outline: "none", background: "white", boxSizing: "border-box" }}
+                          placeholder="e.g. 10 (0 for no delay)"
+                        />
+                        <div style={{ fontSize: "0.65rem", color: "#d97706", marginTop: "4px", fontWeight: "600" }}>
+                          Delay between each auto-sent message. Helps prevent spam flags.
+                        </div>
                       </>
                     )}
 

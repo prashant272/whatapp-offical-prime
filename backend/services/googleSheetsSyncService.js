@@ -105,8 +105,9 @@ export const syncGoogleSheets = async () => {
 
     for (const integration of integrations) {
       try {
+        const safeSheetName = integration.sheetName ? integration.sheetName.replace(/'/g, "''") : "";
         const queryRange = (integration.sheetName && integration.sheetName !== 'Sheet1') 
-                             ? `${integration.sheetName}!A:Z` 
+                             ? `'${safeSheetName}'!A:Z` 
                              : 'A:Z';
         const response = await sheets.spreadsheets.values.get({
           spreadsheetId: integration.spreadsheetId,

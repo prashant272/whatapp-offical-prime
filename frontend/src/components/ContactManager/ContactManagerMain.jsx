@@ -59,6 +59,8 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [isGoogleConnected, setIsGoogleConnected] = useState(false);
   const [sheetUrl, setSheetUrl] = useState("");
   const [registeredSheets, setRegisteredSheets] = useState([]);
+  const [availableSheetTabs, setAvailableSheetTabs] = useState([]);
+  const [selectedSheetTab, setSelectedSheetTab] = useState("");
 
   useEffect(() => {
     // Check google auth status
@@ -106,6 +108,8 @@ const ContactManagerMain = ({ deleted = false }) => {
              mockData[h] = "9999999999 Test Contact Data";
           });
           setTempImportData([mockData]); // Pass single mock row for mapper
+          setAvailableSheetTabs(res.data.sheetNames || []);
+          setSelectedSheetTab(res.data.selectedSheet || "");
           setShowImportModal(false);
           setShowMapper(true);
         }
@@ -306,8 +310,8 @@ const ContactManagerMain = ({ deleted = false }) => {
     reader.readAsBinaryString(file);
   };
 
-  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval) => {
-    console.log("handleMappingComplete called with:", { defaultSource, defaultSector, defaultAssignedTo, messageInterval });
+  const handleMappingComplete = async (processedContacts, standardMappings, customMappings, defaultAssignedTo, templatePreset, defaultWhatsAppAccount, defaultSource, defaultSector, messageInterval, selectedSheetTab) => {
+    console.log("handleMappingComplete called with:", { defaultSource, defaultSector, defaultAssignedTo, messageInterval, selectedSheetTab });
     setImporting(true);
     try {
       if (isGoogleConnected && sheetUrl) {
@@ -326,6 +330,7 @@ const ContactManagerMain = ({ deleted = false }) => {
 
         await api.post("/contacts/sheets", { 
           sheetUrl, 
+          sheetName: selectedSheetTab,
           whatsappAccountId: defaultWhatsAppAccount || activeAccount?._id,
           fieldMapping,
           assignedTo: defaultAssignedTo || null,
@@ -640,6 +645,26 @@ const ContactManagerMain = ({ deleted = false }) => {
         presets={presets}
         accounts={accounts}
         activeAccount={activeAccount}
+        availableSheetTabs={availableSheetTabs}
+        selectedSheetTab={selectedSheetTab}
+        onSheetTabChange={async (newTab) => {
+          setImporting(true);
+          try {
+            const res = await api.get(`/contacts/sheets/headers?sheetUrl=${encodeURIComponent(sheetUrl)}&sheetName=${encodeURIComponent(newTab)}`);
+            if (res.data.headers) {
+              const mockData = {};
+              res.data.headers.forEach(h => {
+                 mockData[h] = "9999999999 Test Contact Data";
+              });
+              setTempImportData([mockData]);
+              setSelectedSheetTab(res.data.selectedSheet || newTab);
+            }
+          } catch(err) {
+            alert("Failed to fetch headers for the selected sheet.");
+          } finally {
+            setImporting(false);
+          }
+        }}
       />
 
       {showEditModal && (
