@@ -1,5 +1,5 @@
 import React, { memo } from "react";
-import { Plus, Search, ChevronDown, Check, MoreVertical, Bell } from "lucide-react";
+import { Plus, Search, ChevronDown, Check, MoreVertical, Bell, ChevronLeft, ChevronRight } from "lucide-react";
 import { List } from "react-window";
 
 // In react-window v2.2.x, the Row component receives props directly from rowProps
@@ -426,6 +426,17 @@ const ChatSidebar = ({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px", padding: "0 4px" }}>
+          <button 
+            onClick={() => {
+              const slider = document.getElementById('sidebar-filter-slider');
+              if (slider) slider.scrollBy({ left: -150, behavior: 'smooth' });
+            }}
+            style={{ background: "#f0f2f5", color: "#54656f", border: "1px solid #e9edef", borderRadius: "50%", width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, padding: 0 }}
+            title="Scroll Left"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          
           <div
             id="sidebar-filter-slider"
             style={{
@@ -435,7 +446,8 @@ const ChatSidebar = ({
               scrollbarWidth: "none",
               msOverflowStyle: "none",
               flex: 1,
-              padding: "4px 0"
+              padding: "4px 0",
+              scrollBehavior: "smooth"
             }}
           >
             <select
@@ -499,6 +511,17 @@ const ChatSidebar = ({
               </>
             )}
           </div>
+
+          <button 
+            onClick={() => {
+              const slider = document.getElementById('sidebar-filter-slider');
+              if (slider) slider.scrollBy({ left: 150, behavior: 'smooth' });
+            }}
+            style={{ background: "#f0f2f5", color: "#54656f", border: "1px solid #e9edef", borderRadius: "50%", width: "24px", height: "24px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, padding: 0 }}
+            title="Scroll Right"
+          >
+            <ChevronRight size={16} />
+          </button>
 
           <button
             onClick={() => setShowManageModal(true)}
