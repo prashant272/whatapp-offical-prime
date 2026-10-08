@@ -141,10 +141,17 @@ export const initAutomationCron = () => {
       }).allowDiskUse(true).populate("contact");
 
       for (const conv of dueReminders) {
+        if (!conv.phone || !conv.contact) {
+          console.log(`⚠️ Skipping corrupted reminder for ID: ${conv._id} (Missing phone or contact)`);
+          await Conversation.updateOne({ _id: conv._id }, { $set: { followUpNotified: true } });
+          continue;
+        }
+        
         console.log(`🔔 Reminder due for ${conv.phone}`);
         smartEmit("followup_reminder", { conversation: conv });
-        conv.followUpNotified = true;
-        await conv.save();
+        
+        // Use updateOne to avoid full document validation errors on corrupted DB entries
+        await Conversation.updateOne({ _id: conv._id }, { $set: { followUpNotified: true } });
       }
 
       // --- NEW: Missed Follow-up Detection ---
@@ -156,6 +163,12 @@ export const initAutomationCron = () => {
       }).allowDiskUse(true);
 
       for (const conv of missedFollowUps) {
+        if (!conv.phone || !conv.contact) {
+          console.log(`⚠️ Skipping corrupted missed follow-up for ID: ${conv._id}`);
+          await Conversation.updateOne({ _id: conv._id }, { $set: { followUpTime: null } });
+          continue;
+        }
+
         // Check if there's any timeline entry for this contact after followUpTime
         const Timeline = (await import("../models/Timeline.js")).default;
         const recentTimeline = await Timeline.findOne({
@@ -166,9 +179,11 @@ export const initAutomationCron = () => {
         if (!recentTimeline) {
           console.log(`⚠️ Moving ${conv.phone} to Missed Follow-up (No activity)`);
           conv.status = "Missed Follow-up";
-          // We clear followUpTime so it doesn't keep triggering this check
-          conv.followUpTime = null;
-          await conv.save();
+          
+          await Conversation.updateOne(
+            { _id: conv._id },
+            { $set: { status: "Missed Follow-up", followUpTime: null } }
+          );
 
           // Sync with Contact model too
           const Contact = (await import("../models/Contact.js")).default;
