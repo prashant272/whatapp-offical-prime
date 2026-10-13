@@ -23,7 +23,7 @@ const getPhoneCandidates = (phone) => {
 
 export const getConversations = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, assignedTo, sector, source, winner, subsector, cursor, search, filter: typeFilter } = req.query;
+    const { page = 1, limit = 20, status, assignedTo, sector, source, winner, subsector, gender, cursor, search, filter: typeFilter } = req.query;
     const account = req.whatsappAccount;
     const accountIds = req.whatsappAccountIds;
 
@@ -53,21 +53,53 @@ export const getConversations = async (req, res) => {
       }
     }
 
-    // 2. Search Logic (Database-wide)
+    // 2. Search Logic (Database-wide - Optimized for high speed)
+    let isPhoneSearch = false;
+    let phoneVariations = [];
     if (search) {
-      const escapedSearch = escapeRegex(search);
+      const cleanDigits = search.replace(/\D/g, "");
+      isPhoneSearch = cleanDigits.length >= 3 && /^[\d\s\+\-\(\)]+$/.test(search.trim());
 
-      const contactIds = await Contact.find({
-        name: { $regex: escapedSearch, $options: "i" }
-      }).distinct("_id");
+      if (isPhoneSearch) {
+        phoneVariations = [cleanDigits];
+        if (cleanDigits.length === 10) {
+          phoneVariations.push("91" + cleanDigits, "+91" + cleanDigits);
+        } else if (cleanDigits.length === 12 && cleanDigits.startsWith("91")) {
+          phoneVariations.push(cleanDigits.substring(2), "+" + cleanDigits);
+        } else if (cleanDigits.length === 11 && cleanDigits.startsWith("0")) {
+          phoneVariations.push(cleanDigits.substring(1), "91" + cleanDigits.substring(1));
+        }
 
-      conditions.push({
-        $or: [
-          { phone: { $regex: escapedSearch, $options: "i" } },
-          { lastMessage: { $regex: escapedSearch, $options: "i" } },
-          { contact: { $in: contactIds } }
-        ]
-      });
+        // Fast indexed phone search
+        conditions.push({
+          $or: [
+            { phone: { $in: phoneVariations } },
+            { phone: new RegExp(cleanDigits, "i") }
+          ]
+        });
+      } else {
+        const escapedSearch = escapeRegex(search);
+
+        const contactIds = await Contact.find({
+          name: { $regex: escapedSearch, $options: "i" }
+        }).select("_id").limit(100).lean();
+
+        const contactIdList = contactIds.map(c => c._id);
+
+        const orList = [
+          { phone: { $regex: escapedSearch, $options: "i" } }
+        ];
+
+        if (contactIdList.length > 0) {
+          orList.push({ contact: { $in: contactIdList } });
+        }
+
+        if (search.trim().length >= 3) {
+          orList.push({ lastMessage: { $regex: escapedSearch, $options: "i" } });
+        }
+
+        conditions.push({ $or: orList });
+      }
     }
 
     // 3. Additional Filters
@@ -89,6 +121,13 @@ export const getConversations = async (req, res) => {
     if (subsector && subsector !== "all") conditions.push({ subsector });
     if (source && source !== "all") conditions.push({ source });
     if (winner && winner !== "all") conditions.push({ winners: winner });
+    if (gender && gender !== "all") {
+      if (gender.toLowerCase() === "unassigned") {
+        conditions.push({ $or: [{ gender: "Unassigned" }, { gender: "unassigned" }, { gender: null }, { gender: { $exists: false } }, { gender: "" }] });
+      } else {
+        conditions.push({ gender: new RegExp(`^${gender}$`, "i") });
+      }
+    }
 
     // 3b. Unread/Window Quick Filters
     if (typeFilter === "unread") {
@@ -113,30 +152,44 @@ export const getConversations = async (req, res) => {
       filter.lastMessageTime = { $lt: new Date(cursor) };
     }
 
-    // Remove excessive logging
-
     const skip = cursor ? 0 : (parseInt(page) - 1) * parseInt(limit);
-    const total = await Conversation.countDocuments(filter);
+    const limitNum = Number(limit);
+
+    // Skip heavy countDocuments on search for ultra-fast response
+    const total = search ? 0 : await Conversation.countDocuments(filter);
+
     let conversations = await Conversation.find(filter)
-      .populate("contact", "_id name phone sector subsector")
-      .select("phone lastMessage lastMessageTime unreadCount status contact whatsappAccountId assignedTo sector subsector followUpTime followUpActivity lastCustomerMessageAt")
+      .populate("contact", "_id name phone sector subsector gender")
+      .select("phone lastMessage lastMessageTime unreadCount status contact whatsappAccountId assignedTo sector subsector gender followUpTime followUpActivity lastCustomerMessageAt")
       .sort({ lastMessageTime: -1 })
       .skip(skip)
-      .limit(Number(limit));
+      .limit(limitNum)
+      .lean();
 
     // Fallback: If searching and we have room in the list, search for matching Contacts
     // who don't have a conversation record yet in this account context
     // RBAC: Executives should NOT see unassigned contacts in search fallback
-    if (search && req.user.role !== "Executive" && conversations.length < Number(limit)) {
+    if (search && req.user.role !== "Executive" && conversations.length < limitNum) {
       const existingPhones = conversations.map(c => c.phone);
 
-      const extraContacts = await Contact.find({
-        phone: { $nin: existingPhones },
-        $or: [
-          { phone: { $regex: search, $options: "i" } },
-          { name: { $regex: search, $options: "i" } }
-        ]
-      }).limit(Number(limit) - conversations.length);
+      let contactQuery = { phone: { $nin: existingPhones } };
+      if (isPhoneSearch) {
+        contactQuery.$or = [
+          { phone: { $in: phoneVariations } },
+          { phone: new RegExp(search.replace(/\D/g, ""), "i") }
+        ];
+      } else {
+        const escaped = escapeRegex(search);
+        contactQuery.$or = [
+          { phone: { $regex: escaped, $options: "i" } },
+          { name: { $regex: escaped, $options: "i" } }
+        ];
+      }
+
+      const extraContacts = await Contact.find(contactQuery)
+        .select("_id name phone sector subsector gender whatsappAccountId")
+        .limit(limitNum - conversations.length)
+        .lean();
 
       const virtualConvs = extraContacts.map(contact => ({
         _id: `new:${contact.phone}`,
@@ -146,6 +199,9 @@ export const getConversations = async (req, res) => {
         lastMessageTime: null,
         unreadCount: 0,
         status: "New",
+        sector: contact.sector || "Unassigned",
+        subsector: contact.subsector || "Unassigned",
+        gender: contact.gender || "Unassigned",
         whatsappAccountId: contact.whatsappAccountId,
         isVirtual: true
       }));
@@ -157,12 +213,16 @@ export const getConversations = async (req, res) => {
       ? conversations[conversations.length - 1].lastMessageTime
       : null;
 
+    const hasMore = search
+      ? conversations.filter(c => !c.isVirtual).length === limitNum
+      : (skip + conversations.filter(c => !c.isVirtual).length < total);
+
     res.json({
       conversations,
       currentPage: Number(page),
-      totalPages: Math.ceil(total / limit),
-      totalConversations: total,
-      hasMore: skip + (conversations.filter(c => !c.isVirtual).length) < total,
+      totalPages: search ? 1 : Math.ceil(total / limitNum),
+      totalConversations: search ? conversations.length : total,
+      hasMore,
       nextCursor
     });
   } catch (error) {
@@ -673,7 +733,7 @@ export const sendChatImageMessage = async (req, res) => {
 
 export const assignConversation = async (req, res) => {
   try {
-    const { phone, userId, sector, subsector, source, winners } = req.body;
+    const { phone, userId, sector, subsector, source, winners, gender } = req.body;
     const account = req.whatsappAccount;
 
     const updateData = {};
@@ -681,6 +741,7 @@ export const assignConversation = async (req, res) => {
     if (sector !== undefined) updateData.sector = sector || "Unassigned";
     if (subsector !== undefined) updateData.subsector = subsector || "Unassigned";
     if (source !== undefined) updateData.source = source || "Unassigned";
+    if (gender !== undefined) updateData.gender = gender || "Unassigned";
     if (winners !== undefined) {
       updateData.winners = Array.isArray(winners) ? winners : (typeof winners === "string" ? winners.split(",").map(w => w.trim()).filter(Boolean) : []);
     }
@@ -704,6 +765,9 @@ export const assignConversation = async (req, res) => {
     if (winners !== undefined) {
       await Conversation.updateMany({ phone }, { $set: { winners: updateData.winners } });
     }
+    if (gender !== undefined) {
+      await Conversation.updateMany({ phone }, { $set: { gender: gender || "Unassigned" } });
+    }
 
     // SYNC: Update the master Contact record as well
     if (conversation && conversation.contact) {
@@ -712,6 +776,7 @@ export const assignConversation = async (req, res) => {
       if (sector !== undefined) contactUpdate.sector = sector || "Unassigned";
       if (subsector !== undefined) contactUpdate.subsector = subsector || "Unassigned";
       if (source !== undefined) contactUpdate.source = source || "Unassigned";
+      if (gender !== undefined) contactUpdate.gender = gender || "Unassigned";
       if (winners !== undefined) contactUpdate.winners = updateData.winners;
 
       await Contact.findByIdAndUpdate(conversation.contact, contactUpdate);

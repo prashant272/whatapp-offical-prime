@@ -5,16 +5,18 @@ const NewChatModal = ({ isOpen, onClose, onStart, sectors = [], sources = [], ac
   const [phone, setPhone] = useState("");
   const [sector, setSector] = useState("");
   const [source, setSource] = useState("");
+  const [gender, setGender] = useState("");
 
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!phone.trim()) return;
-    onStart(phone, undefined, sector, source);
+    onStart(phone, undefined, sector, source, gender);
     setPhone("");
     setSector("");
     setSource("");
+    setGender("");
     onClose();
   };
 
@@ -37,19 +39,28 @@ const NewChatModal = ({ isOpen, onClose, onStart, sectors = [], sources = [], ac
               autoFocus
             />
           </div>
-          <div style={{ marginBottom: "15px", display: "flex", gap: "10px" }}>
-            <div style={{ flex: 1 }}>
+          <div style={{ marginBottom: "15px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+            <div>
               <label style={{ display: "block", fontSize: "0.85rem", color: "#667781", marginBottom: "5px" }}>Sector (Optional)</label>
               <select value={sector} onChange={e => setSector(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
                 <option value="">Unassigned</option>
                 {sectors.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
               </select>
             </div>
-            <div style={{ flex: 1 }}>
+            <div>
               <label style={{ display: "block", fontSize: "0.85rem", color: "#667781", marginBottom: "5px" }}>Source (Optional)</label>
               <select value={source} onChange={e => setSource(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
                 <option value="">Unassigned</option>
                 {sources.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+            <div style={{ gridColumn: "span 2" }}>
+              <label style={{ display: "block", fontSize: "0.85rem", color: "#667781", marginBottom: "5px" }}>Gender (Optional)</label>
+              <select value={gender} onChange={e => setGender(e.target.value)} style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ddd" }}>
+                <option value="">Unassigned</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
               </select>
             </div>
           </div>

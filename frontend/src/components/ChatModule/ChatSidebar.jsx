@@ -165,6 +165,7 @@ const ChatSidebar = ({
   sectorFilter, setSectorFilter,
   sourceFilter, setSourceFilter,
   winnerFilter, setWinnerFilter,
+  genderFilter, setGenderFilter,
   allStatusOptions, executives, sectors, sources, winners,
   setShowManageModal, setShowNewChatModal,
   listData, selectedChat, navigate,
@@ -507,6 +508,18 @@ const ChatSidebar = ({
                   {winners?.map(w => (
                     <option key={w.name} value={w.name}>{w.name}</option>
                   ))}
+                </select>
+
+                <select
+                  value={genderFilter}
+                  onChange={(e) => setGenderFilter(e.target.value)}
+                  style={{ minWidth: "110px", padding: "6px 10px", border: "1px solid #e9edef", borderRadius: "12px", fontSize: "0.75rem", color: "#54656f", outline: "none", cursor: "pointer", fontWeight: "600", background: "#f0f2f5" }}
+                >
+                  <option value="all">Gender: All</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other</option>
+                  <option value="unassigned">Unassigned</option>
                 </select>
               </>
             )}

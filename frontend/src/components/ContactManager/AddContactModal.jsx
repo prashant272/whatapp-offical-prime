@@ -8,6 +8,7 @@ const AddContactModal = ({ isOpen, onClose, sectors, sources, winners, onSuccess
     phone: "",
     sector: "",
     source: "",
+    gender: "",
     winners: [],
   });
   const [loading, setLoading] = useState(false);
@@ -31,6 +32,7 @@ const AddContactModal = ({ isOpen, onClose, sectors, sources, winners, onSuccess
           phone: cleanPhone,
           sector: formData.sector || "Unassigned",
           source: formData.source || "Unassigned",
+          gender: formData.gender || "Unassigned",
           winners: formData.winners || [],
           tags: ["Manual Entry"]
         }],
@@ -39,7 +41,7 @@ const AddContactModal = ({ isOpen, onClose, sectors, sources, winners, onSuccess
 
       onSuccess();
       onClose();
-      setFormData({ name: "", phone: "", sector: "", source: "", winners: [] });
+      setFormData({ name: "", phone: "", sector: "", source: "", gender: "", winners: [] });
     } catch (error) {
       console.error(error);
       alert("Failed to add contact.");
@@ -126,6 +128,24 @@ const AddContactModal = ({ isOpen, onClose, sectors, sources, winners, onSuccess
               >
                 <option value="">Unassigned</option>
                 {sources.map(s => <option key={s._id || s.name} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "0.75rem", fontWeight: "700", color: "#64748b", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>Gender</label>
+            <div style={{ position: "relative" }}>
+              <select
+                value={formData.gender}
+                onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: "10px", border: "1.5px solid #e2e8f0", fontSize: "0.9rem", color: "#1e293b", boxSizing: "border-box", outline: "none", transition: "0.2s", appearance: "none", cursor: "pointer", background: "white" }}
+                onFocus={e => e.target.style.borderColor = "#00a884"}
+                onBlur={e => e.target.style.borderColor = "#e2e8f0"}
+              >
+                <option value="">Unassigned</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
               </select>
             </div>
           </div>

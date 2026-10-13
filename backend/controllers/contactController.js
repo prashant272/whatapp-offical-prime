@@ -49,6 +49,7 @@ export const getContacts = async (req, res, next) => {
       campaignName,
       source,
       winner,
+      gender,
       deleted
     } = req.query;
 
@@ -110,6 +111,11 @@ export const getContacts = async (req, res, next) => {
     if (winner) {
       const winnerArr = Array.isArray(winner) ? winner : winner.split(',');
       query.winners = { $in: winnerArr };
+    }
+
+    if (gender) {
+      const genderArr = Array.isArray(gender) ? gender : gender.split(',');
+      query.gender = { $in: genderArr };
     }
 
     if (subsector) query.subsector = subsector;
@@ -356,6 +362,9 @@ export const updateContact = async (req, res, next) => {
     }
     if (updateData.winners !== undefined) {
       await Conversation.updateMany({ phone: contact.phone }, { $set: { winners: updateData.winners } });
+    }
+    if (updateData.gender !== undefined) {
+      await Conversation.updateMany({ phone: contact.phone }, { $set: { gender: updateData.gender || "Unassigned" } });
     }
 
     const updatedContact = await Contact.findById(id);
@@ -605,7 +614,7 @@ export const checkExistingConversations = async (req, res, next) => {
 
 export const bulkUpdateContacts = async (req, res, next) => {
   try {
-    const { phones, sector, subsector, source, winners } = req.body;
+    const { phones, sector, subsector, source, winners, gender } = req.body;
     if (!phones || !Array.isArray(phones)) {
       return res.status(400).json({ error: "Phones list is required" });
     }
@@ -614,6 +623,7 @@ export const bulkUpdateContacts = async (req, res, next) => {
     if (sector !== undefined) updateFields.sector = sector || "Unassigned";
     if (subsector !== undefined) updateFields.subsector = subsector || "Unassigned";
     if (source !== undefined) updateFields.source = source || "Unassigned";
+    if (gender !== undefined) updateFields.gender = gender || "Unassigned";
     if (winners !== undefined) {
       updateFields.winners = Array.isArray(winners) ? winners : (typeof winners === "string" ? winners.split(',').map(w => w.trim()).filter(Boolean) : []);
     }

@@ -13,6 +13,7 @@ const conversationSchema = new mongoose.Schema({
   sector: { type: String, default: "Unassigned" },
   subsector: { type: String, default: "Unassigned" },
   source: { type: String, default: "Unassigned" },
+  gender: { type: String, default: "Unassigned" },
   winners: [{ type: String }],
   followUpTime: { type: Date },
   followUpActivity: { type: String },
@@ -20,6 +21,8 @@ const conversationSchema = new mongoose.Schema({
   windowReminderSentAt: { type: Date }
 }, { timestamps: true });
 
+conversationSchema.index({ phone: 1 });
+conversationSchema.index({ phone: 1, lastMessageTime: -1 });
 conversationSchema.index({ whatsappAccountId: 1, lastMessageTime: -1 });
 conversationSchema.index({ phone: 1, whatsappAccountId: 1 }, { unique: true });
 conversationSchema.index({ status: 1, lastMessageTime: -1 });
@@ -27,6 +30,7 @@ conversationSchema.index({ assignedTo: 1, lastMessageTime: -1 });
 conversationSchema.index({ sector: 1, lastMessageTime: -1 });
 conversationSchema.index({ subsector: 1, lastMessageTime: -1 });
 conversationSchema.index({ source: 1, lastMessageTime: -1 });
+conversationSchema.index({ gender: 1, lastMessageTime: -1 });
 conversationSchema.index({ whatsappAccountId: 1, status: 1, lastMessageTime: -1 });
 conversationSchema.index({ whatsappAccountId: 1, assignedTo: 1, lastMessageTime: -1 });
 

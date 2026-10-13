@@ -135,6 +135,7 @@ export const syncGoogleSheets = async () => {
         const emailIdx = findIdx('email', ['email']);
         const sectorIdx = findIdx('sector', ['sector', 'industry']);
         const sourceIdx = findIdx('source', ['source', 'lead source']);
+        const genderIdx = findIdx('gender', ['gender', 'sex']);
 
         if (phoneIdx === -1) {
            console.log('Skipping sheet because phoneIdx is -1');
@@ -186,6 +187,13 @@ export const syncGoogleSheets = async () => {
               const email = emailIdx !== -1 ? row[emailIdx] : null;
               const sector = sectorIdx !== -1 ? row[sectorIdx] : null;
               const source = sourceIdx !== -1 ? row[sourceIdx] : null;
+              let gender = null;
+              if (genderIdx !== -1 && row[genderIdx]) {
+                const gLower = String(row[genderIdx]).trim().toLowerCase();
+                if (gLower === 'male' || gLower === 'm') gender = 'Male';
+                else if (gLower === 'female' || gLower === 'f') gender = 'Female';
+                else if (gLower === 'other' || gLower === 'o') gender = 'Other';
+              }
 
               let customFields = {};
               for (const [key, value] of Object.entries(fieldMapping)) {
@@ -213,6 +221,8 @@ export const syncGoogleSheets = async () => {
                 
                 if (integration.defaultSource) updateFields.source = integration.defaultSource;
                 else if (source) updateFields.source = source;
+
+                if (gender) updateFields.gender = gender;
 
                 if (integration.assignedTo) updateFields.assignedTo = integration.assignedTo;
                 
@@ -263,6 +273,7 @@ export const syncGoogleSheets = async () => {
                       phone,
                       sector: integration.defaultSector || sector || 'Unassigned',
                       source: integration.defaultSource || source || 'Google Sheets Auto-Sync',
+                      gender: gender || 'Unassigned',
                       tags: [integration.importTag, `sheet_msg_${integration._id}`],
                       customFields: { ...customFields, ...(email ? { email } : {}) },
                       whatsappAccountId: integration.whatsappAccountId,
@@ -303,6 +314,8 @@ export const syncGoogleSheets = async () => {
               
               const finalSource = integration.defaultSource || source;
               if (finalSource && finalSource !== 'Unassigned' && finalSource !== 'Google Sheets Auto-Sync') rowConvUpdates.source = finalSource;
+
+              if (gender) rowConvUpdates.gender = gender;
               
               rowConvUpdates.contact = contactId; // Ensure linked to contact
 

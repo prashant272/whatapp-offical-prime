@@ -429,7 +429,8 @@ export const handleWebhook = async (req, res) => {
             assignedTo: contact.assignedTo, // Carry over assignment if any
             sector: contact.sector || "Unassigned",
             subsector: contact.subsector || "Unassigned",
-            source: contact.source || "Unassigned"
+            source: contact.source || "Unassigned",
+            gender: contact.gender || "Unassigned"
           });
         }
 

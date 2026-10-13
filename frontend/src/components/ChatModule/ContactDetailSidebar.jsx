@@ -472,8 +472,46 @@ const ContactDetailSidebar = ({
                     </div>
                   </div>
 
+                  <div>
+                    <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Gender</label>
+                    <div style={{ position: "relative" }}>
+                      <select
+                        style={{
+                          width: "100%",
+                          padding: "10px 14px",
+                          background: "#f8fafc",
+                          border: "1.5px solid #e2e8f0",
+                          borderRadius: "10px",
+                          color: "#1e293b",
+                          fontSize: "0.9rem",
+                          fontWeight: "600",
+                          outline: "none",
+                          cursor: "pointer",
+                          appearance: "none",
+                          transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
+                        }}
+                        value={activeContact?.gender || selectedChat.gender || "Unassigned"}
+                        onChange={(e) => handleAssign(undefined, undefined, undefined, undefined, undefined, e.target.value)}
+                        onFocus={e => {
+                          e.target.style.borderColor = "#4f46e5";
+                          e.target.style.background = "#ffffff";
+                        }}
+                        onBlur={e => {
+                          e.target.style.borderColor = "#e2e8f0";
+                          e.target.style.background = "#f8fafc";
+                        }}
+                      >
+                        <option value="Unassigned">Unassigned</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                      <ChevronDown size={15} style={{ position: "absolute", right: "14px", top: "50%", transform: "translateY(-50%)", color: "#64748b", pointerEvents: "none" }} />
+                    </div>
+                  </div>
+
                   {isJobsStatus ? (
-                    <div>
+                    <div style={{ gridColumn: "span 2" }}>
                       <label style={{ color: "#334155", fontSize: "0.7rem", fontWeight: "800", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>Specialist</label>
                       <div style={{ position: "relative" }}>
                         <select

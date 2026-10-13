@@ -11,6 +11,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
     sector: "",
     source: "",
     winners: "",
+    gender: "",
     tags: ""
   });
   const [defaultWinners, setDefaultWinners] = useState([]);
@@ -58,6 +59,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         if (lowerH.includes("sector") || lowerH.includes("department")) newMappings.sector = h;
         if (lowerH.includes("source") || lowerH.includes("lead source") || lowerH.includes("origin")) newMappings.source = h;
         if (lowerH.includes("winner")) newMappings.winners = h;
+        if (lowerH.includes("gender") || lowerH === "sex") newMappings.gender = h;
       });
       
       if (initialConfig?.fieldMapping) {
@@ -92,6 +94,14 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
         // If user picked a default sector/source, use it. Else use Excel column. Else default string
         sector: defaultSector || row[mappings.sector] || "Unassigned",
         source: defaultSource || row[mappings.source] || "",
+        gender: (() => {
+          if (!row[mappings.gender]) return "Unassigned";
+          const gLower = String(row[mappings.gender]).trim().toLowerCase();
+          if (gLower === "male" || gLower === "m") return "Male";
+          if (gLower === "female" || gLower === "f") return "Female";
+          if (gLower === "other" || gLower === "o") return "Other";
+          return "Unassigned";
+        })(),
         winners: defaultWinners.length ? defaultWinners : (row[mappings.winners] ? String(row[mappings.winners]).split(',').map(w => w.trim()).filter(Boolean) : []),
         assignedTo: defaultAssignedTo || null,
         tags: allTags,
@@ -283,6 +293,7 @@ const ImportMapperModal = ({ isOpen, onClose, rawData, onComplete, customFields,
                     <MappingRow label="Phone / Mobile *" icon={<Smartphone size={14} />} value={mappings.phone} onChange={(v) => setMappings({ ...mappings, phone: v })} headers={headers} required />
                     <MappingRow label="Sector" icon={<Layers size={14} />} value={mappings.sector} onChange={(v) => setMappings({ ...mappings, sector: v })} headers={headers} />
                     <MappingRow label="Lead Source" icon={<Layers size={14} />} value={mappings.source} onChange={(v) => setMappings({ ...mappings, source: v })} headers={headers} />
+                    <MappingRow label="Gender" icon={<User size={14} />} value={mappings.gender} onChange={(v) => setMappings({ ...mappings, gender: v })} headers={headers} />
                     <MappingRow label="Winners" icon={<Layers size={14} />} value={mappings.winners} onChange={(v) => setMappings({ ...mappings, winners: v })} headers={headers} />
                   </div>
 

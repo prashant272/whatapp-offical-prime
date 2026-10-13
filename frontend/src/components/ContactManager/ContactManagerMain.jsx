@@ -26,7 +26,7 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(100);
-  const [filters, setFilters] = useState({ search: "", status: "", sector: "", tag: "" });
+  const [filters, setFilters] = useState({ search: "", status: "", sector: "", winner: "", gender: "", tag: "" });
 
   // Metadata
   const [customFields, setCustomFields] = useState([]);

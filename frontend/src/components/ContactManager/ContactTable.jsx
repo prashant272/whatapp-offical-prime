@@ -66,7 +66,9 @@ const ContactRow = memo(({
             </span>
           )}
         </div>
-        <div style={{ color: "#94a3b8", fontSize: "0.65rem", fontWeight: "600" }}>{contact.sector || "Unassigned"}</div>
+        <div style={{ color: "#94a3b8", fontSize: "0.65rem", fontWeight: "600" }}>
+          {contact.sector || "Unassigned"}{contact.gender && contact.gender !== "Unassigned" ? ` • ${contact.gender}` : ""}
+        </div>
       </td>
       <td style={{ padding: "10px 20px" }}>
         {contact.status && (

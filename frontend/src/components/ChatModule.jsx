@@ -22,7 +22,8 @@ import {
   sendImage as sendReduxImage,
   updateConversationStatus as updateReduxStatus,
   setSourceFilter as setReduxSourceFilter,
-  setWinnerFilter as setReduxWinnerFilter
+  setWinnerFilter as setReduxWinnerFilter,
+  setGenderFilter as setReduxGenderFilter
 } from "../redux/slices/chatSlice";
 
 import api, { API_BASE } from "../api";
@@ -85,6 +86,7 @@ const ChatModule = () => {
     sectorFilter,
     sourceFilter,
     winnerFilter,
+    genderFilter,
     userFilter,
     searchQuery,
     selectedAccountIds,
@@ -99,6 +101,7 @@ const ChatModule = () => {
   const setSectorFilter = (val) => dispatch(setReduxSectorFilter(val));
   const setSourceFilter = (val) => dispatch(setReduxSourceFilter(val));
   const setWinnerFilter = (val) => dispatch(setReduxWinnerFilter(val));
+  const setGenderFilter = (val) => dispatch(setReduxGenderFilter(val));
   const setUserFilter = (val) => dispatch(setReduxUserFilter(val));
   const setSearchQuery = (val) => dispatch(setReduxSearchQuery(val));
   const setSelectedAccountIds = (val) => dispatch(setReduxSelectedAccountIds(val));
@@ -207,7 +210,16 @@ const ChatModule = () => {
   // --- Logic Functions ---
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 500);
+    const trimmed = searchQuery.trim();
+    if (trimmed === "") {
+      setDebouncedSearch("");
+      return;
+    }
+    const cleanDigits = trimmed.replace(/\D/g, "");
+    const isDigits = cleanDigits.length >= 3 && /^[\d\s\+\-\(\)]+$/.test(trimmed);
+    // 80ms for 10+ digits, 180ms for partial digits, 220ms for names
+    const delay = isDigits ? (cleanDigits.length >= 10 ? 80 : 180) : 220;
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), delay);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
@@ -222,6 +234,7 @@ const ChatModule = () => {
       sectorFilter,
       sourceFilter,
       winnerFilter,
+      genderFilter,
       debouncedSearch,
       filter
     };
@@ -243,6 +256,7 @@ const ChatModule = () => {
       sector: sectorFilter,
       source: sourceFilter,
       winner: winnerFilter,
+      gender: genderFilter,
       search: debouncedSearch,
       accountIds: accIds,
       filter: filter
@@ -309,7 +323,7 @@ const ChatModule = () => {
       setHasNextPage(hasMore);
     }
     setIsFetchingNextPage(false);
-  }, [dispatch, selectedAccountIds, activeAccount, statusFilter, userFilter, sectorFilter, sourceFilter, winnerFilter, debouncedSearch, filter]);
+  }, [dispatch, selectedAccountIds, activeAccount, statusFilter, userFilter, sectorFilter, sourceFilter, winnerFilter, genderFilter, debouncedSearch, filter]);
 
   const fetchNextPage = useCallback(() => {
     if (hasNextPage && !isFetchingNextPage && nextCursor) {
@@ -321,7 +335,7 @@ const ChatModule = () => {
     if (activeAccount?._id || selectedAccountIds.length > 0) {
       loadConversations();
     }
-  }, [loadConversations, activeAccount?._id, selectedAccountIds, statusFilter, userFilter, sectorFilter, sourceFilter, winnerFilter, debouncedSearch, filter]);
+  }, [loadConversations, activeAccount?._id, selectedAccountIds, statusFilter, userFilter, sectorFilter, sourceFilter, winnerFilter, genderFilter, debouncedSearch, filter]);
 
   const refetchConvs = () => {
     lastFetchParamsRef.current = null;
@@ -485,15 +499,20 @@ const ChatModule = () => {
     }
   }, [showContactInfo, selectedChat?._id, selectedChat?.phone]);
 
-  const handleAssign = async (userId, sector, subsector, source, winners) => {
+  const handleAssign = async (userIdOrObj, sector, subsector, source, winners, gender) => {
     if (!selectedChat) return;
     try {
-      const payload = { phone: selectedChat.phone };
-      if (userId !== undefined) payload.userId = userId;
-      if (sector !== undefined) payload.sector = sector;
-      if (subsector !== undefined) payload.subsector = subsector;
-      if (source !== undefined) payload.source = source;
-      if (winners !== undefined) payload.winners = winners;
+      let payload = { phone: selectedChat.phone };
+      if (typeof userIdOrObj === 'object' && userIdOrObj !== null) {
+        payload = { ...payload, ...userIdOrObj };
+      } else {
+        if (userIdOrObj !== undefined) payload.userId = userIdOrObj;
+        if (sector !== undefined) payload.sector = sector;
+        if (subsector !== undefined) payload.subsector = subsector;
+        if (source !== undefined) payload.source = source;
+        if (winners !== undefined) payload.winners = winners;
+        if (gender !== undefined) payload.gender = gender;
+      }
 
       const res = await api.patch(`/conversations/assign`, payload, {
         headers: { "x-whatsapp-account-id": selectedChat.whatsappAccountId }
@@ -513,7 +532,8 @@ const ChatModule = () => {
           sector: updatedContactObj.sector || updatedConv.sector || prev.sector,
           subsector: updatedContactObj.subsector || updatedConv.subsector || prev.subsector,
           source: updatedContactObj.source || updatedConv.source || prev.source,
-          winners: updatedContactObj.winners || updatedConv.winners || prev.winners
+          winners: updatedContactObj.winners || updatedConv.winners || prev.winners,
+          gender: updatedContactObj.gender || updatedConv.gender || prev.gender
         }));
       }
       // refetchConvs(); // Removed to prevent disappearing from list when filters are active
@@ -741,7 +761,7 @@ const ChatModule = () => {
     }
   };
 
-  const handleStartNewChat = async (phone, accountId, sector, source) => {
+  const handleStartNewChat = async (phone, accountId, sector, source, gender) => {
     try {
       const cleanPhone = phone.replace(/\D/g, "");
       const res = await api.post(`/messages/send`, {
@@ -751,11 +771,12 @@ const ChatModule = () => {
         headers: { "x-whatsapp-account-id": accountId }
       });
       if (res.data.success) {
-        if (sector || source) {
+        if (sector || source || gender) {
           try {
             const payload = { phone: res.data.message.to };
             if (sector) payload.sector = sector;
             if (source) payload.source = source;
+            if (gender) payload.gender = gender;
             await api.patch('/conversations/assign', payload, {
               headers: { "x-whatsapp-account-id": accountId }
             });
@@ -1087,7 +1108,14 @@ const ChatModule = () => {
         }
       }
       if (query) {
-        if (!((c.contact?.name || "").toLowerCase().includes(query) || String(c.phone || "").includes(query) || (c.lastMessage || "").toLowerCase().includes(query))) return false;
+        const cleanQuery = query.replace(/\D/g, "");
+        const cleanPhone = String(c.phone || "").replace(/\D/g, "");
+        const matchesPhone = cleanQuery.length >= 3 && (cleanPhone.includes(cleanQuery) || cleanQuery.includes(cleanPhone) || cleanPhone.endsWith(cleanQuery));
+        const matchesRaw = String(c.phone || "").toLowerCase().includes(query);
+        const matchesName = (c.contact?.name || "").toLowerCase().includes(query);
+        const matchesMsg = (c.lastMessage || "").toLowerCase().includes(query);
+
+        if (!matchesPhone && !matchesRaw && !matchesName && !matchesMsg) return false;
       }
       if (c._id === chatId) return true;
       return true;
@@ -1430,6 +1458,7 @@ const ChatModule = () => {
         sectorFilter={sectorFilter} setSectorFilter={setSectorFilter}
         sourceFilter={sourceFilter} setSourceFilter={setSourceFilter}
         winnerFilter={winnerFilter} setWinnerFilter={setWinnerFilter}
+        genderFilter={genderFilter} setGenderFilter={setGenderFilter}
         allStatusOptions={allStatusOptions} executives={executives} sectors={sectors} sources={sources} winners={winners}
         setShowManageModal={setShowManageModal} setShowNewChatModal={setShowNewChatModal}
         listData={listData} selectedChat={selectedChat} navigate={navigate}

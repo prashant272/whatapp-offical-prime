@@ -62,6 +62,17 @@ const ContactFilters = ({
           {winners.map(w => <option key={w._id} value={w.name}>{w.name}</option>)}
         </select>
 
+        <select
+          style={{ padding: "8px", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "0.75rem", fontWeight: "700", color: "#334155", background: "white", cursor: "pointer" }}
+          value={filters.gender || ""}
+          onChange={e => setFilters({ ...filters, gender: e.target.value })}
+        >
+          <option value="">Gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other</option>
+        </select>
+
         
         {filters.tag && (
           <div style={{ display: "flex", alignItems: "center", gap: "6px", background: "#e0e7ff", padding: "6px 12px", borderRadius: "10px", fontSize: "0.75rem", fontWeight: "800", color: "#3730a3" }}>

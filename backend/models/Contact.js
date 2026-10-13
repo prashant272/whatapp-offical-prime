@@ -12,6 +12,7 @@ const contactSchema = new mongoose.Schema({
   sector: { type: String, default: "Unassigned" },
   subsector: { type: String, default: "Unassigned" },
   source: { type: String, default: "Unassigned" },
+  gender: { type: String, default: "Unassigned" },
   winners: [{ type: String }],
   tags: [String],
 
@@ -79,11 +80,13 @@ const contactSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 contactSchema.index({ phone: 1 }, { unique: true });
+contactSchema.index({ name: 1 });
 contactSchema.index({ "accountsData.whatsappAccountId": 1 });
 contactSchema.index({ whatsappAccountId: 1, createdAt: -1 });
 contactSchema.index({ sector: 1 });
 contactSchema.index({ subsector: 1 });
 contactSchema.index({ source: 1 });
+contactSchema.index({ gender: 1 });
 contactSchema.index({ status: 1 });
 contactSchema.index({ assignedTo: 1 });
 contactSchema.index({ isCampaignSent: 1, isCampaignFailed: 1 });

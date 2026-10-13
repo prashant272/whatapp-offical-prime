@@ -13,6 +13,7 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources
         phone: contact.phone || "",
         sector: contact.sector || "",
         source: contact.source || "",
+        gender: contact.gender || "",
         winners: contact.winners || [],
         priority: contact.priority || "",
         status: contact.status || "",
@@ -90,6 +91,20 @@ const EditContactModal = ({ isOpen, onClose, contact, onUpdate, sectors, sources
               >
                 <option value="">No Source</option>
                 {sources.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: "0.8rem", fontWeight: "700", color: "#475569", marginBottom: "4px", display: "block" }}>Gender</label>
+              <select
+                value={formData.gender || ""}
+                onChange={e => setFormData({ ...formData, gender: e.target.value })}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", outline: "none" }}
+              >
+                <option value="">Unassigned</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
               </select>
             </div>
           </div>

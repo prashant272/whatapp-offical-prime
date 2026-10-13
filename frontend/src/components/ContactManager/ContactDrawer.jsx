@@ -190,6 +190,10 @@ const ContactDrawer = ({
                     <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase" }}>Status</div>
                     <div style={{ fontSize: "0.95rem", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>{contact.status || "Unassigned"}</div>
                   </div>
+                  <div style={{ background: "#f8fafc", padding: "15px", borderRadius: "12px", border: "1px solid #eef2f6" }}>
+                    <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "700", textTransform: "uppercase" }}>Gender</div>
+                    <div style={{ fontSize: "0.95rem", fontWeight: "800", color: "#1e293b", marginTop: "4px" }}>{contact.gender || "Unassigned"}</div>
+                  </div>
                   
                   {contact.customFields && Object.keys(contact.customFields).length > 0 && (
                     <>

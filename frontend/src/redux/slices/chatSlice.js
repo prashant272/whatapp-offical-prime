@@ -17,10 +17,10 @@ export const fetchMessages = createAsyncThunk(
 
 export const fetchConversations = createAsyncThunk(
   "chat/fetchConversations",
-  async ({ cursor, status, assignedTo, sector, source, winner, search, accountIds, filter }, { rejectWithValue }) => {
+  async ({ cursor, status, assignedTo, sector, source, winner, gender, search, accountIds, filter }, { rejectWithValue }) => {
     try {
       const res = await api.get(`/conversations`, {
-        params: { limit: 20, status, assignedTo, sector, source, winner, search, cursor, filter },
+        params: { limit: 20, status, assignedTo, sector, source, winner, gender, search, cursor, filter },
         headers: { "x-whatsapp-account-id": accountIds }
       });
       return res.data;
@@ -80,6 +80,7 @@ const initialState = {
   sectorFilter: "all",
   sourceFilter: "all",
   winnerFilter: "all",
+  genderFilter: "all",
   userFilter: "all",
   searchQuery: "",
   selectedAccountIds: [],
@@ -108,6 +109,9 @@ const chatSlice = createSlice({
     },
     setWinnerFilter: (state, action) => {
       state.winnerFilter = action.payload;
+    },
+    setGenderFilter: (state, action) => {
+      state.genderFilter = action.payload;
     },
     setUserFilter: (state, action) => {
       state.userFilter = action.payload;
@@ -189,6 +193,7 @@ export const {
   setSectorFilter,
   setSourceFilter,
   setWinnerFilter,
+  setGenderFilter,
   setUserFilter,
   setSearchQuery,
   setSelectedAccountIds,
