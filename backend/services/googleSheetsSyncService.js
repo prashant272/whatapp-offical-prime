@@ -4,6 +4,9 @@ import SheetIntegration from '../models/SheetIntegration.js';
 import Contact from '../models/Contact.js';
 import Message from '../models/Message.js';
 import Conversation from '../models/Conversation.js';
+import '../models/Template.js';
+import '../models/TemplatePreset.js';
+import '../models/WhatsAppAccount.js';
 import { sendTemplateMessage } from './whatsappService.js';
 
 const getOauth2Client = () => {
@@ -43,10 +46,13 @@ const buildTemplateComponents = (template, configObj, contactName, contactPhone)
   return components;
 };
 
-const sendAutoMessage = async (account, toPhone, toName, preset) => {
+export const sendAutoMessage = async (account, toPhone, toName, preset) => {
   try {
-    const template = preset.template;
-    if (!template) return;
+    const template = preset?.template;
+    if (!template) {
+      console.warn(`⚠️ Cannot send auto-message to ${toPhone}: Preset "${preset?.name}" has no valid Meta Template attached in database.`);
+      return false;
+    }
     const components = buildTemplateComponents(template, preset.config, toName, toPhone);
     const lang = template.language || "en_US";
 
@@ -54,7 +60,7 @@ const sendAutoMessage = async (account, toPhone, toName, preset) => {
     const messageId = metaRes.messages?.[0]?.id;
 
     let messageBody = `[Template: ${template.name}]`;
-    const bodyComp = template.components.find(c => c.type === "BODY");
+    const bodyComp = template.components?.find(c => c.type === "BODY");
     if (bodyComp && bodyComp.text) {
       let text = bodyComp.text;
       const bodyParams = components.find(c => c.type === "body")?.parameters || [];
@@ -84,12 +90,21 @@ const sendAutoMessage = async (account, toPhone, toName, preset) => {
       },
       { upsert: true, new: true }
     );
+    return true;
   } catch (error) {
     console.error(`Failed to auto-send message to ${toPhone}:`, error.message);
+    return false;
   }
 };
 
+let isSyncInProgress = false;
+
 export const syncGoogleSheets = async () => {
+  if (isSyncInProgress) {
+    console.log("⚠️ Google Sheets sync is already in progress, skipping overlapping run.");
+    return;
+  }
+  isSyncInProgress = true;
   try {
     const integrations = await SheetIntegration.find({ active: true })
       .populate('whatsappAccountId')
@@ -187,12 +202,12 @@ export const syncGoogleSheets = async () => {
               const email = emailIdx !== -1 ? row[emailIdx] : null;
               const sector = sectorIdx !== -1 ? row[sectorIdx] : null;
               const source = sourceIdx !== -1 ? row[sourceIdx] : null;
-              let gender = null;
+              let rowGender = null;
               if (genderIdx !== -1 && row[genderIdx]) {
                 const gLower = String(row[genderIdx]).trim().toLowerCase();
-                if (gLower === 'male' || gLower === 'm') gender = 'Male';
-                else if (gLower === 'female' || gLower === 'f') gender = 'Female';
-                else if (gLower === 'other' || gLower === 'o') gender = 'Other';
+                if (gLower === 'male' || gLower === 'm') rowGender = 'Male';
+                else if (gLower === 'female' || gLower === 'f') rowGender = 'Female';
+                else if (gLower === 'other' || gLower === 'o') rowGender = 'Other';
               }
 
               let customFields = {};
@@ -222,7 +237,7 @@ export const syncGoogleSheets = async () => {
                 if (integration.defaultSource) updateFields.source = integration.defaultSource;
                 else if (source) updateFields.source = source;
 
-                if (gender) updateFields.gender = gender;
+                if (rowGender) updateFields.gender = rowGender;
 
                 if (integration.assignedTo) updateFields.assignedTo = integration.assignedTo;
                 
@@ -243,13 +258,16 @@ export const syncGoogleSheets = async () => {
                    hasCfUpdate = true;
                 }
 
-                const msgTag = `sheet_msg_${integration._id}`;
-                const hasBeenMessaged = contact.tags && contact.tags.includes(msgTag);
+                const sheetTag = `sheet_msg_${integration._id}`;
+                const sentTag = `sheet_sent_${integration._id}`;
+                const hasBeenMessaged = contact.tags && (contact.tags.includes(sentTag) || contact.tags.includes(`sheet_msg_${integration._id}_sent`));
                 
                 let addToSetFields = null;
                 if (!hasBeenMessaged && integration.whatsappAccountId && integration.templatePreset) {
                    newContactsToMessage.push({ phone, name });
-                   addToSetFields = { tags: msgTag };
+                }
+                if (!contact.tags || !contact.tags.includes(sheetTag)) {
+                   addToSetFields = { tags: sheetTag };
                 }
 
                 if (Object.keys(updateFields).length > 0 || addToSetFields) {
@@ -273,7 +291,7 @@ export const syncGoogleSheets = async () => {
                       phone,
                       sector: integration.defaultSector || sector || 'Unassigned',
                       source: integration.defaultSource || source || 'Google Sheets Auto-Sync',
-                      gender: gender || 'Unassigned',
+                      gender: rowGender || 'Unassigned',
                       tags: [integration.importTag, `sheet_msg_${integration._id}`],
                       customFields: { ...customFields, ...(email ? { email } : {}) },
                       whatsappAccountId: integration.whatsappAccountId,
@@ -315,7 +333,14 @@ export const syncGoogleSheets = async () => {
               const finalSource = integration.defaultSource || source;
               if (finalSource && finalSource !== 'Unassigned' && finalSource !== 'Google Sheets Auto-Sync') rowConvUpdates.source = finalSource;
 
-              if (gender) rowConvUpdates.gender = gender;
+              let rowGender2 = null;
+              if (genderIdx !== -1 && row[genderIdx]) {
+                const gLower = String(row[genderIdx]).trim().toLowerCase();
+                if (gLower === 'male' || gLower === 'm') rowGender2 = 'Male';
+                else if (gLower === 'female' || gLower === 'f') rowGender2 = 'Female';
+                else if (gLower === 'other' || gLower === 'o') rowGender2 = 'Other';
+              }
+              if (rowGender2) rowConvUpdates.gender = rowGender2;
               
               rowConvUpdates.contact = contactId; // Ensure linked to contact
 
@@ -336,9 +361,13 @@ export const syncGoogleSheets = async () => {
               const account = integration.whatsappAccountId;
               const preset = integration.templatePreset;
               const intervalMs = (integration.messageInterval || 0) * 1000;
+              const sentTag = `sheet_sent_${integration._id}`;
               for (let i = 0; i < newContactsToMessage.length; i++) {
                 const contact = newContactsToMessage[i];
-                await sendAutoMessage(account, contact.phone, contact.name, preset);
+                const ok = await sendAutoMessage(account, contact.phone, contact.name, preset);
+                if (ok) {
+                  await Contact.updateOne({ phone: contact.phone }, { $addToSet: { tags: sentTag } });
+                }
                 if (intervalMs > 0 && i < newContactsToMessage.length - 1) {
                   await new Promise(r => setTimeout(r, intervalMs));
                 }
@@ -367,5 +396,7 @@ export const syncGoogleSheets = async () => {
     }
   } catch (err) {
     console.error('Google Sheets Sync Engine Error:', err);
+  } finally {
+    isSyncInProgress = false;
   }
 };

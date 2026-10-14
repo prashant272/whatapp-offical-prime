@@ -116,6 +116,11 @@ httpServer.listen(PORT, () => {
   console.log(`Backend running on port ${PORT} 🚀`);
   
   // Start Background Sync Jobs
+  setTimeout(() => {
+    console.log("Triggering startup Google Sheets auto-sync...");
+    syncGoogleSheets();
+  }, 3000);
+
   cron.schedule("*/5 * * * *", () => {
     console.log("Running Google Sheets Auto-Sync (Every 5 Mins)...");
     syncGoogleSheets();

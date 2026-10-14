@@ -804,6 +804,7 @@ export const registerSheet = async (req, res) => {
     } else {
       integration.fieldMapping = fieldMapping || integration.fieldMapping;
       if (syncName) integration.name = syncName;
+      if (whatsappAccountId !== undefined) integration.whatsappAccountId = whatsappAccountId;
       if (sheetName !== undefined) integration.sheetName = sheetName;
       if (assignedTo !== undefined) integration.assignedTo = assignedTo;
       if (templatePreset !== undefined) integration.templatePreset = templatePreset;
@@ -884,10 +885,27 @@ export const getSheetHeaders = async (req, res) => {
 export const getRegisteredSheets = async (req, res) => {
   try {
     const SheetIntegration = (await import('../models/SheetIntegration.js')).default;
-    const sheets = await SheetIntegration.find().sort('-createdAt');
+    const Contact = (await import('../models/Contact.js')).default;
+    await import('../models/Template.js');
+    await import('../models/TemplatePreset.js');
+    await import('../models/WhatsAppAccount.js');
+
+    const sheets = await SheetIntegration.find()
+      .populate('whatsappAccountId', 'name phoneNumberId')
+      .populate({ path: 'templatePreset', populate: { path: 'template', select: 'name status components' } })
+      .sort('-createdAt')
+      .lean();
+
+    for (const s of sheets) {
+      const tag = `sheet_msg_${s._id}`;
+      const sentTag = `sheet_sent_${s._id}`;
+      s.taggedContactsCount = await Contact.countDocuments({ tags: tag });
+      s.sentContactsCount = await Contact.countDocuments({ tags: sentTag });
+    }
+
     res.json({ sheets });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch sheets' });
+    res.status(500).json({ error: 'Failed to fetch sheets: ' + err.message });
   }
 };
 
@@ -900,3 +918,119 @@ export const deleteSheet = async (req, res) => {
     res.status(500).json({ error: 'Failed to delete sheet' });
   }
 };
+
+export const syncSheetsNow = async (req, res) => {
+  try {
+    const { syncGoogleSheets } = await import('../services/googleSheetsSyncService.js');
+    syncGoogleSheets();
+    res.json({ success: true, message: 'Google Sheets sync started' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to start sync: ' + err.message });
+  }
+};
+
+export const sendSheetMessages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { whatsappAccountId, templatePresetId, intervalSeconds = 5, onlyUnsent = false } = req.body;
+
+    const SheetIntegration = (await import('../models/SheetIntegration.js')).default;
+    const Contact = (await import('../models/Contact.js')).default;
+    const WhatsAppAccount = (await import('../models/WhatsAppAccount.js')).default;
+    const TemplatePreset = (await import('../models/TemplatePreset.js')).default;
+    await import('../models/Template.js');
+    const { sendAutoMessage } = await import('../services/googleSheetsSyncService.js');
+
+    const integration = await SheetIntegration.findById(id);
+    if (!integration) return res.status(404).json({ error: 'Sheet integration not found' });
+
+    const accountId = whatsappAccountId || integration.whatsappAccountId;
+    if (!accountId) {
+      return res.status(400).json({ error: 'No WhatsApp Account selected for sending messages' });
+    }
+    const account = await WhatsAppAccount.findById(accountId);
+    if (!account) return res.status(404).json({ error: 'WhatsApp Account not found' });
+
+    const presetId = templatePresetId || integration.templatePreset;
+    if (!presetId) {
+      return res.status(400).json({ error: 'No Template Preset selected' });
+    }
+    const preset = await TemplatePreset.findById(presetId).populate('template');
+    if (!preset) return res.status(404).json({ error: 'Template Preset not found' });
+    if (!preset.template) {
+      return res.status(400).json({ error: `Selected preset "${preset.name}" has no valid Meta Template attached in database. Please choose a different preset.` });
+    }
+
+    // Save selected preset & account to the integration if user changed them
+    if (whatsappAccountId && String(integration.whatsappAccountId) !== String(whatsappAccountId)) {
+      integration.whatsappAccountId = whatsappAccountId;
+    }
+    if (templatePresetId && String(integration.templatePreset) !== String(templatePresetId)) {
+      integration.templatePreset = templatePresetId;
+    }
+    if (intervalSeconds && Number(intervalSeconds) !== integration.messageInterval) {
+      integration.messageInterval = Number(intervalSeconds);
+    }
+    await integration.save();
+
+    const sheetTag = `sheet_msg_${integration._id}`;
+    const sentTag = `sheet_sent_${integration._id}`;
+
+    const query = { tags: sheetTag };
+    if (onlyUnsent) {
+      query.tags = { $all: [sheetTag], $nin: [sentTag] };
+    }
+
+    let contacts = await Contact.find(query).select('_id name phone tags');
+
+    // Fallback: If no contacts found with sheet_msg_ tag, try integration.importTag
+    if (contacts.length === 0 && !onlyUnsent && integration.importTag) {
+      contacts = await Contact.find({ tags: integration.importTag }).select('_id name phone tags');
+    }
+
+    if (contacts.length === 0) {
+      return res.status(400).json({ error: onlyUnsent ? 'All contacts for this sheet have already received messages.' : 'No contacts found for this sheet.' });
+    }
+
+    const intervalMs = Math.max(Number(intervalSeconds) || 3, 1) * 1000;
+
+    // Trigger asynchronous background sending
+    (async () => {
+      console.log(`🚀 [Sheet Broadcast] Started for "${integration.name}": Sending to ${contacts.length} leads using preset "${preset.name}" (${preset.template.name}) via ${account.name} (Interval: ${intervalSeconds}s)`);
+      let sentCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < contacts.length; i++) {
+        const c = contacts[i];
+        try {
+          const success = await sendAutoMessage(account, c.phone, c.name, preset);
+          if (success) {
+            sentCount++;
+            await Contact.updateOne({ _id: c._id }, { $addToSet: { tags: sentTag } });
+          } else {
+            failCount++;
+          }
+        } catch (sendErr) {
+          failCount++;
+          console.error(`[Sheet Broadcast] Error sending to ${c.phone}:`, sendErr.message);
+        }
+
+        if (i < contacts.length - 1 && intervalMs > 0) {
+          await new Promise(r => setTimeout(r, intervalMs));
+        }
+      }
+      console.log(`🏁 [Sheet Broadcast] Complete for "${integration.name}": ${sentCount} sent, ${failCount} failed.`);
+    })();
+
+    res.json({
+      success: true,
+      message: `Message sending started for ${contacts.length} contacts using template "${preset.template.name}". They are being sent in the background.`,
+      contactCount: contacts.length
+    });
+  } catch (error) {
+    console.error('Error in sendSheetMessages:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+

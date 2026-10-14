@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import * as XLSX from 'xlsx';
 import api from "../../api";
-import { ChevronLeft, ChevronRight, Loader2, Send, X, AlertTriangle, FileSpreadsheet, Trash2, Edit3 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, Send, X, AlertTriangle, FileSpreadsheet, Trash2, Edit3, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useWhatsAppAccount } from "../../WhatsAppAccountContext";
 import { useGoogleLogin } from "@react-oauth/google";
@@ -62,6 +62,49 @@ const ContactManagerMain = ({ deleted = false }) => {
   const [availableSheetTabs, setAvailableSheetTabs] = useState([]);
   const [selectedSheetTab, setSelectedSheetTab] = useState("");
   const [editingSyncConfig, setEditingSyncConfig] = useState(null);
+  const [syncingAllSheets, setSyncingAllSheets] = useState(false);
+  const [sheetToMessage, setSheetToMessage] = useState(null);
+  const [selectedPresetForSend, setSelectedPresetForSend] = useState("");
+  const [selectedAccountForSend, setSelectedAccountForSend] = useState("");
+  const [sendIntervalSeconds, setSendIntervalSeconds] = useState(5);
+  const [onlyUnsentLeads, setOnlyUnsentLeads] = useState(false);
+  const [sendingMessages, setSendingMessages] = useState(false);
+
+  const handleTriggerSync = async () => {
+    try {
+      setSyncingAllSheets(true);
+      await api.post("/contacts/sheets/sync");
+      alert("🔄 Auto-sync triggered! Updated rows will reflect in contacts & conversations.");
+      setTimeout(fetchRegisteredSheets, 4000);
+    } catch (err) {
+      alert("Failed to start sync: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSyncingAllSheets(false);
+    }
+  };
+
+  const handleSendSheetMessages = async () => {
+    if (!sheetToMessage) return;
+    if (!selectedAccountForSend) return alert("Please select a WhatsApp Sender Account");
+    if (!selectedPresetForSend) return alert("Please select a Template Preset");
+    
+    setSendingMessages(true);
+    try {
+      const res = await api.post(`/contacts/sheets/${sheetToMessage._id}/send-messages`, {
+        whatsappAccountId: selectedAccountForSend,
+        templatePresetId: selectedPresetForSend,
+        intervalSeconds: sendIntervalSeconds,
+        onlyUnsent: onlyUnsentLeads
+      });
+      alert(`🚀 ${res.data.message}`);
+      setSheetToMessage(null);
+      fetchRegisteredSheets();
+    } catch (err) {
+      alert("Failed to start message broadcast: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSendingMessages(false);
+    }
+  };
 
   useEffect(() => {
     // Check google auth status
@@ -583,73 +626,138 @@ const ContactManagerMain = ({ deleted = false }) => {
 
               {registeredSheets.length > 0 && (
                 <div style={{ marginTop: "20px", borderTop: "1px solid #eef2f6", paddingTop: "15px" }}>
-                  <h5 style={{ fontSize: "0.85rem", fontWeight: "800", color: "#1e293b", marginBottom: "10px" }}>Currently Auto-Syncing ({registeredSheets.length})</h5>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "150px", overflowY: "auto" }}>
-                    {registeredSheets.map(s => (
-                      <div key={s._id} 
-                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px", background: "white", borderRadius: "8px", border: "1px solid #eee", cursor: "pointer", transition: "all 0.2s" }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = "#f1f5f9"}
-                        onMouseLeave={(e) => e.currentTarget.style.background = "white"}
-                        onClick={(e) => {
-                          if (e.target.closest('a') || e.target.closest('svg')) return;
-                          setFilters(prev => ({ ...prev, tag: `sheet_msg_${s._id}` }));
-                          setShowImportModal(false);
-                        }}
-                      >
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <span style={{ fontSize: "0.8rem", fontWeight: "800", color: "#1e293b" }}>{s.name || `Google Sheet (ID: ${s.spreadsheetId?.substring(0,6)}...)`}</span>
-                          <a href={s.spreadsheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem", fontWeight: "600", color: "#00a884", textDecoration: "none" }}>{s.sheetName}</a>
-                          <span style={{ fontSize: "0.65rem", color: "#64748b" }}>Added: {s.syncStats?.totalAdded || 0} | Updated: {s.syncStats?.totalUpdated || 0}</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={{ fontSize: "0.65rem", fontWeight: "700", color: s.active ? "#0f9d58" : "#ef4444" }}>
-                            {s.lastSyncedAt ? `Last Sync: ${new Date(s.lastSyncedAt).toLocaleTimeString()}` : "Pending Sync"}
-                          </span>
-                          <Edit3
-                            size={16}
-                            color="#1d4ed8"
-                            style={{ cursor: "pointer" }}
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              setImporting(true);
-                              try {
-                                const res = await api.get(`/contacts/sheets/headers?sheetUrl=${encodeURIComponent(s.spreadsheetUrl)}&sheetName=${encodeURIComponent(s.sheetName)}`);
-                                if (res.data.headers) {
-                                  const mockData = {};
-                                  res.data.headers.forEach(h => { mockData[h] = "9999999999 Test Contact Data"; });
-                                  setTempImportData([mockData]);
-                                  setAvailableSheetTabs(res.data.sheetNames || [s.sheetName]);
-                                  setSelectedSheetTab(res.data.selectedSheet || s.sheetName);
-                                  setEditingSyncConfig(s);
-                                  setSheetUrl(s.spreadsheetUrl);
-                                  setShowImportModal(false);
-                                  setShowMapper(true);
-                                }
-                              } catch(err) {
-                                alert("Failed to fetch sheet configuration.");
-                              } finally {
-                                setImporting(false);
-                              }
-                            }}
-                          />
-                          <Trash2 
-                            size={16} 
-                            color="#ef4444" 
-                            style={{ cursor: "pointer" }} 
-                            onClick={async () => {
-                              if(window.confirm('Stop auto-sync and remove this sheet?')) {
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                    <h5 style={{ fontSize: "0.85rem", fontWeight: "800", color: "#1e293b", margin: 0 }}>Currently Auto-Syncing ({registeredSheets.length})</h5>
+                    <button
+                      type="button"
+                      disabled={syncingAllSheets}
+                      onClick={handleTriggerSync}
+                      style={{ padding: "4px 10px", fontSize: "0.72rem", fontWeight: "700", background: syncingAllSheets ? "#94a3b8" : "#00a884", color: "white", border: "none", borderRadius: "6px", cursor: syncingAllSheets ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: "5px" }}
+                    >
+                      <RefreshCw size={12} className={syncingAllSheets ? "animate-spin" : ""} /> {syncingAllSheets ? "Syncing..." : "Sync Now"}
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxHeight: "240px", overflowY: "auto" }}>
+                    {registeredSheets.map(s => {
+                      const isTemplateMissing = s.templatePreset && !s.templatePreset.template;
+                      return (
+                        <div key={s._id} 
+                          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 12px", background: "white", borderRadius: "10px", border: "1px solid #e2e8f0", cursor: "pointer", transition: "all 0.2s" }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = "#f8fafc"}
+                          onMouseLeave={(e) => e.currentTarget.style.background = "white"}
+                          onClick={(e) => {
+                            if (e.target.closest('a') || e.target.closest('button') || e.target.closest('svg')) return;
+                            setFilters(prev => ({ ...prev, tag: `sheet_msg_${s._id}` }));
+                            setShowImportModal(false);
+                          }}
+                        >
+                          <div style={{ display: "flex", flexDirection: "column", gap: "2px", flex: 1 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                              <span style={{ fontSize: "0.85rem", fontWeight: "800", color: "#1e293b" }}>{s.name || `Sheet (${s.spreadsheetId?.substring(0,6)}...)`}</span>
+                              <a href={s.spreadsheetUrl} target="_blank" rel="noreferrer" style={{ fontSize: "0.7rem", fontWeight: "700", color: "#00a884", textDecoration: "none" }}>{s.sheetName}</a>
+                            </div>
+                            <div style={{ fontSize: "0.68rem", color: "#64748b", display: "flex", gap: "10px", alignItems: "center" }}>
+                              <span>Leads: <strong>{s.taggedContactsCount || 0}</strong></span>
+                              <span>Sent: <strong style={{ color: s.sentContactsCount > 0 ? "#059669" : "#64748b" }}>{s.sentContactsCount || 0}</strong></span>
+                              <span>Added: <strong>{s.syncStats?.totalAdded || 0}</strong></span>
+                            </div>
+                            <div>
+                              {s.templatePreset ? (
+                                isTemplateMissing ? (
+                                  <span style={{ fontSize: "0.62rem", color: "#dc2626", fontWeight: "800", background: "#fef2f2", padding: "1px 6px", borderRadius: "4px", border: "1px solid #fecaca" }}>
+                                    ⚠️ Preset template missing in Meta!
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: "0.62rem", color: "#059669", fontWeight: "700", background: "#f0fdf4", padding: "1px 6px", borderRadius: "4px", border: "1px solid #bbf7d0" }}>
+                                    💬 {s.templatePreset.name}
+                                  </span>
+                                )
+                              ) : (
+                                <span style={{ fontSize: "0.62rem", color: "#94a3b8" }}>No Preset</span>
+                              )}
+                            </div>
+                          </div>
+                          
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontSize: "0.65rem", fontWeight: "700", color: s.active ? "#0f9d58" : "#ef4444" }}>
+                              {s.lastSyncedAt ? new Date(s.lastSyncedAt).toLocaleTimeString() : "Pending"}
+                            </span>
+                            
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSheetToMessage(s);
+                                setSelectedAccountForSend(s.whatsappAccountId?._id || (activeAccount && !activeAccount.isAll ? activeAccount._id : ""));
+                                setSelectedPresetForSend(s.templatePreset?._id || "");
+                                setSendIntervalSeconds(s.messageInterval || 5);
+                                setOnlyUnsentLeads(false);
+                              }}
+                              style={{
+                                padding: "5px 10px",
+                                fontSize: "0.7rem",
+                                fontWeight: "800",
+                                background: "#25d366",
+                                color: "white",
+                                border: "none",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px"
+                              }}
+                              title="Send WhatsApp Template Message to Sheet Leads"
+                            >
+                              <Send size={11} /> Send Msg
+                            </button>
+
+                            <Edit3
+                              size={16}
+                              color="#1d4ed8"
+                              style={{ cursor: "pointer" }}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                setImporting(true);
                                 try {
-                                  await api.delete(`/contacts/sheets/${s._id}`);
-                                  fetchRegisteredSheets();
+                                  const res = await api.get(`/contacts/sheets/headers?sheetUrl=${encodeURIComponent(s.spreadsheetUrl)}&sheetName=${encodeURIComponent(s.sheetName)}`);
+                                  if (res.data.headers) {
+                                    const mockData = {};
+                                    res.data.headers.forEach(h => { mockData[h] = "9999999999 Test Contact Data"; });
+                                    setTempImportData([mockData]);
+                                    setAvailableSheetTabs(res.data.sheetNames || [s.sheetName]);
+                                    setSelectedSheetTab(res.data.selectedSheet || s.sheetName);
+                                    setEditingSyncConfig(s);
+                                    setSheetUrl(s.spreadsheetUrl);
+                                    setShowImportModal(false);
+                                    setShowMapper(true);
+                                  }
                                 } catch(err) {
-                                  alert('Failed to delete sheet');
+                                  alert("Failed to fetch sheet configuration.");
+                                } finally {
+                                  setImporting(false);
                                 }
-                              }
-                            }}
-                          />
+                              }}
+                            />
+                            <Trash2 
+                              size={16} 
+                              color="#ef4444" 
+                              style={{ cursor: "pointer" }} 
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if(window.confirm('Stop auto-sync and remove this sheet?')) {
+                                  try {
+                                    await api.delete(`/contacts/sheets/${s._id}`);
+                                    fetchRegisteredSheets();
+                                  } catch(err) {
+                                    alert('Failed to delete sheet');
+                                  }
+                                }
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -698,6 +806,153 @@ const ContactManagerMain = ({ deleted = false }) => {
           }
         }}
       />
+
+      {/* Sheet Send Message Modal */}
+      {sheetToMessage && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10000 }}>
+          <div style={{ background: "white", borderRadius: "16px", padding: "24px", width: "480px", maxWidth: "90%", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.25)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "800", color: "#1e293b", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Send size={18} color="#25d366" /> Send Message to Sheet Leads
+              </h3>
+              <button onClick={() => setSheetToMessage(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <div style={{ background: "#f8fafc", borderRadius: "10px", padding: "12px", marginBottom: "16px", border: "1px solid #e2e8f0" }}>
+              <div style={{ fontWeight: "700", color: "#0f172a", fontSize: "0.9rem" }}>{sheetToMessage.name}</div>
+              <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "4px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <span>Tab: <strong>{sheetToMessage.sheetName}</strong></span>
+                <span>Total Leads: <strong>{sheetToMessage.taggedContactsCount || 0}</strong></span>
+                <span>Already Messaged: <strong style={{ color: "#059669" }}>{sheetToMessage.sentContactsCount || 0}</strong></span>
+              </div>
+            </div>
+
+            {sheetToMessage.templatePreset && !sheetToMessage.templatePreset.template && (
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "10px", padding: "10px 12px", marginBottom: "16px", display: "flex", gap: "8px", alignItems: "center" }}>
+                <AlertTriangle size={18} color="#ef4444" style={{ flexShrink: 0 }} />
+                <div style={{ fontSize: "0.75rem", color: "#991b1b" }}>
+                  The previously saved preset (<strong>{sheetToMessage.templatePreset.name}</strong>) has a missing template in Meta. Please choose a valid preset below.
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ fontSize: "0.72rem", fontWeight: "800", color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
+                  📱 WhatsApp Sender Account
+                </label>
+                <select
+                  value={selectedAccountForSend}
+                  onChange={(e) => {
+                    setSelectedAccountForSend(e.target.value);
+                    setSelectedPresetForSend("");
+                  }}
+                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "0.85rem", fontWeight: "600", outline: "none", background: "white" }}
+                >
+                  <option value="">-- Select Sender Account --</option>
+                  {accounts.filter(a => !a.isAll).map(a => (
+                    <option key={a._id} value={a._id}>{a.name} (+{a.phoneNumberId})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.72rem", fontWeight: "800", color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
+                  💬 Template Preset
+                </label>
+                <select
+                  value={selectedPresetForSend}
+                  onChange={(e) => setSelectedPresetForSend(e.target.value)}
+                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "0.85rem", fontWeight: "600", outline: "none", background: "white" }}
+                >
+                  <option value="">-- Select Template Preset --</option>
+                  {presets.map(p => {
+                    const matches = !p.whatsappAccountId || p.whatsappAccountId === selectedAccountForSend || p.whatsappAccountId?._id === selectedAccountForSend;
+                    if (!matches) return null;
+                    const hasTpl = !!p.template?.name;
+                    return (
+                      <option key={p._id} value={p._id} disabled={!hasTpl}>
+                        {p.name} {hasTpl ? `(Template: ${p.template.name})` : "❌ (Template Missing)"}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: "0.72rem", fontWeight: "800", color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
+                  ⏱️ Message Interval (Seconds between messages)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={sendIntervalSeconds}
+                  onChange={(e) => setSendIntervalSeconds(Number(e.target.value))}
+                  style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1.5px solid #cbd5e1", fontSize: "0.85rem", fontWeight: "600", outline: "none" }}
+                />
+                <div style={{ fontSize: "0.68rem", color: "#64748b", marginTop: "4px" }}>
+                  Interval between messages helps avoid Meta spam blocks. (Default: 5s)
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                <input
+                  type="checkbox"
+                  id="onlyUnsentCheckbox"
+                  checked={onlyUnsentLeads}
+                  onChange={(e) => setOnlyUnsentLeads(e.target.checked)}
+                  style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                />
+                <label htmlFor="onlyUnsentCheckbox" style={{ fontSize: "0.78rem", fontWeight: "600", color: "#334155", cursor: "pointer" }}>
+                  Only send to leads who haven't received message yet ({Math.max((sheetToMessage.taggedContactsCount || 0) - (sheetToMessage.sentContactsCount || 0), 0)} leads)
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "12px", marginTop: "20px" }}>
+              <button
+                type="button"
+                onClick={() => setSheetToMessage(null)}
+                disabled={sendingMessages}
+                style={{ flex: 1, padding: "10px", borderRadius: "8px", border: "1.5px solid #cbd5e1", background: "white", fontWeight: "700", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={sendingMessages || !selectedAccountForSend || !selectedPresetForSend}
+                onClick={handleSendSheetMessages}
+                style={{
+                  flex: 2,
+                  padding: "10px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: sendingMessages || !selectedAccountForSend || !selectedPresetForSend ? "#94a3b8" : "#25d366",
+                  color: "white",
+                  fontWeight: "800",
+                  cursor: sendingMessages || !selectedAccountForSend || !selectedPresetForSend ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px"
+                }}
+              >
+                {sendingMessages ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Starting Broadcast...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} /> Send Messages ({onlyUnsentLeads ? Math.max((sheetToMessage.taggedContactsCount || 0) - (sheetToMessage.sentContactsCount || 0), 0) : (sheetToMessage.taggedContactsCount || 0)})
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showEditModal && (
         <EditContactModal
