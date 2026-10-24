@@ -366,6 +366,9 @@ export const updateContact = async (req, res, next) => {
     if (updateData.gender !== undefined) {
       await Conversation.updateMany({ phone: contact.phone }, { $set: { gender: updateData.gender || "Unassigned" } });
     }
+    if (updateData.assignedTo !== undefined) {
+      await Conversation.updateMany({ phone: contact.phone }, { $set: { assignedTo: updateData.assignedTo || null } });
+    }
 
     const updatedContact = await Contact.findById(id);
 
@@ -815,21 +818,32 @@ export const registerSheet = async (req, res) => {
       
       // Instantly apply bulk overrides to existing contacts from this sheet
       const Contact = (await import("../models/Contact.js")).default;
+      const Conversation = (await import("../models/Conversation.js")).default;
+
+      // Only assign default user to contacts/conversations that are currently unassigned (preserve manual assignments)
+      if (assignedTo !== undefined && assignedTo) {
+        await Contact.updateMany(
+          { tags: `sheet_msg_${integration._id}`, $or: [{ assignedTo: null }, { assignedTo: { $exists: false } }] },
+          { $set: { assignedTo } }
+        );
+        const newlyAssigned = await Contact.find({ tags: `sheet_msg_${integration._id}`, assignedTo }).select("phone");
+        const newlyAssignedPhones = newlyAssigned.map(c => c.phone);
+        if (newlyAssignedPhones.length > 0) {
+          await Conversation.updateMany(
+            { phone: { $in: newlyAssignedPhones }, $or: [{ assignedTo: null }, { assignedTo: { $exists: false } }] },
+            { $set: { assignedTo } }
+          );
+        }
+      }
+
       const updatePayload = {};
-      if (assignedTo !== undefined) updatePayload.assignedTo = assignedTo || null;
       if (defaultSource !== undefined) updatePayload.source = defaultSource;
       if (defaultSector !== undefined) updatePayload.sector = defaultSector;
       
       if (Object.keys(updatePayload).length > 0) {
         await Contact.updateMany({ tags: `sheet_msg_${integration._id}` }, { $set: updatePayload });
-        
-        // Also update Conversations to immediately reflect in the Chat UI
-        const Conversation = (await import("../models/Conversation.js")).default;
-        
-        // Find all contacts updated to get their phones
         const affectedContacts = await Contact.find({ tags: `sheet_msg_${integration._id}` }).select("phone");
         const phones = affectedContacts.map(c => c.phone);
-        
         if (phones.length > 0) {
            await Conversation.updateMany({ phone: { $in: phones } }, { $set: updatePayload });
         }
@@ -975,21 +989,22 @@ export const sendSheetMessages = async (req, res) => {
 
     const sheetTag = `sheet_msg_${integration._id}`;
     const sentTag = `sheet_sent_${integration._id}`;
+    const failedTag = `sheet_failed_${integration._id}`;
 
     const query = { tags: sheetTag };
     if (onlyUnsent) {
-      query.tags = { $all: [sheetTag], $nin: [sentTag] };
+      query.tags = { $all: [sheetTag], $nin: [sentTag, failedTag, 'invalid_whatsapp'] };
     }
 
-    let contacts = await Contact.find(query).select('_id name phone tags');
+    let contacts = await Contact.find(query).select('_id name phone tags sheetFailCount');
 
     // Fallback: If no contacts found with sheet_msg_ tag, try integration.importTag
     if (contacts.length === 0 && !onlyUnsent && integration.importTag) {
-      contacts = await Contact.find({ tags: integration.importTag }).select('_id name phone tags');
+      contacts = await Contact.find({ tags: integration.importTag }).select('_id name phone tags sheetFailCount');
     }
 
     if (contacts.length === 0) {
-      return res.status(400).json({ error: onlyUnsent ? 'All contacts for this sheet have already received messages.' : 'No contacts found for this sheet.' });
+      return res.status(400).json({ error: onlyUnsent ? 'All contacts for this sheet have already received messages or failed.' : 'No contacts found for this sheet.' });
     }
 
     const intervalMs = Math.max(Number(intervalSeconds) || 3, 1) * 1000;
@@ -1006,12 +1021,30 @@ export const sendSheetMessages = async (req, res) => {
           const success = await sendAutoMessage(account, c.phone, c.name, preset);
           if (success) {
             sentCount++;
-            await Contact.updateOne({ _id: c._id }, { $addToSet: { tags: sentTag } });
+            await Contact.updateOne(
+              { _id: c._id }, 
+              { 
+                $addToSet: { tags: sentTag },
+                $set: { sheetFailCount: 0 }
+              }
+            );
           } else {
             failCount++;
+            const newFail = (c.sheetFailCount || 0) + 1;
+            const updateDoc = { $inc: { sheetFailCount: 1 } };
+            if (newFail >= 2) {
+              updateDoc.$addToSet = { tags: { $each: [failedTag, 'invalid_whatsapp'] } };
+            }
+            await Contact.updateOne({ _id: c._id }, updateDoc);
           }
         } catch (sendErr) {
           failCount++;
+          const newFail = (c.sheetFailCount || 0) + 1;
+          const updateDoc = { $inc: { sheetFailCount: 1 } };
+          if (newFail >= 2) {
+            updateDoc.$addToSet = { tags: { $each: [failedTag, 'invalid_whatsapp'] } };
+          }
+          await Contact.updateOne({ _id: c._id }, updateDoc);
           console.error(`[Sheet Broadcast] Error sending to ${c.phone}:`, sendErr.message);
         }
 

@@ -239,7 +239,8 @@ export const syncGoogleSheets = async () => {
 
                 if (rowGender) updateFields.gender = rowGender;
 
-                if (integration.assignedTo) updateFields.assignedTo = integration.assignedTo;
+                // Only assign default user if contact does not already have an assigned user
+                if (!contact.assignedTo && integration.assignedTo) updateFields.assignedTo = integration.assignedTo;
                 
                 const cfObj = {};
                 if (contact.customFields) {
@@ -260,11 +261,18 @@ export const syncGoogleSheets = async () => {
 
                 const sheetTag = `sheet_msg_${integration._id}`;
                 const sentTag = `sheet_sent_${integration._id}`;
-                const hasBeenMessaged = contact.tags && (contact.tags.includes(sentTag) || contact.tags.includes(`sheet_msg_${integration._id}_sent`));
+                const failedTag = `sheet_failed_${integration._id}`;
+                const hasBeenMessaged = contact.tags && (
+                  contact.tags.includes(sentTag) || 
+                  contact.tags.includes(`sheet_msg_${integration._id}_sent`) ||
+                  contact.tags.includes(failedTag) ||
+                  contact.tags.includes('invalid_whatsapp')
+                );
+                const isFailedTooManyTimes = (contact.sheetFailCount || 0) >= 2;
                 
                 let addToSetFields = null;
-                if (!hasBeenMessaged && integration.whatsappAccountId && integration.templatePreset) {
-                   newContactsToMessage.push({ phone, name });
+                if (!hasBeenMessaged && !isFailedTooManyTimes && integration.whatsappAccountId && integration.templatePreset) {
+                   newContactsToMessage.push({ phone, name, sheetFailCount: contact.sheetFailCount || 0 });
                 }
                 if (!contact.tags || !contact.tags.includes(sheetTag)) {
                    addToSetFields = { tags: sheetTag };
@@ -301,7 +309,7 @@ export const syncGoogleSheets = async () => {
                 });
                 localAdded++;
                 if (integration.whatsappAccountId && integration.templatePreset) {
-                   newContactsToMessage.push({ phone, name });
+                   newContactsToMessage.push({ phone, name, sheetFailCount: 0 });
                 }
               }
               
@@ -311,21 +319,32 @@ export const syncGoogleSheets = async () => {
                await Contact.bulkWrite(bulkOps, { ordered: false });
             }
             
-            // After contacts are created/updated, fetch their IDs to link Conversations
-            const syncedContacts = await Contact.find({ phone: { $in: batchPhones } }).select('_id phone');
+            // After contacts are created/updated, fetch their IDs and assignments to link Conversations
+            const syncedContacts = await Contact.find({ phone: { $in: batchPhones } }).select('_id phone assignedTo');
             const syncedContactMap = new Map();
-            for (const c of syncedContacts) syncedContactMap.set(c.phone, c._id);
+            for (const c of syncedContacts) syncedContactMap.set(c.phone, c);
+
+            const existingConversations = await Conversation.find({ phone: { $in: batchPhones } }).select('phone assignedTo');
+            const existingConvMap = new Map();
+            for (const conv of existingConversations) existingConvMap.set(conv.phone, conv);
             
             for (const item of batch) {
               const { phone, row } = item;
-              const contactId = syncedContactMap.get(phone);
-              if (!contactId) continue;
+              const syncedContact = syncedContactMap.get(phone);
+              if (!syncedContact) continue;
+              const contactId = syncedContact._id;
               
               const sector = sectorIdx !== -1 ? row[sectorIdx] : null;
               const source = sourceIdx !== -1 ? row[sourceIdx] : null;
               
               const rowConvUpdates = {};
-              if (integration.assignedTo) rowConvUpdates.assignedTo = integration.assignedTo;
+
+              // Only assign default user if conversation does not already have an assigned user
+              const existingConv = existingConvMap.get(phone);
+              if (!existingConv || !existingConv.assignedTo) {
+                const targetAssignedTo = syncedContact.assignedTo || integration.assignedTo;
+                if (targetAssignedTo) rowConvUpdates.assignedTo = targetAssignedTo;
+              }
               
               const finalSector = integration.defaultSector || sector;
               if (finalSector && finalSector !== 'Unassigned') rowConvUpdates.sector = finalSector;
@@ -345,10 +364,9 @@ export const syncGoogleSheets = async () => {
               rowConvUpdates.contact = contactId; // Ensure linked to contact
 
               convBulkOps.push({
-                updateOne: {
+                updateMany: {
                   filter: { phone },
-                  update: { $set: rowConvUpdates },
-                  upsert: true
+                  update: { $set: rowConvUpdates }
                 }
               });
             }
@@ -362,11 +380,30 @@ export const syncGoogleSheets = async () => {
               const preset = integration.templatePreset;
               const intervalMs = (integration.messageInterval || 0) * 1000;
               const sentTag = `sheet_sent_${integration._id}`;
+              const failedTag = `sheet_failed_${integration._id}`;
               for (let i = 0; i < newContactsToMessage.length; i++) {
                 const contact = newContactsToMessage[i];
                 const ok = await sendAutoMessage(account, contact.phone, contact.name, preset);
                 if (ok) {
-                  await Contact.updateOne({ phone: contact.phone }, { $addToSet: { tags: sentTag } });
+                  await Contact.updateOne(
+                    { phone: contact.phone }, 
+                    { 
+                      $addToSet: { tags: sentTag },
+                      $set: { sheetFailCount: 0 }
+                    }
+                  );
+                } else {
+                  const newFailCount = (contact.sheetFailCount || 0) + 1;
+                  const updateDoc = {
+                    $inc: { sheetFailCount: 1 }
+                  };
+                  if (newFailCount >= 2) {
+                    updateDoc.$addToSet = {
+                      tags: { $each: [failedTag, 'invalid_whatsapp'] }
+                    };
+                    console.log(`🚫 Number ${contact.phone} failed ${newFailCount} times. Marked as invalid WhatsApp/failed to stop retrying.`);
+                  }
+                  await Contact.updateOne({ phone: contact.phone }, updateDoc);
                 }
                 if (intervalMs > 0 && i < newContactsToMessage.length - 1) {
                   await new Promise(r => setTimeout(r, intervalMs));

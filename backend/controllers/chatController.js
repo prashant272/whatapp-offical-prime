@@ -159,12 +159,19 @@ export const getConversations = async (req, res) => {
     const total = search ? 0 : await Conversation.countDocuments(filter);
 
     let conversations = await Conversation.find(filter)
-      .populate("contact", "_id name phone sector subsector gender")
+      .populate("contact", "_id name phone sector subsector gender assignedTo")
+      .populate("assignedTo", "name")
       .select("phone lastMessage lastMessageTime unreadCount status contact whatsappAccountId assignedTo sector subsector gender followUpTime followUpActivity lastCustomerMessageAt")
       .sort({ lastMessageTime: -1 })
       .skip(skip)
       .limit(limitNum)
       .lean();
+
+    for (const c of conversations) {
+      if (!c.assignedTo && c.contact?.assignedTo) {
+        c.assignedTo = c.contact.assignedTo;
+      }
+    }
 
     // Fallback: If searching and we have room in the list, search for matching Contacts
     // who don't have a conversation record yet in this account context
@@ -187,7 +194,8 @@ export const getConversations = async (req, res) => {
       }
 
       const extraContacts = await Contact.find(contactQuery)
-        .select("_id name phone sector subsector gender whatsappAccountId")
+        .select("_id name phone sector subsector gender whatsappAccountId assignedTo")
+        .populate("assignedTo", "name")
         .limit(limitNum - conversations.length)
         .lean();
 
@@ -203,6 +211,7 @@ export const getConversations = async (req, res) => {
         subsector: contact.subsector || "Unassigned",
         gender: contact.gender || "Unassigned",
         whatsappAccountId: contact.whatsappAccountId,
+        assignedTo: contact.assignedTo,
         isVirtual: true
       }));
 
@@ -746,13 +755,25 @@ export const assignConversation = async (req, res) => {
       updateData.winners = Array.isArray(winners) ? winners : (typeof winners === "string" ? winners.split(",").map(w => w.trim()).filter(Boolean) : []);
     }
 
-    const conversation = await Conversation.findOneAndUpdate(
-      { phone, $or: [{ whatsappAccountId: account?._id }, { whatsappAccountId: null }] },
+    const filter = { phone };
+    if (account?._id && account._id !== "all") {
+      filter.$or = [{ whatsappAccountId: account._id }, { whatsappAccountId: null }];
+    }
+
+    let conversation = await Conversation.findOneAndUpdate(
+      filter,
       updateData,
       { new: true }
     ).populate("assignedTo", "name");
 
-    // SYNC: Update all conversations for this phone number to keep sector/subsector global
+    if (!conversation) {
+      conversation = await Conversation.findOne({ phone }).populate("assignedTo", "name");
+    }
+
+    // CRITICAL: Update ALL conversations for this phone number to keep assignment and taxonomy global
+    if (userId !== undefined) {
+      await Conversation.updateMany({ phone }, { $set: { assignedTo: userId || null } });
+    }
     if (sector !== undefined) {
       await Conversation.updateMany({ phone }, { $set: { sector: sector || "Unassigned" } });
     }
@@ -769,25 +790,34 @@ export const assignConversation = async (req, res) => {
       await Conversation.updateMany({ phone }, { $set: { gender: gender || "Unassigned" } });
     }
 
-    // SYNC: Update the master Contact record as well
-    if (conversation && conversation.contact) {
-      const contactUpdate = {};
-      if (userId !== undefined) contactUpdate.assignedTo = userId || null;
-      if (sector !== undefined) contactUpdate.sector = sector || "Unassigned";
-      if (subsector !== undefined) contactUpdate.subsector = subsector || "Unassigned";
-      if (source !== undefined) contactUpdate.source = source || "Unassigned";
-      if (gender !== undefined) contactUpdate.gender = gender || "Unassigned";
-      if (winners !== undefined) contactUpdate.winners = updateData.winners;
+    // SYNC: Update all master Contact records for this phone number as well
+    const contactUpdate = {};
+    if (userId !== undefined) contactUpdate.assignedTo = userId || null;
+    if (sector !== undefined) contactUpdate.sector = sector || "Unassigned";
+    if (subsector !== undefined) contactUpdate.subsector = subsector || "Unassigned";
+    if (source !== undefined) contactUpdate.source = source || "Unassigned";
+    if (gender !== undefined) contactUpdate.gender = gender || "Unassigned";
+    if (winners !== undefined) contactUpdate.winners = updateData.winners;
 
-      await Contact.findByIdAndUpdate(conversation.contact, contactUpdate);
+    if (Object.keys(contactUpdate).length > 0) {
+      await Contact.updateMany({ phone }, { $set: contactUpdate });
     }
 
-    const assignedName = conversation.assignedTo ? conversation.assignedTo.name : "Unassigned";
-    const sectorName = conversation.sector || "Unassigned";
-    const subsectorName = conversation.subsector || "Unassigned";
+    // Ensure all conversations for this phone are linked to the master contact
+    const masterContact = await Contact.findOne({ phone }).select('_id');
+    if (masterContact) {
+      await Conversation.updateMany(
+        { phone, $or: [{ contact: null }, { contact: { $exists: false } }] },
+        { $set: { contact: masterContact._id } }
+      );
+    }
+
+    const assignedName = (userId !== undefined ? (userId ? "Specialist" : "Unassigned") : null) || (conversation?.assignedTo?.name || "Unassigned");
+    const sectorName = conversation?.sector || "Unassigned";
+    const subsectorName = conversation?.subsector || "Unassigned";
     await logActivity(req.user._id, "ASSIGN_CHAT", `Assigned chat to ${assignedName} (Sector: ${sectorName}, Subsector: ${subsectorName})`, phone);
 
-    const populatedConv = await Conversation.findById(conversation._id).populate("assignedTo", "name").populate("contact");
+    const populatedConv = conversation ? await Conversation.findById(conversation._id).populate("assignedTo", "name").populate("contact") : null;
     smartEmit("chat_assigned", { conversation: populatedConv, isNewAssignment: userId !== undefined });
 
     res.json({ message: "Conversation assigned", conversation: populatedConv });
@@ -798,8 +828,25 @@ export const assignConversation = async (req, res) => {
 
 export const getConversationById = async (req, res) => {
   try {
-    const conversation = await Conversation.findById(req.params.id).populate("contact").populate("assignedTo", "name");
+    let conversation = await Conversation.findById(req.params.id).populate("contact").populate("assignedTo", "name");
     if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+
+    // Link contact if missing
+    if (!conversation.contact) {
+      const c = await Contact.findOne({ phone: conversation.phone }).lean();
+      if (c) {
+        await Conversation.updateOne({ _id: conversation._id }, { $set: { contact: c._id } });
+        conversation.contact = c;
+        if (!conversation.assignedTo && c.assignedTo) {
+          await Conversation.updateOne({ _id: conversation._id }, { $set: { assignedTo: c.assignedTo } });
+          conversation = await Conversation.findById(req.params.id).populate("contact").populate("assignedTo", "name");
+        }
+      }
+    } else if (!conversation.assignedTo && conversation.contact.assignedTo) {
+      // Inherit assignment from contact if conversation was unassigned
+      await Conversation.updateOne({ _id: conversation._id }, { $set: { assignedTo: conversation.contact.assignedTo } });
+      conversation = await Conversation.findById(req.params.id).populate("contact").populate("assignedTo", "name");
+    }
 
     // RBAC: Executives can only see their own assigned chats
     if (req.user.role === "Executive" && String(conversation.assignedTo?._id || conversation.assignedTo) !== String(req.user._id)) {

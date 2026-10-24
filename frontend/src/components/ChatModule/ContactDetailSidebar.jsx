@@ -529,7 +529,11 @@ const ContactDetailSidebar = ({
                             appearance: "none",
                             transition: "all 0.2s ease"
                           }}
-                          value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
+                          value={
+                            (selectedChat?.assignedTo && typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo._id : selectedChat?.assignedTo) ||
+                            (activeContact?.assignedTo && typeof activeContact.assignedTo === 'object' ? activeContact.assignedTo._id : activeContact?.assignedTo) ||
+                            ""
+                          }
                           onChange={(e) => handleAssign(e.target.value, undefined)}
                           onFocus={e => {
                             e.target.style.borderColor = "#4f46e5";
@@ -715,7 +719,11 @@ const ContactDetailSidebar = ({
                             appearance: "none",
                             transition: "all 0.2s ease"
                           }}
-                          value={typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo?._id : (selectedChat.assignedTo || "")}
+                          value={
+                            (selectedChat?.assignedTo && typeof selectedChat.assignedTo === 'object' ? selectedChat.assignedTo._id : selectedChat?.assignedTo) ||
+                            (activeContact?.assignedTo && typeof activeContact.assignedTo === 'object' ? activeContact.assignedTo._id : activeContact?.assignedTo) ||
+                            ""
+                          }
                           onChange={(e) => handleAssign(e.target.value, undefined)}
                           onFocus={e => {
                             e.target.style.borderColor = "#4f46e5";

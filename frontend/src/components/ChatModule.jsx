@@ -520,12 +520,23 @@ const ChatModule = () => {
 
       const updatedConv = res.data.conversation;
 
-      // Update local list
-      setConversations(prev => prev.map(c => c._id === updatedConv._id ? { ...c, ...updatedConv } : c));
+      // Update local list for all conversations with this phone number
+      setConversations(prev => prev.map(c => {
+        if (c.phone === updatedConv?.phone || c._id === updatedConv?._id) {
+          return {
+            ...c,
+            ...updatedConv,
+            _id: c._id,
+            whatsappAccountId: c.whatsappAccountId
+          };
+        }
+        return c;
+      }));
 
-      if (activeContact && (activeContact._id === updatedConv.contact?._id || activeContact._id === updatedConv.contact)) {
-        const updatedContactObj = typeof updatedConv.contact === 'object' ? updatedConv.contact : {};
-        setActiveContact(prev => ({
+      const updatedContactObj = typeof updatedConv?.contact === 'object' ? updatedConv.contact : {};
+      setActiveContact(prev => {
+        if (!prev) return updatedContactObj?._id ? { ...updatedContactObj, assignedTo: updatedConv.assignedTo } : null;
+        return {
           ...prev,
           ...updatedContactObj,
           assignedTo: updatedConv.assignedTo,
@@ -534,8 +545,8 @@ const ChatModule = () => {
           source: updatedContactObj.source || updatedConv.source || prev.source,
           winners: updatedContactObj.winners || updatedConv.winners || prev.winners,
           gender: updatedContactObj.gender || updatedConv.gender || prev.gender
-        }));
-      }
+        };
+      });
       // refetchConvs(); // Removed to prevent disappearing from list when filters are active
     } catch (err) {
       alert("Error assigning: " + err.message);
@@ -1283,8 +1294,27 @@ const ChatModule = () => {
         };
         setUiNotifications(prev => [newNotif, ...prev]);
       }
-      // Local update instead of full refetch to keep list order stable
-      setConversations(prev => prev.map(c => c._id === conversation._id ? { ...c, ...conversation } : c));
+      // Local update instead of full refetch to keep list order stable across all accounts
+      setConversations(prev => prev.map(c => {
+        if (c.phone === conversation.phone || c._id === conversation._id) {
+          return {
+            ...c,
+            ...conversation,
+            _id: c._id,
+            whatsappAccountId: c.whatsappAccountId
+          };
+        }
+        return c;
+      }));
+      setActiveContact(prev => {
+        if (prev && (prev.phone === conversation.phone || prev._id === conversation.contact?._id)) {
+          return {
+            ...prev,
+            assignedTo: conversation.assignedTo
+          };
+        }
+        return prev;
+      });
     });
 
     socket.on("followup_reminder", ({ conversation }) => {

@@ -15,6 +15,7 @@ const contactSchema = new mongoose.Schema({
   gender: { type: String, default: "Unassigned" },
   winners: [{ type: String }],
   tags: [String],
+  sheetFailCount: { type: Number, default: 0 },
 
   // The current label for this customer (e.g. "Interested", "Pending"). Used by the Cron Job.
   status: { type: String, default: null },
