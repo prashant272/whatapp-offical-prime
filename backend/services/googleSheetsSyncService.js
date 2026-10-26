@@ -249,8 +249,9 @@ export const syncGoogleSheets = async () => {
                 
                 let hasCfUpdate = false;
                 for (const [k, v] of Object.entries(customFields)) {
-                   if (cfObj[k] !== String(v)) {
-                     updateFields[`customFields.${k}`] = String(v);
+                   const strVal = typeof v === 'object' && v !== null ? JSON.stringify(v) : String(v);
+                   if (cfObj[k] !== strVal) {
+                     updateFields[`customFields.${k}`] = strVal;
                      hasCfUpdate = true;
                    }
                 }

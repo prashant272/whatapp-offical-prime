@@ -31,8 +31,8 @@ const contactSchema = new mongoose.Schema({
   lastFlowEndedAt: { type: Date, default: null },
 
   // Temporary storage for data collected during a multi-step flow.
-  chatData: { type: Map, of: String, default: {} },
-  customFields: { type: Map, of: String, default: {} },
+  chatData: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
+  customFields: { type: Map, of: mongoose.Schema.Types.Mixed, default: {} },
 
   // --- ADVANCED CRM FIELDS ---
   // Priority: 'Hot', 'Warm', 'Cold' or numerical score
