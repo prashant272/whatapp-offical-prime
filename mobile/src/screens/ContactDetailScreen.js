@@ -159,7 +159,8 @@ export default function ContactDetailScreen({ route, navigation }) {
       const contactId = activeContact?._id || conversation.contact?._id || conversation.contact;
 
       // 1. Update Lead Status
-      const isFollowUp = selectedStatus.toLowerCase().includes('follow');
+      const lowerStatus = selectedStatus.toLowerCase();
+      const isFollowUp = lowerStatus.includes('follow') || lowerStatus.includes('interest');
       let finalFollowUpTime = null;
       if (isFollowUp && followUpDate && followUpTime) {
         finalFollowUpTime = new Date(`${followUpDate}T${followUpTime}`).toISOString();
@@ -271,7 +272,7 @@ export default function ContactDetailScreen({ route, navigation }) {
           </TouchableOpacity>
 
           {/* Follow Up Scheduling (Conditional) */}
-          {selectedStatus.toLowerCase().includes('follow') && (
+          {(selectedStatus.toLowerCase().includes('follow') || selectedStatus.toLowerCase().includes('interest')) && (
             <View style={{ marginTop: 10, padding: 12, backgroundColor: '#fffbeb', borderRadius: 12, borderWidth: 1, borderColor: '#fef3c7', marginBottom: 12 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#d97706', textTransform: 'uppercase', marginBottom: 4 }}>Follow-up Date (YYYY-MM-DD)</Text>
               <TextInput

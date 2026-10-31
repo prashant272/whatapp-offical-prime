@@ -889,8 +889,9 @@ const ChatModule = () => {
   const handleUpdateStatus = async (status, fTime = null) => {
     if (!selectedChat) return;
 
-    // Check if status is Follow-up (case-insensitive check for 'follow')
-    const isFollowUp = status.toLowerCase().includes("follow");
+    // Check if status requires date & time (case-insensitive check for 'follow' or 'interest')
+    const lowerStatus = status.toLowerCase();
+    const isFollowUp = lowerStatus.includes("follow") || lowerStatus.includes("interest");
 
     if (isFollowUp && !fTime) {
       setPendingStatus(status);
@@ -916,8 +917,8 @@ const ChatModule = () => {
       const resultAction = await dispatch(updateReduxStatus({
         conversationId: selectedChat._id,
         status,
-        followUpTime: status.toLowerCase().includes("follow") ? fTime : null,
-        followUpActivity: status.toLowerCase().includes("follow") ? (fTime ? followUpActivity : null) : null,
+        followUpTime: isFollowUp ? fTime : null,
+        followUpActivity: isFollowUp ? (fTime ? followUpActivity : null) : null,
         accountId: selectedChat.whatsappAccountId
       }));
 
