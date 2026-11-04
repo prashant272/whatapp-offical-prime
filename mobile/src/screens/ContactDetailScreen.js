@@ -160,7 +160,13 @@ export default function ContactDetailScreen({ route, navigation }) {
 
       // 1. Update Lead Status
       const lowerStatus = selectedStatus.toLowerCase();
-      const isFollowUp = lowerStatus.includes('follow') || lowerStatus.includes('interest');
+      const isNotInterested = lowerStatus.includes('not interested') || lowerStatus.includes('notinterested') || lowerStatus.includes('not_interested');
+      const isFollowUp = !isNotInterested && (
+        lowerStatus.includes('follow') || 
+        lowerStatus.includes('interest') || 
+        lowerStatus.includes('not pick') || 
+        lowerStatus.includes('notpick')
+      );
       let finalFollowUpTime = null;
       if (isFollowUp && followUpDate && followUpTime) {
         finalFollowUpTime = new Date(`${followUpDate}T${followUpTime}`).toISOString();
@@ -271,8 +277,9 @@ export default function ContactDetailScreen({ route, navigation }) {
             <Text style={styles.dropdownFieldArrow}>▼</Text>
           </TouchableOpacity>
 
-          {/* Follow Up Scheduling (Conditional) */}
-          {(selectedStatus.toLowerCase().includes('follow') || selectedStatus.toLowerCase().includes('interest')) && (
+          {/* Follow Up Scheduling (Conditional - excludes Not Interested) */}
+          {(!selectedStatus.toLowerCase().includes('not interested') && !selectedStatus.toLowerCase().includes('notinterested')) && 
+           (selectedStatus.toLowerCase().includes('follow') || selectedStatus.toLowerCase().includes('interest') || selectedStatus.toLowerCase().includes('not pick') || selectedStatus.toLowerCase().includes('notpick')) && (
             <View style={{ marginTop: 10, padding: 12, backgroundColor: '#fffbeb', borderRadius: 12, borderWidth: 1, borderColor: '#fef3c7', marginBottom: 12 }}>
               <Text style={{ fontSize: 12, fontWeight: '700', color: '#d97706', textTransform: 'uppercase', marginBottom: 4 }}>Follow-up Date (YYYY-MM-DD)</Text>
               <TextInput

@@ -889,9 +889,15 @@ const ChatModule = () => {
   const handleUpdateStatus = async (status, fTime = null) => {
     if (!selectedChat) return;
 
-    // Check if status requires date & time (case-insensitive check for 'follow', 'interest', or 'not pick')
+    // Check if status requires date & time (case-insensitive check for 'follow', 'interest', or 'not pick', EXCEPT 'not interested')
     const lowerStatus = status.toLowerCase();
-    const isFollowUp = lowerStatus.includes("follow") || lowerStatus.includes("interest") || lowerStatus.includes("not pick") || lowerStatus.includes("notpick");
+    const isNotInterested = lowerStatus.includes("not interested") || lowerStatus.includes("notinterested") || lowerStatus.includes("not_interested");
+    const isFollowUp = !isNotInterested && (
+      lowerStatus.includes("follow") || 
+      lowerStatus.includes("interest") || 
+      lowerStatus.includes("not pick") || 
+      lowerStatus.includes("notpick")
+    );
 
     if (isFollowUp && !fTime) {
       setPendingStatus(status);
